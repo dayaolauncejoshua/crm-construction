@@ -1,0 +1,521 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Lead System - Multi-Tenant Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#475569',
+                        accent: '#10b981',
+                        warning: '#f59e0b',
+                        success: '#10b981',
+                        danger: '#ef4444'
+                    },
+                    fontFamily: {
+                        'inter': ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 font-inter">
+    <!-- @COMPONENT: MainLayout -->
+    <div class="flex h-screen bg-slate-50">
+        <!-- @COMPONENT: Sidebar -->
+        <div class="w-64 bg-white shadow-sm border-r border-slate-200 flex flex-col">
+            <!-- Logo Header -->
+            <div class="p-6 border-b border-slate-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-robot text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-900">AI Lead System</h1>
+                        <p class="text-sm text-slate-500">Multi-Tenant Platform</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-1 p-4 space-y-2">
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary rounded-lg font-medium">
+                    <i class="fas fa-tachometer-alt w-5"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-users w-5"></i>
+                    <span>Clients</span>
+                    <span class="ml-auto bg-accent text-white text-xs px-2 py-1 rounded-full" data-bind="clientCount">12</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-chart-line w-5"></i>
+                    <span>Leads</span>
+                    <span class="ml-auto bg-warning text-white text-xs px-2 py-1 rounded-full" data-bind="activeLeads">247</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-comments w-5"></i>
+                    <span>Conversations</span>
+                    <span class="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full" data-bind="hotLeads">8</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-video w-5"></i>
+                    <span>VSL Generator</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-calendar-alt w-5"></i>
+                    <span>Bookings</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i class="fas fa-cog w-5"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+
+            <!-- User Profile -->
+            <div class="p-4 border-t border-slate-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
+                        <i class="fas fa-user text-slate-600"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-medium text-slate-900" data-bind="user.name">John Smith</p>
+                        <p class="text-sm text-slate-500">Admin</p>
+                    </div>
+                    <button class="text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: MainContent -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- @COMPONENT: Header -->
+            <header class="bg-white border-b border-slate-200 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+                        <p class="text-slate-600">Monitor your AI lead generation performance</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <!-- Response Time Indicator -->
+                        <div class="flex items-center space-x-2 bg-success/10 text-success px-3 py-2 rounded-lg">
+                            <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                            <span class="text-sm font-medium">Avg Response: <span data-bind="avgResponseTime">1.2min</span></span>
+                        </div>
+                        <button class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Add Client
+                        </button>
+                    </div>
+                </div>
+            </header>
+            <!-- @END_COMPONENT: Header -->
+
+            <!-- @COMPONENT: DashboardContent -->
+            <main class="flex-1 overflow-auto p-6">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <!-- @COMPONENT: KPICard -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-bolt text-primary text-xl"></i>
+                            </div>
+                            <span class="text-success text-sm font-medium">+12.5%</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-900" data-bind="totalLeads">1,247</h3>
+                        <p class="text-slate-600">Total Leads Generated</p>
+                        <div class="mt-3 text-xs text-slate-500">Last 30 days</div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-percentage text-accent text-xl"></i>
+                            </div>
+                            <span class="text-success text-sm font-medium">+3.2%</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-900" data-bind="conversionRate">18.5%</h3>
+                        <p class="text-slate-600">Conversion Rate</p>
+                        <div class="mt-3 text-xs text-slate-500">Lead to booking</div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-clock text-warning text-xl"></i>
+                            </div>
+                            <span class="text-success text-sm font-medium">-15s</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-900" data-bind="responseTime">1.8min</h3>
+                        <p class="text-slate-600">Avg Response Time</p>
+                        <div class="mt-3 text-xs text-slate-500">Target: <2min</div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-robot text-purple-600 text-xl"></i>
+                            </div>
+                            <span class="text-success text-sm font-medium">+5.1%</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-900" data-bind="aiHandled">72%</h3>
+                        <p class="text-slate-600">AI Handled</p>
+                        <div class="mt-3 text-xs text-slate-500">Qualified automatically</div>
+                    </div>
+                    <!-- @END_COMPONENT: KPICard -->
+                </div>
+
+                <!-- Main Dashboard Tabs -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                    <!-- Tab Navigation -->
+                    <div class="border-b border-slate-200">
+                        <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                            <button class="border-b-2 border-primary text-primary py-4 px-1 text-sm font-medium">
+                                Live Conversations
+                            </button>
+                            <button class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 py-4 px-1 text-sm font-medium">
+                                Lead Pipeline
+                            </button>
+                            <button class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 py-4 px-1 text-sm font-medium">
+                                VSL Performance
+                            </button>
+                            <button class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 py-4 px-1 text-sm font-medium">
+                                Client Management
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- @COMPONENT: LiveConversations -->
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-slate-900">Active Conversations</h3>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm text-slate-600">Auto-refresh: ON</span>
+                                <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                            </div>
+                        </div>
+
+                        <!-- Hot Leads Alert -->
+                        <div class="bg-danger/10 border border-danger/20 rounded-lg p-4 mb-6">
+                            <div class="flex items-center">
+                                <i class="fas fa-exclamation-triangle text-danger mr-3"></i>
+                                <div>
+                                    <h4 class="font-medium text-danger">3 High-Priority Leads Require Human Attention</h4>
+                                    <p class="text-sm text-danger/80">Leads with qualification score >0.7 detected</p>
+                                </div>
+                                <button class="ml-auto bg-danger text-white px-4 py-2 rounded-lg text-sm hover:bg-danger/90">
+                                    Take Action
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Conversation List -->
+                        <div class="space-y-4">
+                            <!-- @MAP: conversations.map(conversation => ( -->
+                            <div class="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3 mb-2">
+                                            <div class="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
+                                                <i class="fas fa-user text-slate-600"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-medium text-slate-900" data-bind="conversation.name">Sarah Johnson</h4>
+                                                <p class="text-sm text-slate-500" data-bind="conversation.company">Construction Solutions LLC</p>
+                                            </div>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="bg-danger text-white text-xs px-2 py-1 rounded-full">Score: 0.9</span>
+                                                <span class="bg-warning text-white text-xs px-2 py-1 rounded-full">Hot Lead</span>
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-50 rounded-lg p-3 mb-3">
+                                            <p class="text-sm text-slate-700" data-mock="true">"I need to book a consultation ASAP. We're losing $5K daily due to delays."</p>
+                                            <div class="flex items-center justify-between mt-2">
+                                                <span class="text-xs text-slate-500">via WhatsApp • 2 minutes ago</span>
+                                                <div class="flex items-center space-x-1">
+                                                    <i class="fas fa-whatsapp text-green-500"></i>
+                                                    <span class="text-xs text-slate-500">Online</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-3">
+                                            <button class="bg-primary text-white px-3 py-1 rounded text-sm hover:bg-primary/90">
+                                                <i class="fas fa-reply mr-1"></i>Take Over
+                                            </button>
+                                            <button class="bg-accent text-white px-3 py-1 rounded text-sm hover:bg-accent/90">
+                                                <i class="fas fa-calendar mr-1"></i>Book Now
+                                            </button>
+                                            <button class="text-slate-500 hover:text-slate-700">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-200 rounded-lg p-4">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3 mb-2">
+                                            <div class="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
+                                                <i class="fas fa-user text-slate-600"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-medium text-slate-900" data-bind="conversation.name">Mike Rodriguez</h4>
+                                                <p class="text-sm text-slate-500" data-bind="conversation.company">Digital Marketing Agency</p>
+                                            </div>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="bg-warning text-white text-xs px-2 py-1 rounded-full">Score: 0.6</span>
+                                                <span class="bg-accent text-white text-xs px-2 py-1 rounded-full">AI Handling</span>
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-50 rounded-lg p-3 mb-3">
+                                            <p class="text-sm text-slate-700" data-mock="true">"AI: Thanks for your interest! What's your current monthly ad spend?"</p>
+                                            <div class="flex items-center justify-between mt-2">
+                                                <span class="text-xs text-slate-500">via SMS • 5 minutes ago</span>
+                                                <div class="flex items-center space-x-1">
+                                                    <i class="fas fa-robot text-primary"></i>
+                                                    <span class="text-xs text-slate-500">AI Active</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-3">
+                                            <button class="border border-slate-300 text-slate-600 px-3 py-1 rounded text-sm hover:bg-slate-50">
+                                                <i class="fas fa-eye mr-1"></i>Monitor
+                                            </button>
+                                            <button class="text-slate-500 hover:text-slate-700">
+                                                <i class="fas fa-cog"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- @END_MAP )) -->
+                        </div>
+
+                        <!-- Show More Button -->
+                        <div class="text-center mt-6">
+                            <button class="text-primary hover:text-primary/80 text-sm font-medium">
+                                View All Conversations (24 more)
+                            </button>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: LiveConversations -->
+                </div>
+
+                <!-- Secondary Panels -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                    <!-- @COMPONENT: RecentActivity -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-success/10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-success text-xs"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-slate-900" data-mock="true">New booking confirmed</p>
+                                    <p class="text-xs text-slate-500" data-mock="true">Construction Solutions LLC • 2 mins ago</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-warning/10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-video text-warning text-xs"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-slate-900" data-mock="true">VSL generated for new client</p>
+                                    <p class="text-xs text-slate-500" data-mock="true">MedSpa Innovations • 5 mins ago</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-user-plus text-primary text-xs"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-slate-900" data-mock="true">New lead captured</p>
+                                    <p class="text-xs text-slate-500" data-mock="true">Response time: 1.4 minutes • 8 mins ago</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: RecentActivity -->
+
+                    <!-- @COMPONENT: SystemHealth -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="text-lg font-semibold text-slate-900 mb-4">System Health</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-3 h-3 bg-success rounded-full"></div>
+                                    <span class="text-sm text-slate-900">WhatsApp API</span>
+                                </div>
+                                <span class="text-sm text-success font-medium">Operational</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-3 h-3 bg-success rounded-full"></div>
+                                    <span class="text-sm text-slate-900">AI Chat System</span>
+                                </div>
+                                <span class="text-sm text-success font-medium">Operational</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-3 h-3 bg-warning rounded-full"></div>
+                                    <span class="text-sm text-slate-900">VSL Generator</span>
+                                </div>
+                                <span class="text-sm text-warning font-medium">Maintenance</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-3 h-3 bg-success rounded-full"></div>
+                                    <span class="text-sm text-slate-900">Calendar Integration</span>
+                                </div>
+                                <span class="text-sm text-success font-medium">Operational</span>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-slate-200">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-slate-600">System Uptime</span>
+                                    <span class="text-sm font-medium text-slate-900" data-bind="uptime">99.8%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: SystemHealth -->
+                </div>
+            </main>
+            <!-- @END_COMPONENT: DashboardContent -->
+        </div>
+        <!-- @END_COMPONENT: MainContent -->
+    </div>
+    <!-- @END_COMPONENT: MainLayout -->
+
+    <!-- @COMPONENT: LandingPagePreview (Modal) -->
+    <div id="landingPageModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-full overflow-auto">
+            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                <h3 class="text-xl font-semibold text-slate-900">Landing Page Preview</h3>
+                <button onclick="closeLandingPageModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <!-- Landing Page Content -->
+            <div class="p-8 bg-slate-50">
+                <!-- Landing Page Hero Section -->
+                <div class="bg-gradient-to-br from-primary to-blue-700 text-white rounded-xl p-12 mb-8">
+                    <div class="max-w-3xl mx-auto text-center">
+                        <h1 class="text-4xl font-bold mb-4" data-mock="true">Stop Losing Leads to Slow Response Times</h1>
+                        <p class="text-xl mb-8 text-blue-100" data-mock="true">Get qualified leads in your pipeline within 2 minutes with our AI-powered system</p>
+                        
+                        <!-- Video Player Placeholder -->
+                        <div class="bg-black bg-opacity-30 rounded-lg p-8 mb-8">
+                            <div class="bg-slate-800 rounded-lg h-64 flex items-center justify-center">
+                                <div class="text-center">
+                                    <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i class="fas fa-play text-white text-xl"></i>
+                                    </div>
+                                    <p class="text-white font-medium" data-mock="true">VSL: How We Generate 200+ Qualified Leads/Month</p>
+                                    <p class="text-blue-200 text-sm" data-mock="true">3:42 • Click to play</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Two-Step Form -->
+                        <div class="bg-white rounded-xl p-8 text-slate-900">
+                            <h3 class="text-2xl font-bold mb-6">Get Your Free 2-Minute Lead Audit</h3>
+                            
+                            <!-- Step 1: Email -->
+                            <div id="step1" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Business Email</label>
+                                    <input type="email" placeholder="john@company.com" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
+                                    <input type="text" placeholder="Your Company LLC" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                </div>
+                                <button onclick="showStep2()" class="w-full bg-primary text-white py-3 px-6 rounded-lg font-semibold hover:bg-primary/90 transition-colors">
+                                    Continue to Phone Capture
+                                </button>
+                            </div>
+
+                            <!-- Step 2: Phone (Hidden initially) -->
+                            <div id="step2" class="space-y-4 hidden">
+                                <div class="bg-success/10 border border-success/20 rounded-lg p-4 mb-4">
+                                    <p class="text-success font-medium text-sm">✓ Email verified successfully</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
+                                    <input type="tel" placeholder="+1 (555) 123-4567" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                </div>
+                                <div class="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg">
+                                    <p data-mock="true">✓ By providing your phone number, you consent to receive automated text messages about your lead audit results and follow-up information. Message and data rates may apply. Reply STOP to opt out anytime.</p>
+                                </div>
+                                <button class="w-full bg-accent text-white py-3 px-6 rounded-lg font-semibold hover:bg-accent/90 transition-colors">
+                                    Get My Free Audit Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Social Proof -->
+                <div class="text-center mb-8">
+                    <p class="text-slate-600 mb-4">Trusted by 200+ businesses across industries</p>
+                    <div class="flex justify-center items-center space-x-8 opacity-60">
+                        <div class="bg-slate-200 px-6 py-3 rounded" data-mock="true">Company Logo</div>
+                        <div class="bg-slate-200 px-6 py-3 rounded" data-mock="true">Company Logo</div>
+                        <div class="bg-slate-200 px-6 py-3 rounded" data-mock="true">Company Logo</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: LandingPagePreview -->
+
+    <script>
+        // Simple UI interactions for demonstration
+        (function() {
+            // TODO: Implement business logic, API calls, and state management
+            
+            function showStep2() {
+                const step1 = document.getElementById('step1');
+                const step2 = document.getElementById('step2');
+                step1.classList.add('hidden');
+                step2.classList.remove('hidden');
+            }
+
+            function closeLandingPageModal() {
+                const modal = document.getElementById('landingPageModal');
+                modal.classList.add('hidden');
+            }
+
+            function showLandingPagePreview() {
+                const modal = document.getElementById('landingPageModal');
+                modal.classList.remove('hidden');
+            }
+
+            // Make functions globally available for onclick handlers
+            window.showStep2 = showStep2;
+            window.closeLandingPageModal = closeLandingPageModal;
+            window.showLandingPagePreview = showLandingPagePreview;
+
+            // Auto-refresh simulation for live data
+            setInterval(() => {
+                // TODO: Implement real-time data updates
+                console.log('Checking for new conversations and updates...');
+            }, 30000);
+        })();
+    </script>
+</body>
+</html>
