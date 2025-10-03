@@ -1,9 +1,16 @@
+// server/setup-notion.ts
+
 import { Client } from "@notionhq/client";
 import { notion, NOTION_PAGE_ID, createDatabaseIfNotExists, findDatabaseByTitle } from "./notion";
 
 // Environment variables validation
 if (!process.env.NOTION_INTEGRATION_SECRET) {
     throw new Error("NOTION_INTEGRATION_SECRET is not defined. Please add it to your environment variables.");
+}
+
+// Validate notion client is initialized (TypeScript guard)
+if (!notion) {
+    throw new Error("Notion client failed to initialize");
 }
 
 // Setup comprehensive SOP and reporting databases for the AI lead generation system
@@ -185,10 +192,15 @@ async function setupNotionDatabases() {
         }
     });
 
-    console.log("✅ All Notion databases created successfully!");
+    console.log("All Notion databases created successfully!");
 }
 
 async function createSampleSOPs() {
+    // Add null check at the beginning
+    if (!notion) {
+        throw new Error("Notion client not initialized");
+    }
+
     try {
         console.log("Creating sample SOPs...");
 
@@ -397,16 +409,21 @@ Create templates for:
                 ]
             });
 
-            console.log(`✅ Created SOP: ${sop.title}`);
+            console.log(`Created SOP: ${sop.title}`);
         }
 
-        console.log("✅ Sample SOPs creation complete!");
+        console.log("Sample SOPs creation complete!");
     } catch (error) {
         console.error("Error creating sample SOPs:", error);
     }
 }
 
 async function createSampleExecutiveReport() {
+    // Add null check at the beginning
+    if (!notion) {
+        throw new Error("Notion client not initialized");
+    }
+
     try {
         console.log("Creating sample executive report...");
 
@@ -524,7 +541,7 @@ This week showed strong performance across all key metrics with a 23% increase i
             ]
         });
 
-        console.log("✅ Sample executive report created!");
+        console.log("Sample executive report created!");
     } catch (error) {
         console.error("Error creating sample executive report:", error);
     }
@@ -535,10 +552,10 @@ setupNotionDatabases()
     .then(() => createSampleSOPs())
     .then(() => createSampleExecutiveReport())
     .then(() => {
-        console.log("🎉 Notion setup complete! Your AI Lead Generation System is ready.");
+        console.log("Notion setup complete! Your AI Lead Generation System is ready.");
         process.exit(0);
     })
     .catch(error => {
-        console.error("❌ Setup failed:", error);
+        console.error("Setup failed:", error);
         process.exit(1);
     });

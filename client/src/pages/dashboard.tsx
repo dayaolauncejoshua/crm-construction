@@ -1,3 +1,5 @@
+// client/src/pages/dashboard.tsx
+
 import { useState, useEffect } from "react";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";

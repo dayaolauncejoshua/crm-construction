@@ -1,9 +1,18 @@
+// server/advanced-routes.ts
+
 import express from "express";
 import { Request, Response } from "express";
 import { storage } from "./storage";
 import { notion } from "./notion";
 
 const router = express.Router();
+
+// Add TypeScript interface for custom Notion methods
+interface NotionWrapper {
+  getAllSOPs: () => Promise<any[]>;
+  syncSOPContent: (pageId: string) => Promise<any>;
+  createExecutiveReport: (clientId: string, reportData: any) => Promise<any>;
+}
 
 // Monitoring Routes
 router.get("/monitoring/:clientId", async (req: Request, res: Response) => {
@@ -156,8 +165,11 @@ router.post("/notion-sops/:clientId/sync", async (req: Request, res: Response) =
       return res.status(400).json({ error: "Notion integration not configured" });
     }
     
+    // Type assertion to ensure TypeScript knows about custom methods
+    const notionClient = notion as unknown as NotionWrapper;
+    
     // Sync all SOPs from Notion
-    const allSOPs = await notion.getAllSOPs();
+    const allSOPs = await notionClient.getAllSOPs();
     
     // Update sync status for existing SOPs
     const existingSOPs = await storage.getNotionSOPs(clientId);
@@ -165,9 +177,9 @@ router.post("/notion-sops/:clientId/sync", async (req: Request, res: Response) =
     
     for (const sop of existingSOPs) {
       try {
-        const syncedContent = await notion.syncSOPContent(sop.notionPageId);
+        const syncedContent = await notionClient.syncSOPContent(sop.notionPageId);
         results.push({ sopId: sop.id, status: "synced", content: syncedContent });
-      } catch (error) {
+      } catch (error: any) {
         results.push({ sopId: sop.id, status: "failed", error: error.message });
       }
     }
@@ -253,7 +265,9 @@ router.post("/executive-reports", async (req: Request, res: Response) => {
     // Also create Notion page for the report
     if (notion) {
       try {
-        await notion.createExecutiveReport(req.body.clientId, req.body);
+        // Type assertion for custom Notion methods
+        const notionClient = notion as unknown as NotionWrapper;
+        await notionClient.createExecutiveReport(req.body.clientId, req.body);
       } catch (notionError) {
         console.error("Error creating Notion report:", notionError);
       }

@@ -1,3 +1,5 @@
+// server/services/leadQualification.ts
+
 import { storage } from "../storage";
 import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";

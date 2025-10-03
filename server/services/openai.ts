@@ -1,3 +1,5 @@
+// server/services/openai.ts
+
 import OpenAI from "openai";
 
 const openai = new OpenAI({ 

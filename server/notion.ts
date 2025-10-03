@@ -1,3 +1,5 @@
+// server/notion.ts
+
 import { Client } from "@notionhq/client";
 
 // Initialize Notion client
@@ -119,6 +121,11 @@ export async function createDatabaseIfNotExists(title: string, properties: any) 
  * Create or update SOP pages in Notion
  */
 export async function createSOPPage(title: string, content: string, category?: string) {
+    // Add null checks at the beginning
+    if (!notion || !NOTION_PAGE_ID) {
+        throw new Error("Notion integration not configured");
+    }
+
     try {
         const response = await notion.pages.create({
             parent: {
@@ -165,6 +172,11 @@ export async function createSOPPage(title: string, content: string, category?: s
  * Sync SOP content from Notion
  */
 export async function syncSOPContent(pageId: string) {
+    // Add null check at the beginning
+    if (!notion) {
+        throw new Error("Notion integration not configured");
+    }
+
     try {
         const page = await notion.pages.retrieve({ page_id: pageId });
         const blocks = await notion.blocks.children.list({ block_id: pageId });
@@ -183,6 +195,11 @@ export async function syncSOPContent(pageId: string) {
  * Get all SOPs from Notion workspace
  */
 export async function getAllSOPs() {
+    // Add null checks at the beginning
+    if (!notion || !NOTION_PAGE_ID) {
+        throw new Error("Notion integration not configured");
+    }
+
     try {
         const response = await notion.search({
             filter: {
@@ -209,6 +226,11 @@ export async function getAllSOPs() {
  * Create executive report page in Notion
  */
 export async function createExecutiveReport(clientId: string, reportData: any) {
+    // Add null checks at the beginning
+    if (!notion || !NOTION_PAGE_ID) {
+        throw new Error("Notion integration not configured");
+    }
+
     try {
         const title = `Executive Report - ${reportData.period} - ${reportData.clientName}`;
         

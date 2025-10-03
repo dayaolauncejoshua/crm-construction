@@ -1,3 +1,5 @@
+// server/storage.ts
+
 import {
   users,
   clients,
@@ -605,7 +607,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllUsersForAdmin(searchQuery?: string, statusFilter?: string): Promise<any[]> {
-    let query = db
+    // Build where conditions array
+    const whereConditions = [];
+
+    if (searchQuery) {
+      whereConditions.push(
+        sql`${users.email} ILIKE ${`%${searchQuery}%`} OR 
+            ${users.firstName} ILIKE ${`%${searchQuery}%`} OR 
+            ${users.lastName} ILIKE ${`%${searchQuery}%`}`
+      );
+    }
+
+    if (statusFilter && statusFilter !== "all") {
+      switch (statusFilter) {
+        case "trial":
+          whereConditions.push(eq(users.isTrialActive, true));
+          break;
+        case "expired":
+          whereConditions.push(and(eq(users.hasUnlockedTrial, true), eq(users.isTrialActive, false)));
+          break;
+        default:
+          whereConditions.push(eq(users.subscriptionType, statusFilter));
+      }
+    }
+
+    // Build query with or without where clause
+    const baseSelect = db
       .select({
         id: users.id,
         email: users.email,
@@ -621,33 +648,24 @@ export class DatabaseStorage implements IStorage {
         clientsCount: count(clients.id),
       })
       .from(users)
-      .leftJoin(clients, eq(users.id, clients.userId))
-      .groupBy(users.id);
+      .leftJoin(clients, eq(users.id, clients.userId));
 
-    let finalQuery = query;
-
-    if (searchQuery) {
-      finalQuery = finalQuery.where(
-        sql`${users.email} ILIKE ${`%${searchQuery}%`} OR 
-            ${users.firstName} ILIKE ${`%${searchQuery}%`} OR 
-            ${users.lastName} ILIKE ${`%${searchQuery}%`}`
-      );
+    // Apply where conditions if any, then group and order
+    if (whereConditions.length > 0) {
+      return await baseSelect
+        .where(
+          whereConditions.length === 1 
+            ? whereConditions[0] 
+            : and(...whereConditions)
+        )
+        .groupBy(users.id)
+        .orderBy(desc(users.createdAt));
     }
 
-    if (statusFilter && statusFilter !== "all") {
-      switch (statusFilter) {
-        case "trial":
-          finalQuery = finalQuery.where(eq(users.isTrialActive, true));
-          break;
-        case "expired":
-          finalQuery = finalQuery.where(and(eq(users.hasUnlockedTrial, true), eq(users.isTrialActive, false)));
-          break;
-        default:
-          finalQuery = finalQuery.where(eq(users.subscriptionType, statusFilter));
-      }
-    }
-
-    return await finalQuery.orderBy(desc(users.createdAt));
+    // No where conditions - just group and order
+    return await baseSelect
+      .groupBy(users.id)
+      .orderBy(desc(users.createdAt));
   }
 
   async getRecentActivities(limit: number = 50): Promise<any[]> {
@@ -717,6 +735,24 @@ export class DatabaseStorage implements IStorage {
   async createBooking(booking: InsertBooking): Promise<Booking> {
     const [newBooking] = await db.insert(bookings).values(booking).returning();
     return newBooking;
+  }
+
+  
+  // Update booking
+  async updateBooking(id: string, updates: Partial<InsertBooking>): Promise<Booking> {
+    const [updated] = await db
+      .update(bookings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bookings.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Delete lead
+  async deleteLead(id: string): Promise<void> {
+    await db
+      .delete(leads)
+      .where(eq(leads.id, id));
   }
 
   // Analytics operations

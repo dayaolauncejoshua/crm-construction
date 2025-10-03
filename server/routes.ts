@@ -1,3 +1,5 @@
+// server/routes.ts
+
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -298,7 +300,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const booking = await storage.updateBooking(bookingId, {
         status,
         notes,
-        updatedAt: new Date(),
       });
 
       res.json(booking);

@@ -1,3 +1,5 @@
+// server/services/whatsapp.ts
+
 export interface WhatsAppMessage {
   to: string;
   type: string;

@@ -1,3 +1,5 @@
+// client/src/pages/trial-unlock.tsx
+
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,12 +22,19 @@ import {
   Crown
 } from "lucide-react";
 
+// Add TypeScript interface for trial status
+interface TrialStatus {
+  isTrialActive: boolean;
+  daysLeft?: number;
+  trialEndsAt?: string;
+}
+
 export default function TrialUnlock() {
   const [isActivating, setIsActivating] = useState(false);
   const { toast } = useToast();
 
-  // Check current user trial status
-  const { data: userStatus, isLoading } = useQuery({
+  // Check current user trial status - NOW PROPERLY TYPED
+  const { data: userStatus, isLoading } = useQuery<TrialStatus>({
     queryKey: ["/api/user/trial-status"],
     retry: false,
   });
@@ -129,7 +138,7 @@ export default function TrialUnlock() {
                 <span className="text-2xl font-bold text-green-700">{daysLeft} days left</span>
               </div>
               <p className="text-green-600">
-                Trial expires on {new Date(userStatus.trialEndsAt).toLocaleDateString()}
+                Trial expires on {new Date(userStatus.trialEndsAt || '').toLocaleDateString()}
               </p>
             </div>
             

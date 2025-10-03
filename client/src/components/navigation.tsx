@@ -1,3 +1,5 @@
+// client/components/navigation.tsx
+
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
