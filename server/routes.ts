@@ -4,7 +4,11 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertLeadSchema, insertClientSchema, insertBookingSchema } from "@shared/schema";
+import {
+  insertLeadSchema,
+  insertClientSchema,
+  insertBookingSchema,
+} from "@shared/schema";
 import { generateAudit, generateVSLScript } from "./services/openai";
 import { whatsappService } from "./services/whatsapp";
 import { leadQualificationService } from "./services/leadQualification";
@@ -13,15 +17,27 @@ import advancedRoutes from "./advanced-routes";
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
+  let wss: WebSocketServer | null = null;
+  function broadcastUpdate(data: any) {
+    if (!wss) return;
+    const message = JSON.stringify(data);
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        // WebSocket.OPEN
+        client.send(message);
+      }
+    });
+  }
+
   // WebSocket server for real-time updates
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   leadQualificationService.setWebSocketServer(wss);
 
-  wss.on('connection', (ws: WebSocket) => {
-    console.log('Client connected to WebSocket');
-    
-    ws.on('close', () => {
-      console.log('Client disconnected from WebSocket');
+  wss.on("connection", (ws: WebSocket) => {
+    console.log("Client connected to WebSocket");
+
+    ws.on("close", () => {
+      console.log("Client disconnected from WebSocket");
     });
   });
 
@@ -29,13 +45,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leads", async (req, res) => {
     try {
       const leadData = insertLeadSchema.parse(req.body);
-      
+
       // Generate audit based on provided data
       const auditInputs = req.body.auditInputs || {};
       const auditType = req.body.auditType || "business";
-      
+
       const auditResults = await generateAudit(auditType, auditInputs);
-      
+
       // Create lead with audit results
       const lead = await storage.createLead({
         ...leadData,
@@ -51,14 +67,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process lead for immediate response
       await leadQualificationService.processNewLead(lead.id);
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         leadId: lead.id,
-        auditResults: lead.auditResults 
+        auditResults: lead.auditResults,
       });
     } catch (error) {
       console.error("Error creating lead:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Unknown error" });
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   });
 
@@ -66,7 +84,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/webhooks/whatsapp", async (req, res) => {
     try {
       const incomingMessage = whatsappService.parseWebhook(req.body);
-      
+
       if (incomingMessage) {
         await leadQualificationService.handleIncomingMessage(
           incomingMessage.from,
@@ -84,10 +102,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // WhatsApp webhook verification
   app.get("/api/webhooks/whatsapp", (req, res) => {
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+    const verifyToken =
+      process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
 
     if (mode && token === verifyToken) {
       res.status(200).send(challenge);
@@ -100,7 +119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clients", async (req, res) => {
     try {
       // For demo purposes, use a default user ID
-      const userId = req.query.userId as string || "demo-user-id";
+      const userId = (req.query.userId as string) || "demo-user-id";
       const clients = await storage.getClients(userId);
       res.json(clients);
     } catch (error) {
@@ -116,7 +135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(client);
     } catch (error) {
       console.error("Error creating client:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Unknown error" });
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   });
 
@@ -124,22 +145,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/:clientId", async (req, res) => {
     try {
       const { clientId } = req.params;
-      
-      const [
-        kpis,
-        conversations,
-        hotLeads,
-        recentActivity,
-        leads,
-        bookings
-      ] = await Promise.all([
-        storage.getKPIs(clientId),
-        storage.getConversations(clientId, 10),
-        storage.getHotLeads(clientId),
-        storage.getRecentActivity(clientId),
-        storage.getLeads(clientId, 50),
-        storage.getBookings(clientId)
-      ]);
+
+      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
+        await Promise.all([
+          storage.getKPIs(clientId),
+          storage.getConversations(clientId, 10),
+          storage.getHotLeads(clientId),
+          storage.getRecentActivity(clientId),
+          storage.getLeads(clientId, 50),
+          storage.getBookings(clientId),
+        ]);
 
       res.json({
         kpis,
@@ -182,10 +197,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:conversationId/takeover", async (req, res) => {
     try {
       const { conversationId } = req.params;
-      
+
       const conversation = await storage.updateConversation(conversationId, {
         isAiHandled: false,
         humanTakeoverAt: new Date(),
+      });
+
+      // Get lead details for broadcast
+      const lead = await storage.getLead(conversation.leadId);
+
+      // Broadcast update
+      broadcastUpdate({
+        type: "conversation_updated",
+        conversation: {
+          ...conversation,
+          lead,
+        },
       });
 
       res.json(conversation);
@@ -225,6 +252,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sentAt: new Date(),
       });
 
+      // Update conversation last message time
+      await storage.updateConversation(conversationId, {
+        lastMessageAt: new Date(),
+      });
+
+      // Broadcast new message
+      broadcastUpdate({
+        type: "new_message",
+        conversationId,
+        message,
+      });
+
       res.json(message);
     } catch (error) {
       console.error("Error sending message:", error);
@@ -246,8 +285,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/vsls", async (req, res) => {
     try {
-      const { title, niche, targetAudience, painPoints, solution, proofElements, clientId } = req.body;
-      
+      const {
+        title,
+        niche,
+        targetAudience,
+        painPoints,
+        solution,
+        proofElements,
+        clientId,
+      } = req.body;
+
       // Generate VSL script using AI
       const scriptData = {
         niche,
@@ -278,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const bookingData = insertBookingSchema.parse(req.body);
       const booking = await storage.createBooking(bookingData);
-      
+
       // Update lead status to converted
       await storage.updateLead(booking.leadId, {
         status: "converted",
@@ -287,7 +334,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(booking);
     } catch (error) {
       console.error("Error creating booking:", error);
-      res.status(400).json({ message: error instanceof Error ? error.message : "Unknown error" });
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   });
 
@@ -296,7 +345,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { bookingId } = req.params;
       const { status, notes } = req.body;
-      
+
       const booking = await storage.updateBooking(bookingId, {
         status,
         notes,
@@ -314,7 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { leadId } = req.params;
       const updateData = req.body;
-      
+
       const lead = await storage.updateLead(leadId, {
         ...updateData,
         updatedAt: new Date(),
@@ -356,11 +405,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // In a real app, get userId from authenticated session
       const userId = "demo-user-id"; // Mock user ID
       const result = await storage.activateUserTrial(userId);
-      
+
       // Log the activation
       await storage.logUserActivity(userId, "trial_activated", "trial", {
         trialDays: 14,
-        source: "dashboard"
+        source: "dashboard",
       });
 
       res.json(result);
@@ -384,7 +433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/super-admin/users", async (req, res) => {
     try {
       const { search, status } = req.query;
-      const users = await storage.getAllUsersForAdmin(search as string, status as string);
+      const users = await storage.getAllUsersForAdmin(
+        search as string,
+        status as string
+      );
       res.json(users);
     } catch (error) {
       console.error("Error fetching users:", error);

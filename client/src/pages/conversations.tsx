@@ -24,57 +24,108 @@ import {
   AlertTriangle,
   CheckCircle,
   UserCheck,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 
 export default function Conversations() {
-  const [selectedClientId, setSelectedClientId] = useState("demo-client");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  
+
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
 
   // Fetch clients
-  const { data: clients } = useQuery({
+  const {
+    data: clients,
+    isLoading: isLoadingClients,
+    error: clientsError,
+  } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
-      return response.json();
+      console.log("Fetching clients...");
+      const response = await fetch(`/api/clients?userId=demo-user-id`);
+      const data = await response.json();
+      console.log("Clients response:", data);
+      return data;
     },
   });
 
+  useEffect(() => {
+    if (clientsError) {
+      console.error("Error loading clients:", clientsError);
+    }
+  }, [clientsError]);
+
+  // Then add useEffect to set it from clients:
+  useEffect(() => {
+    if (clients && clients.length > 0 && !selectedClientId) {
+      console.log("Setting client ID to:", clients[0].id);
+      setSelectedClientId(clients[0].id);
+    }
+  }, [clients, selectedClientId]);
+
   // Fetch conversations
-  const { data: dashboardData, isLoading, refetch } = useQuery({
-    queryKey: ["/api/dashboard", selectedClientId],
+  const {
+    data: dashboardData,
+    isLoading,
+    refetch,
+  } = useQuery<{
+    conversations: any[];
+    hotLeads: any[];
+    kpis: any;
+    recentActivity: any[];
+    leads: any[];
+    bookings: any[];
+  }>({
+    queryKey: [`/api/dashboard/${selectedClientId}`],
     enabled: !!selectedClientId,
-  }) as { data: { conversations?: any[]; hotLeads?: any[] } | undefined; isLoading: boolean; refetch: () => void };
+  });
 
   // Fetch messages for selected conversation
   const { data: messages } = useQuery({
     queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
     enabled: !!selectedConversation?.id,
     queryFn: async () => {
-      const response = await fetch(`/api/conversations/${selectedConversation.id}/messages`);
-      return response.json();
+      const response = await fetch(
+        `/api/conversations/${selectedConversation.id}/messages`
+      );
+      const data = await response.json();
+      // Reverse to show oldest first (top) to newest (bottom)
+      return data.reverse();
     },
   });
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content }: { conversationId: string; content: string }) => {
-      const response = await apiRequest("POST", `/api/conversations/${conversationId}/messages`, {
-        content,
-        sender: "human",
-        channel: "dashboard",
-      });
+    mutationFn: async ({
+      conversationId,
+      content,
+    }: {
+      conversationId: string;
+      content: string;
+    }) => {
+      const response = await apiRequest(
+        "POST",
+        `/api/conversations/${conversationId}/messages`,
+        {
+          content,
+          channel: "whatsapp",
+        }
+      );
       return response.json();
     },
     onSuccess: () => {
       setNewMessage("");
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversation?.id, "messages"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+      });
+      // Force scroll to bottom after sending
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
       toast({
         title: "Message sent",
         description: "Your message has been delivered.",
@@ -92,7 +143,11 @@ export default function Conversations() {
   // Take over conversation mutation
   const takeoverMutation = useMutation({
     mutationFn: async (conversationId: string) => {
-      const response = await apiRequest("POST", `/api/conversations/${conversationId}/takeover`, {});
+      const response = await apiRequest(
+        "POST",
+        `/api/conversations/${conversationId}/takeover`,
+        {}
+      );
       return response.json();
     },
     onSuccess: () => {
@@ -107,19 +162,83 @@ export default function Conversations() {
   const conversations = dashboardData?.conversations || [];
   const hotLeads = dashboardData?.hotLeads || [];
 
+  //Debug Logging
   useEffect(() => {
-    if (wsData) {
-      refetch();
-    }
-  }, [wsData, refetch]);
+    console.log("Selected Client ID:", selectedClientId);
+    console.log("Dashboard Data:", dashboardData);
+    console.log("Conversations:", conversations);
+    console.log("Is Loading:", isLoading);
+  }, [selectedClientId, dashboardData, isLoading]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!wsData) return;
+
+    console.log("WebSocket update received:", wsData);
+
+    switch (wsData.type) {
+      case "conversation_updated":
+        // Refetch dashboard to update conversation list
+        queryClient.invalidateQueries({
+          queryKey: [`/api/dashboard/${selectedClientId}`],
+        });
+        break;
+
+      case "new_message":
+        // Refetch messages for the conversation
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
+        });
+        // Also refetch dashboard to update last message time
+        queryClient.invalidateQueries({
+          queryKey: [`/api/dashboard/${selectedClientId}`],
+        });
+        break;
+
+      case "new_conversation":
+      case "hot_lead_alert":
+        // Refetch entire dashboard
+        queryClient.invalidateQueries({
+          queryKey: [`/api/dashboard/${selectedClientId}`],
+        });
+
+        // Show notification for hot leads
+        if (wsData.type === "hot_lead_alert") {
+          toast({
+            title: "Hot Lead Alert!",
+            description: `${wsData.conversation?.lead?.firstName} needs immediate attention`,
+            variant: "destructive",
+          });
+        }
+        break;
+
+      default:
+        // Fallback: refetch everything
+        refetch();
+    }
+  }, [wsData, selectedClientId, queryClient, toast, refetch]);
+
+  useEffect(() => {
+    // Scroll to bottom when messages load or conversation changes
+    if (messages && messages.length > 0) {
+      // Use timeout to ensure DOM has updated
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  }, [messages, selectedConversation?.id]);
+
+  useEffect(() => {
+    // Scroll to bottom when selecting a conversation
+    if (selectedConversation) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 200);
+    }
+  }, [selectedConversation?.id]);
 
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
-    
+
     sendMessageMutation.mutate({
       conversationId: selectedConversation.id,
       content: newMessage,
@@ -132,18 +251,27 @@ export default function Conversations() {
 
   const getStatusBadge = (conversation: any) => {
     const score = parseFloat(conversation.qualificationScore || "0");
-    
+
     if (score >= 0.7) {
-      return <Badge className="bg-red-100 text-red-800">Hot Lead (Score: {score.toFixed(1)})</Badge>;
+      return (
+        <Badge className="bg-red-100 text-red-800">
+          Hot Lead (Score: {score.toFixed(1)})
+        </Badge>
+      );
     } else if (conversation.isAiHandled) {
       return <Badge className="bg-blue-100 text-blue-800">AI Handling</Badge>;
     } else {
-      return <Badge className="bg-green-100 text-green-800">Human Active</Badge>;
+      return (
+        <Badge className="bg-green-100 text-green-800">Human Active</Badge>
+      );
     }
   };
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   if (isLoading) {
@@ -158,44 +286,64 @@ export default function Conversations() {
   }
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* Conversations List */}
-        <div className="w-full lg:w-80 bg-white border-r border-slate-200 flex flex-col lg:h-full max-h-96 lg:max-h-none">
-          <div className="p-4 border-b border-slate-200">
+    <div className="h-screen flex flex-col">
+      {/* Fixed height container */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Conversations List - Fixed width with internal scroll */}
+        <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+          {/* Header - Fixed */}
+          <div className="p-4 border-b border-slate-200 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Conversations</h3>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Conversations
+              </h3>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => refetch()}
                 disabled={isLoading}
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                />
               </Button>
             </div>
-            
+
             {/* Connection Status */}
-            <div className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg ${
-              isConnected ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <div
+              className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg ${
+                isConnected
+                  ? "bg-green-50 text-green-700"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-green-500" : "bg-red-500"
+                }`}
+              ></div>
+              <span>{isConnected ? "Connected" : "Disconnected"}</span>
             </div>
           </div>
 
-          <ScrollArea className="flex-1">
+          {/* Scrollable conversation list */}
+          <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-3">
               {conversations.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600">No active conversations</p>
+                  <p className="text-sm text-slate-600">
+                    No active conversations
+                  </p>
                 </div>
               ) : (
                 conversations.map((conversation: any) => (
                   <Card
                     key={conversation.id}
                     className={`cursor-pointer transition-colors hover:bg-slate-50 ${
-                      selectedConversation?.id === conversation.id ? 'ring-2 ring-primary' : ''
+                      selectedConversation?.id === conversation.id
+                        ? "ring-2 ring-primary"
+                        : ""
                     }`}
                     onClick={() => setSelectedConversation(conversation)}
                   >
@@ -203,27 +351,30 @@ export default function Conversations() {
                       <div className="flex items-start space-x-3">
                         <Avatar className="h-10 w-10">
                           <AvatarFallback>
-                            {(conversation.lead?.firstName?.[0] || 'U') + (conversation.lead?.lastName?.[0] || '')}
+                            {(conversation.lead?.firstName?.[0] || "U") +
+                              (conversation.lead?.lastName?.[0] || "")}
                           </AvatarFallback>
                         </Avatar>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <h4 className="text-sm font-medium text-slate-900 truncate">
-                              {conversation.lead?.firstName} {conversation.lead?.lastName}
+                              {conversation.lead?.firstName}{" "}
+                              {conversation.lead?.lastName}
                             </h4>
                             <span className="text-xs text-slate-500">
                               {formatTime(conversation.lastMessageAt)}
                             </span>
                           </div>
-                          
+
                           <p className="text-xs text-slate-600 mb-2 truncate">
                             {conversation.lead?.company}
                           </p>
-                          
+
                           {getStatusBadge(conversation)}
-                          
-                          {parseFloat(conversation.qualificationScore || "0") >= 0.7 && (
+
+                          {parseFloat(conversation.qualificationScore || "0") >=
+                            0.7 && (
                             <div className="flex items-center space-x-1 mt-2 text-xs text-red-600">
                               <AlertTriangle className="w-3 h-3" />
                               <span>Needs attention</span>
@@ -236,35 +387,38 @@ export default function Conversations() {
                 ))
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
 
-        {/* Chat Interface */}
+        {/* Chat Interface - Flex column with internal scroll */}
         <div className="flex-1 flex flex-col">
           {selectedConversation ? (
             <>
-              {/* Chat Header */}
-              <div className="bg-white border-b border-slate-200 p-4">
+              {/* Chat Header - Fixed */}
+              <div className="bg-white border-b border-slate-200 p-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback>
-                        {(selectedConversation.lead?.firstName?.[0] || 'U') + (selectedConversation.lead?.lastName?.[0] || '')}
+                        {(selectedConversation.lead?.firstName?.[0] || "U") +
+                          (selectedConversation.lead?.lastName?.[0] || "")}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="text-lg font-semibold text-slate-900">
-                        {selectedConversation.lead?.firstName} {selectedConversation.lead?.lastName}
+                        {selectedConversation.lead?.firstName}{" "}
+                        {selectedConversation.lead?.lastName}
                       </h3>
                       <p className="text-sm text-slate-600">
-                        {selectedConversation.lead?.company} • {selectedConversation.lead?.email}
+                        {selectedConversation.lead?.company} •{" "}
+                        {selectedConversation.lead?.email}
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-3">
                     {getStatusBadge(selectedConversation)}
-                    
+
                     {selectedConversation.isAiHandled && (
                       <Button
                         onClick={() => handleTakeover(selectedConversation.id)}
@@ -272,15 +426,17 @@ export default function Conversations() {
                         disabled={takeoverMutation.isPending}
                       >
                         <UserCheck className="w-4 h-4 mr-2" />
-                        {takeoverMutation.isPending ? "Taking over..." : "Take Over"}
+                        {takeoverMutation.isPending
+                          ? "Taking over..."
+                          : "Take Over"}
                       </Button>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Messages */}
-              <ScrollArea className="flex-1 p-4">
+              {/* Messages - Scrollable area */}
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
                 <div className="space-y-4">
                   {messages?.length === 0 ? (
                     <div className="text-center py-8">
@@ -291,24 +447,37 @@ export default function Conversations() {
                     messages?.map((message: any) => (
                       <div
                         key={message.id}
-                        className={`flex ${message.sender === 'lead' ? 'justify-start' : 'justify-end'}`}
+                        className={`flex ${
+                          message.sender === "lead"
+                            ? "justify-start"
+                            : "justify-end"
+                        }`}
                       >
                         <div
                           className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.sender === 'lead'
-                              ? 'bg-slate-100 text-slate-900'
-                              : message.sender === 'ai'
-                              ? 'bg-blue-100 text-blue-900'
-                              : 'bg-primary text-white'
+                            message.sender === "lead"
+                              ? "bg-slate-100 text-slate-900"
+                              : message.sender === "ai"
+                              ? "bg-blue-100 text-blue-900"
+                              : "bg-primary text-white"
                           }`}
                         >
                           <div className="flex items-center space-x-2 mb-1">
-                            {message.sender === 'ai' && <Bot className="w-3 h-3" />}
-                            {message.sender === 'lead' && <User className="w-3 h-3" />}
-                            {message.sender === 'human' && <UserCheck className="w-3 h-3" />}
+                            {message.sender === "ai" && (
+                              <Bot className="w-3 h-3" />
+                            )}
+                            {message.sender === "lead" && (
+                              <User className="w-3 h-3" />
+                            )}
+                            {message.sender === "human" && (
+                              <UserCheck className="w-3 h-3" />
+                            )}
                             <span className="text-xs opacity-75">
-                              {message.sender === 'ai' ? 'AI Assistant' : 
-                               message.sender === 'lead' ? 'Lead' : 'You'}
+                              {message.sender === "ai"
+                                ? "AI Assistant"
+                                : message.sender === "lead"
+                                ? "Lead"
+                                : "You"}
                             </span>
                           </div>
                           <p className="text-sm">{message.content}</p>
@@ -321,21 +490,23 @@ export default function Conversations() {
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-              </ScrollArea>
+              </div>
 
-              {/* Message Input */}
-              <div className="bg-white border-t border-slate-200 p-4">
+              {/* Message Input - Fixed at bottom */}
+              <div className="bg-white border-t border-slate-200 p-4 flex-shrink-0">
                 <div className="flex space-x-3">
                   <Input
                     placeholder="Type your message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                     disabled={sendMessageMutation.isPending}
                   />
                   <Button
                     onClick={handleSendMessage}
-                    disabled={!newMessage.trim() || sendMessageMutation.isPending}
+                    disabled={
+                      !newMessage.trim() || sendMessageMutation.isPending
+                    }
                     className="bg-primary text-white hover:bg-primary/90"
                   >
                     <Send className="w-4 h-4" />
@@ -347,12 +518,17 @@ export default function Conversations() {
             <div className="flex-1 flex items-center justify-center bg-slate-50">
               <div className="text-center">
                 <MessageCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Select a Conversation</h3>
-                <p className="text-slate-600">Choose a conversation from the list to start chatting</p>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Select a Conversation
+                </h3>
+                <p className="text-slate-600">
+                  Choose a conversation from the list to start chatting
+                </p>
               </div>
             </div>
           )}
         </div>
+      </div>
     </div>
   );
 }

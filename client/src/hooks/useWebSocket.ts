@@ -1,5 +1,3 @@
-// client/src/hooks/useWebSocket.ts
-
 import { useState, useEffect, useRef } from "react";
 
 export function useWebSocket() {
@@ -8,21 +6,23 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    // Always connect to backend server port
+    const wsUrl = "ws://localhost:5000/ws";
     
     const connect = () => {
+      console.log("Attempting to connect to:", wsUrl);
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       socket.onopen = () => {
-        console.log("WebSocket connected");
+        console.log("WebSocket connected successfully");
         setIsConnected(true);
       };
 
       socket.onmessage = (event) => {
         try {
           const parsedData = JSON.parse(event.data);
+          console.log("WebSocket message received:", parsedData);
           setData(parsedData);
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -30,10 +30,8 @@ export function useWebSocket() {
       };
 
       socket.onclose = () => {
-        console.log("WebSocket disconnected");
+        console.log("WebSocket disconnected, reconnecting in 3s...");
         setIsConnected(false);
-        
-        // Reconnect after 3 seconds
         setTimeout(connect, 3000);
       };
 
