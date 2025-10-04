@@ -7,12 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import {
   MessageCircle,
   Send,
@@ -35,6 +42,9 @@ export default function Conversations() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [showLeadDetails, setShowLeadDetails] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState(""); // ADD THIS
+  const [filterStatus, setFilterStatus] = useState("all");
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
@@ -164,6 +174,36 @@ export default function Conversations() {
   const conversations = dashboardData?.conversations || [];
   const hotLeads = dashboardData?.hotLeads || [];
 
+  const filteredConversations = conversations.filter((conv: any) => {
+    // Search filter
+    const matchesSearch =
+      searchQuery === "" ||
+      conv.lead?.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.lead?.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Status filter
+    const matchesStatus =
+      filterStatus === "all" ||
+      (filterStatus === "hot" &&
+        parseFloat(conv.qualificationScore || "0") >= 0.7) ||
+      (filterStatus === "ai" && conv.isAiHandled === true) ||
+      (filterStatus === "human" && conv.isAiHandled === false);
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // Calculate counts for badges
+  const hotCount = conversations.filter(
+    (c: any) => parseFloat(c.qualificationScore || "0") >= 0.7
+  ).length;
+  const aiHandlingCount = conversations.filter(
+    (c: any) => c.isAiHandled === true
+  ).length;
+  const humanHandlingCount = conversations.filter(
+    (c: any) => c.isAiHandled === false
+  ).length;
+
   //Debug Logging
   useEffect(() => {
     console.log("Selected Client ID:", selectedClientId);
@@ -292,8 +332,9 @@ export default function Conversations() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Conversations List */}
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-          <div className="p-4 border-b border-slate-200 flex-shrink-0">
-            <div className="flex items-center justify-between mb-4">
+          {/* Header */}
+          <div className="p-3 border-b border-slate-200 flex-shrink-0">
+            <div className="flex items-center justify-between mb-1">
               <h3 className="text-lg font-semibold text-slate-900">
                 Conversations
               </h3>
@@ -309,8 +350,9 @@ export default function Conversations() {
               </Button>
             </div>
 
+            {/* Connection Status */}
             <div
-              className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg ${
+              className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg mb-4 ${
                 isConnected
                   ? "bg-green-50 text-green-700"
                   : "bg-red-50 text-red-700"
@@ -323,19 +365,66 @@ export default function Conversations() {
               ></div>
               <span>{isConnected ? "Connected" : "Disconnected"}</span>
             </div>
+
+            {/* Search Bar */}
+            {/* Search and Filter - Inline */}
+            <div className="flex gap-1.5 mb-3">
+              {/* Search Input */}
+              <Input
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-2"
+              />
+
+              {/* Filter Dropdown */}
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    All ({conversations.length})
+                  </SelectItem>
+                  <SelectItem value="hot">Hot Leads ({hotCount})</SelectItem>
+                  <SelectItem value="ai">
+                    AI Handling ({aiHandlingCount})
+                  </SelectItem>
+                  <SelectItem value="human">
+                    Human ({humanHandlingCount})
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
+          {/* Scrollable conversation list */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-4 space-y-3">
-              {conversations.length === 0 ? (
+            <div className="p-3 space-y-3">
+              {filteredConversations.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                   <p className="text-sm text-slate-600">
-                    No active conversations
+                    {searchQuery || filterStatus !== "all"
+                      ? "No conversations match your filters"
+                      : "No active conversations"}
                   </p>
+                  {(searchQuery || filterStatus !== "all") && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setFilterStatus("all");
+                      }}
+                      className="mt-2"
+                    >
+                      Clear filters
+                    </Button>
+                  )}
                 </div>
               ) : (
-                conversations.map((conversation: any) => (
+                filteredConversations.map((conversation: any) => (
                   <Card
                     key={conversation.id}
                     className={`cursor-pointer transition-colors hover:bg-slate-50 ${
