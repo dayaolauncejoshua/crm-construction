@@ -20,8 +20,12 @@ export class WhatsAppService {
   private phoneNumberId: string;
 
   constructor() {
-    this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || "default_token";
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || "default_phone_id";
+    this.accessToken =
+      process.env.WHATSAPP_ACCESS_TOKEN ||
+      process.env.META_ACCESS_TOKEN ||
+      "default_token";
+    this.phoneNumberId =
+      process.env.WHATSAPP_PHONE_NUMBER_ID || "default_phone_id";
   }
 
   async sendMessage(message: WhatsAppMessage): Promise<boolean> {
@@ -31,10 +35,13 @@ export class WhatsAppService {
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${this.accessToken}`,
+            Authorization: `Bearer ${this.accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(message),
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            ...message,
+          }),
         }
       );
 
@@ -76,15 +83,18 @@ export class WhatsAppService {
         language: {
           code: "en_US",
         },
-        components: variables.length > 0 ? [
-          {
-            type: "body",
-            parameters: variables.map(variable => ({
-              type: "text",
-              text: variable,
-            })),
-          },
-        ] : [],
+        components:
+          variables.length > 0
+            ? [
+                {
+                  type: "body",
+                  parameters: variables.map((variable) => ({
+                    type: "text",
+                    text: variable,
+                  })),
+                },
+              ]
+            : [],
       },
     };
 
@@ -99,7 +109,7 @@ export class WhatsAppService {
     shortlink: string
   ): Promise<boolean> {
     const message = `Hi ${firstName}, your ${auditType} is ready. Top finding: ${topFinding}. See details: ${shortlink}. Reply 1 to book, 2 to ask a question, or STOP to opt out.`;
-    
+
     return await this.sendTextMessage(to, message);
   }
 

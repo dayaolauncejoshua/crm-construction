@@ -25,6 +25,7 @@ import {
   CheckCircle,
   UserCheck,
   RefreshCw,
+  Info,
 } from "lucide-react";
 
 export default function Conversations() {
@@ -33,6 +34,7 @@ export default function Conversations() {
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [showLeadDetails, setShowLeadDetails] = useState(false);
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
@@ -287,11 +289,9 @@ export default function Conversations() {
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Fixed height container */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Conversations List - Fixed width with internal scroll */}
+        {/* Left: Conversations List */}
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-          {/* Header - Fixed */}
           <div className="p-4 border-b border-slate-200 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900">
@@ -309,7 +309,6 @@ export default function Conversations() {
               </Button>
             </div>
 
-            {/* Connection Status */}
             <div
               className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg ${
                 isConnected
@@ -326,7 +325,6 @@ export default function Conversations() {
             </div>
           </div>
 
-          {/* Scrollable conversation list */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-3">
               {conversations.length === 0 ? (
@@ -390,11 +388,10 @@ export default function Conversations() {
           </div>
         </div>
 
-        {/* Chat Interface - Flex column with internal scroll */}
+        {/* Center: Chat Interface */}
         <div className="flex-1 flex flex-col">
           {selectedConversation ? (
             <>
-              {/* Chat Header - Fixed */}
               <div className="bg-white border-b border-slate-200 p-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -410,19 +407,29 @@ export default function Conversations() {
                         {selectedConversation.lead?.lastName}
                       </h3>
                       <p className="text-sm text-slate-600">
-                        {selectedConversation.lead?.company} •{" "}
-                        {selectedConversation.lead?.email}
+                        {selectedConversation.lead?.company}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center">
                     {getStatusBadge(selectedConversation)}
+
+                    {/* Icon-only button with hover tooltip */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowLeadDetails(!showLeadDetails)}
+                      className={`p-2 ${showLeadDetails ? "bg-slate-100" : ""}`}
+                      title="Lead Details" // This shows tooltip on hover
+                    >
+                      <Info className="w-6 h-6 text-slate-600" />
+                    </Button>
 
                     {selectedConversation.isAiHandled && (
                       <Button
                         onClick={() => handleTakeover(selectedConversation.id)}
-                        className="bg-primary text-white hover:bg-primary/90"
+                        className=""
                         disabled={takeoverMutation.isPending}
                       >
                         <UserCheck className="w-4 h-4 mr-2" />
@@ -435,7 +442,6 @@ export default function Conversations() {
                 </div>
               </div>
 
-              {/* Messages - Scrollable area */}
               <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
                 <div className="space-y-4">
                   {messages?.length === 0 ? (
@@ -492,7 +498,6 @@ export default function Conversations() {
                 </div>
               </div>
 
-              {/* Message Input - Fixed at bottom */}
               <div className="bg-white border-t border-slate-200 p-4 flex-shrink-0">
                 <div className="flex space-x-3">
                   <Input
@@ -528,6 +533,253 @@ export default function Conversations() {
             </div>
           )}
         </div>
+
+        {/* Right: Lead Detail Sidebar */}
+
+        {selectedConversation && showLeadDetails && (
+          <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden pb-4">
+            <div className="p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Lead Details
+              </h3>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Contact Information */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  Contact Information
+                </h4>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <User className="w-4 h-4 text-slate-500" />
+                    <span className="text-slate-900">
+                      {selectedConversation.lead?.firstName}{" "}
+                      {selectedConversation.lead?.lastName}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Phone className="w-4 h-4 text-slate-500" />
+                    <span className="text-slate-600">
+                      {selectedConversation.lead?.phone || "No phone"}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm break-all">
+                    <span className="text-slate-500">@</span>
+                    <span className="text-slate-600">
+                      {selectedConversation.lead?.email || "No email"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Lead Status */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  Status
+                </h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Lead Status</span>
+                    <Badge variant="outline">
+                      {selectedConversation.lead?.status || "new"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Source</span>
+                    <Badge variant="outline">
+                      {selectedConversation.lead?.source || "unknown"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">
+                      Qualification Score
+                    </span>
+                    <Badge
+                      className={
+                        parseFloat(
+                          selectedConversation.qualificationScore || "0"
+                        ) >= 0.7
+                          ? "bg-red-100 text-red-800"
+                          : parseFloat(
+                              selectedConversation.qualificationScore || "0"
+                            ) >= 0.4
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-green-100 text-green-800"
+                      }
+                    >
+                      {(
+                        parseFloat(
+                          selectedConversation.qualificationScore || "0"
+                        ) * 100
+                      ).toFixed(0)}
+                      %
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Audit Results */}
+              {selectedConversation.lead?.auditResults && (
+                <>
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                      Audit Results
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-xs font-medium text-slate-500">
+                          Score
+                        </span>
+                        <div className="mt-1 flex items-center space-x-2">
+                          <div className="flex-1 bg-slate-200 rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full"
+                              style={{
+                                width: `${
+                                  selectedConversation.lead.auditResults
+                                    .score || 0
+                                }%`,
+                              }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-semibold text-slate-900">
+                            {selectedConversation.lead.auditResults.score || 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-medium text-slate-500">
+                          Top Finding
+                        </span>
+                        <p className="text-sm text-slate-900 mt-1">
+                          {selectedConversation.lead.auditResults.topFinding ||
+                            "N/A"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-medium text-slate-500">
+                          Estimated ROI
+                        </span>
+                        <p className="text-sm text-green-600 font-semibold mt-1">
+                          {selectedConversation.lead.auditResults
+                            .estimatedROI || "N/A"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-medium text-slate-500">
+                          Timeline
+                        </span>
+                        <p className="text-sm text-slate-900 mt-1">
+                          {selectedConversation.lead.auditResults.timeline ||
+                            "N/A"}
+                        </p>
+                      </div>
+
+                      {selectedConversation.lead.auditResults.wins?.length >
+                        0 && (
+                        <div>
+                          <span className="text-xs font-medium text-slate-500">
+                            Opportunities
+                          </span>
+                          <ul className="mt-1 space-y-1">
+                            {selectedConversation.lead.auditResults.wins.map(
+                              (win: string, idx: number) => (
+                                <li
+                                  key={idx}
+                                  className="text-sm text-slate-700 flex items-start"
+                                >
+                                  <CheckCircle className="w-3 h-3 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
+                                  <span>{win}</span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
+
+              {/* Quick Actions */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  Quick Actions
+                </h4>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    size="sm"
+                  >
+                    <Star className="w-4 h-4 mr-2" />
+                    Mark as Hot Lead
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    size="sm"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Mark as Converted
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-red-600 hover:text-red-700"
+                    size="sm"
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Flag for Review
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Timestamps */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  Activity
+                </h4>
+                <div className="space-y-2 text-xs text-slate-600">
+                  <div className="flex justify-between">
+                    <span>Lead Created</span>
+                    <span>
+                      {new Date(
+                        selectedConversation.lead?.createdAt
+                      ).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Last Message</span>
+                    <span>
+                      {new Date(
+                        selectedConversation.lastMessageAt
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  {selectedConversation.lead?.responseTimeSeconds && (
+                    <div className="flex justify-between">
+                      <span>Response Time</span>
+                      <span className="font-semibold text-green-600">
+                        {selectedConversation.lead.responseTimeSeconds}s
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

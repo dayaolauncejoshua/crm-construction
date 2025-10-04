@@ -102,18 +102,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // WhatsApp webhook verification
   app.get("/api/webhooks/whatsapp", (req, res) => {
-    const verifyToken =
-      process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-    if (mode && token === verifyToken) {
-      res.status(200).send(challenge);
-    } else {
-      res.status(403).send("Forbidden");
-    }
-  });
+  console.log("=== WEBHOOK VERIFICATION ===");
+  console.log("Expected token:", verifyToken);
+  console.log("Received token:", token);
+  console.log("Mode:", mode);
+  console.log("Challenge:", challenge);
+
+  if (mode && token === verifyToken) {
+    console.log("✅ Verification successful");
+    res.status(200).send(challenge);
+  } else {
+    console.log("❌ Verification failed - token mismatch");
+    res.status(403).send("Forbidden");
+  }
+});
 
   // Client management
   app.get("/api/clients", async (req, res) => {

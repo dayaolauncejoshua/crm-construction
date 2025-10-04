@@ -5,6 +5,7 @@ import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
 
+
 export class LeadQualificationService {
   private wss: WebSocketServer | null = null;
 
@@ -71,20 +72,25 @@ export class LeadQualificationService {
     }
   }
 
+  //OPENAPI AI 
   async handleIncomingMessage(
-    from: string,
-    message: string,
-    timestamp: number
-  ): Promise<void> {
-    try {
-      // Find lead by phone number
-      const leads = await storage.getLeads("", 1000); // TODO: Add phone lookup method
-      const lead = leads.find(l => l.phone?.replace(/\D/g, "") === from);
-      
-      if (!lead) {
-        console.log("No lead found for phone:", from);
-        return;
-      }
+  from: string,
+  message: string,
+  timestamp: number
+): Promise<void> {
+  try {
+    console.log("=== INCOMING MESSAGE ===");
+    console.log("From:", from);
+    
+    // Find lead by phone number
+    const lead = await storage.getLeadByPhone(from);
+    
+    if (!lead) {
+      console.log("❌ No lead found for phone:", from);
+      return;
+    }
+    
+    console.log("✅ Lead found:", lead.firstName, lead.lastName);
 
       // Find active conversation
       const conversations = await storage.getActiveConversations(lead.clientId);
@@ -104,72 +110,80 @@ export class LeadQualificationService {
         sentAt: new Date(timestamp * 1000),
       });
 
+      //---------------------------------------------------------------------------
+      //SKIP AI QUALIFICATION FOR NOW - UPDATE CONVERSATION FOR NOW
+
       // Get conversation history
-      const messages = await storage.getMessages(conversation.id);
+      // const messages = await storage.getMessages(conversation.id);
       
-      // Qualify the lead
-      const qualification = await qualifyLead(lead, messages);
+      // // Qualify the lead
+      // const qualification = await qualifyLead(lead, messages);
 
-      // Update conversation with new score
-      await storage.updateConversation(conversation.id, {
-        qualificationScore: qualification.score.toString(),
-        lastMessageAt: new Date(),
-      });
+      // // Update conversation with new score
+      // await storage.updateConversation(conversation.id, {
+      //   qualificationScore: qualification.score.toString(),
+      //   lastMessageAt: new Date(),
+      // });
 
-      // Check if human handoff is needed
-      if (qualification.needsHumanAttention || qualification.score >= 0.7) {
+      // // Check if human handoff is needed
+      // if (qualification.needsHumanAttention || qualification.score >= 0.7) {
+      //   await storage.updateConversation(conversation.id, {
+      //     isAiHandled: false,
+      //     humanTakeoverAt: new Date(),
+      //   });
+
+      //   // Alert humans via WebSocket
+      //   this.broadcastUpdate({
+      //     type: "hot_lead_alert",
+      //     conversation: {
+      //       ...conversation,
+      //       lead,
+      //       qualificationScore: qualification.score.toString(),
+      //     },
+      //     qualification,
+      //   });
+
+      //   // Send notification message
+      //   await whatsappService.sendTextMessage(
+      //     from,
+      //     "Thanks for your message! A team member will respond within 5 minutes to help with your request."
+      //   );
+      // } else {
+      //   // Generate AI response
+      //   const client = await storage.getClient(lead.clientId);
+      //   const aiResponse = await generateAIResponse(messages, lead, client);
+
+      //   // Send AI response
+      //   await whatsappService.sendTextMessage(from, aiResponse);
+
+      //   // Record AI response
+      //   await storage.createMessage({
+      //     conversationId: conversation.id,
+      //     content: aiResponse,
+      //     sender: "ai",
+      //     channel: "whatsapp",
+      //     sentAt: new Date(),
+      //   });
+      // }
+
+       // -----------------------------------------------------
+
         await storage.updateConversation(conversation.id, {
-          isAiHandled: false,
-          humanTakeoverAt: new Date(),
-        });
-
-        // Alert humans via WebSocket
-        this.broadcastUpdate({
-          type: "hot_lead_alert",
-          conversation: {
-            ...conversation,
-            lead,
-            qualificationScore: qualification.score.toString(),
-          },
-          qualification,
-        });
-
-        // Send notification message
-        await whatsappService.sendTextMessage(
-          from,
-          "Thanks for your message! A team member will respond within 5 minutes to help with your request."
-        );
-      } else {
-        // Generate AI response
-        const client = await storage.getClient(lead.clientId);
-        const aiResponse = await generateAIResponse(messages, lead, client);
-
-        // Send AI response
-        await whatsappService.sendTextMessage(from, aiResponse);
-
-        // Record AI response
-        await storage.createMessage({
-          conversationId: conversation.id,
-          content: aiResponse,
-          sender: "ai",
-          channel: "whatsapp",
-          sentAt: new Date(),
-        });
-      }
+      lastMessageAt: new Date(),
+    });
 
       // Broadcast conversation update
       this.broadcastUpdate({
-        type: "conversation_updated",
-        conversation: {
-          ...conversation,
-          lead,
-          qualificationScore: qualification.score.toString(),
-        },
-      });
+      type: "new_message",
+      conversationId: conversation.id,
+      message: { content: message, sender: "lead" },
+    });
 
-    } catch (error) {
-      console.error("Error handling incoming message:", error);
-    }
+    console.log("✅ Message recorded, skipping AI for now");
+
+  } catch (error) {
+    console.error("Error handling incoming message:", error);
+  }
   }
 
   private broadcastUpdate(data: any): void {

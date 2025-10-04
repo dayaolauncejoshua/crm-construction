@@ -64,11 +64,19 @@ export interface IStorage {
   getLeadsByStatus(clientId: string, status: string): Promise<Lead[]>;
 
   // Conversation operations
-  getConversations(clientId: string, limit?: number): Promise<(Conversation & { lead: Lead })[]>;
+  getConversations(
+    clientId: string,
+    limit?: number
+  ): Promise<(Conversation & { lead: Lead })[]>;
   getConversation(id: string): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
-  updateConversation(id: string, updates: Partial<InsertConversation>): Promise<Conversation>;
-  getActiveConversations(clientId: string): Promise<(Conversation & { lead: Lead })[]>;
+  updateConversation(
+    id: string,
+    updates: Partial<InsertConversation>
+  ): Promise<Conversation>;
+  getActiveConversations(
+    clientId: string
+  ): Promise<(Conversation & { lead: Lead })[]>;
   getHotLeads(clientId: string): Promise<(Conversation & { lead: Lead })[]>;
 
   // Message operations
@@ -134,7 +142,10 @@ export class DatabaseStorage implements IStorage {
     return newClient;
   }
 
-  async updateClient(id: string, updates: Partial<InsertClient>): Promise<Client> {
+  async updateClient(
+    id: string,
+    updates: Partial<InsertClient>
+  ): Promise<Client> {
     const [updated] = await db
       .update(clients)
       .set({ ...updates, updatedAt: new Date() })
@@ -180,8 +191,17 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(leads.createdAt));
   }
 
+  async getLeadByPhone(phone: string): Promise<Lead | undefined> {
+    const cleanPhone = phone.replace(/\D/g, "");
+    const allLeads = await db.select().from(leads);
+    return allLeads.find((l) => l.phone?.replace(/\D/g, "") === cleanPhone);
+  }
+
   // Conversation operations
-  async getConversations(clientId: string, limit = 20): Promise<(Conversation & { lead: Lead })[]> {
+  async getConversations(
+    clientId: string,
+    limit = 20
+  ): Promise<(Conversation & { lead: Lead })[]> {
     return await db
       .select({
         id: conversations.id,
@@ -212,7 +232,9 @@ export class DatabaseStorage implements IStorage {
     return conversation;
   }
 
-  async createConversation(conversation: InsertConversation): Promise<Conversation> {
+  async createConversation(
+    conversation: InsertConversation
+  ): Promise<Conversation> {
     const [newConversation] = await db
       .insert(conversations)
       .values(conversation)
@@ -220,7 +242,10 @@ export class DatabaseStorage implements IStorage {
     return newConversation;
   }
 
-  async updateConversation(id: string, updates: Partial<InsertConversation>): Promise<Conversation> {
+  async updateConversation(
+    id: string,
+    updates: Partial<InsertConversation>
+  ): Promise<Conversation> {
     const [updated] = await db
       .update(conversations)
       .set({ ...updates, updatedAt: new Date() })
@@ -229,7 +254,9 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getActiveConversations(clientId: string): Promise<(Conversation & { lead: Lead })[]> {
+  async getActiveConversations(
+    clientId: string
+  ): Promise<(Conversation & { lead: Lead })[]> {
     return await db
       .select({
         id: conversations.id,
@@ -247,11 +274,18 @@ export class DatabaseStorage implements IStorage {
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
-      .where(and(eq(conversations.clientId, clientId), eq(conversations.status, "active")))
+      .where(
+        and(
+          eq(conversations.clientId, clientId),
+          eq(conversations.status, "active")
+        )
+      )
       .orderBy(desc(conversations.lastMessageAt));
   }
 
-  async getHotLeads(clientId: string): Promise<(Conversation & { lead: Lead })[]> {
+  async getHotLeads(
+    clientId: string
+  ): Promise<(Conversation & { lead: Lead })[]> {
     return await db
       .select({
         id: conversations.id,
@@ -292,8 +326,6 @@ export class DatabaseStorage implements IStorage {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
   }
-
-
 
   // VSL operations
   async getVSLs(clientId: string): Promise<VSL[]> {
@@ -347,7 +379,10 @@ export class DatabaseStorage implements IStorage {
 
   // Competitor Tracking
   async createCompetitorTracking(data: any): Promise<any> {
-    const [newTracking] = await db.insert(competitorTracking).values(data).returning();
+    const [newTracking] = await db
+      .insert(competitorTracking)
+      .values(data)
+      .returning();
     return newTracking;
   }
 
@@ -375,7 +410,10 @@ export class DatabaseStorage implements IStorage {
 
   // Brand Mentions
   async createBrandMention(data: any): Promise<any> {
-    const [newMention] = await db.insert(brandMentions).values(data).returning();
+    const [newMention] = await db
+      .insert(brandMentions)
+      .values(data)
+      .returning();
     return newMention;
   }
 
@@ -389,7 +427,10 @@ export class DatabaseStorage implements IStorage {
 
   // Executive Reports
   async createExecutiveReport(data: any): Promise<any> {
-    const [newReport] = await db.insert(executiveReports).values(data).returning();
+    const [newReport] = await db
+      .insert(executiveReports)
+      .values(data)
+      .returning();
     return newReport;
   }
 
@@ -403,7 +444,10 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity Alerts
   async createOpportunityAlert(data: any): Promise<any> {
-    const [newAlert] = await db.insert(opportunityAlerts).values(data).returning();
+    const [newAlert] = await db
+      .insert(opportunityAlerts)
+      .values(data)
+      .returning();
     return newAlert;
   }
 
@@ -417,7 +461,10 @@ export class DatabaseStorage implements IStorage {
 
   // Technical Issues
   async createTechnicalIssue(data: any): Promise<any> {
-    const [newIssue] = await db.insert(technicalIssues).values(data).returning();
+    const [newIssue] = await db
+      .insert(technicalIssues)
+      .values(data)
+      .returning();
     return newIssue;
   }
 
@@ -438,9 +485,13 @@ export class DatabaseStorage implements IStorage {
   async getVideoSOPs(clientId?: string): Promise<any[]> {
     const query = db.select().from(videoSOPs);
     if (clientId) {
-      return await query.where(eq(videoSOPs.clientId, clientId)).orderBy(desc(videoSOPs.createdAt));
+      return await query
+        .where(eq(videoSOPs.clientId, clientId))
+        .orderBy(desc(videoSOPs.createdAt));
     }
-    return await query.where(eq(videoSOPs.isPublic, true)).orderBy(desc(videoSOPs.createdAt));
+    return await query
+      .where(eq(videoSOPs.isPublic, true))
+      .orderBy(desc(videoSOPs.createdAt));
   }
 
   // Notion SOPs
@@ -459,7 +510,10 @@ export class DatabaseStorage implements IStorage {
 
   // White Label Settings
   async createWhiteLabelSettings(data: any): Promise<any> {
-    const [newSettings] = await db.insert(whiteLabelSettings).values(data).returning();
+    const [newSettings] = await db
+      .insert(whiteLabelSettings)
+      .values(data)
+      .returning();
     return newSettings;
   }
 
@@ -496,7 +550,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Trial and User Management
-  async activateUserTrial(userId: string, trialDays: number = 14): Promise<any> {
+  async activateUserTrial(
+    userId: string,
+    trialDays: number = 14
+  ): Promise<any> {
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
@@ -507,7 +564,7 @@ export class DatabaseStorage implements IStorage {
         isTrialActive: true,
         hasUnlockedTrial: true,
         trialEndsAt,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
       .returning();
@@ -518,7 +575,7 @@ export class DatabaseStorage implements IStorage {
       .values({
         userId,
         trialDays,
-        source: "dashboard"
+        source: "dashboard",
       })
       .returning();
 
@@ -533,7 +590,7 @@ export class DatabaseStorage implements IStorage {
         isTrialActive: users.isTrialActive,
         hasUnlockedTrial: users.hasUnlockedTrial,
         trialEndsAt: users.trialEndsAt,
-        subscriptionType: users.subscriptionType
+        subscriptionType: users.subscriptionType,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -546,8 +603,11 @@ export class DatabaseStorage implements IStorage {
     if (user.isTrialActive && user.trialEndsAt) {
       const now = new Date();
       const endDate = new Date(user.trialEndsAt);
-      daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-      
+      daysLeft = Math.max(
+        0,
+        Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      );
+
       // Check if trial has expired
       if (daysLeft === 0) {
         await db
@@ -561,14 +621,19 @@ export class DatabaseStorage implements IStorage {
     return { ...user, daysLeft };
   }
 
-  async logUserActivity(userId: string, action: string, resource?: string, details?: any): Promise<any> {
+  async logUserActivity(
+    userId: string,
+    action: string,
+    resource?: string,
+    details?: any
+  ): Promise<any> {
     const [activity] = await db
       .insert(userActivities)
       .values({
         userId,
         action,
         resource,
-        details
+        details,
       })
       .returning();
 
@@ -585,28 +650,33 @@ export class DatabaseStorage implements IStorage {
 
     const [activeTrials] = await db
       .select({
-        count: count(users.id)
+        count: count(users.id),
       })
       .from(users)
       .where(eq(users.isTrialActive, true));
 
     const [expiredTrials] = await db
       .select({
-        count: count(users.id)
+        count: count(users.id),
       })
       .from(users)
-      .where(and(eq(users.hasUnlockedTrial, true), eq(users.isTrialActive, false)));
+      .where(
+        and(eq(users.hasUnlockedTrial, true), eq(users.isTrialActive, false))
+      );
 
     return {
       totalUsers: metrics.totalUsers || 0,
       activeTrials: activeTrials.count || 0,
       expiredTrials: expiredTrials.count || 0,
       totalClients: 0, // Will be calculated from clients table
-      totalLeads: 0,   // Will be calculated from leads table
+      totalLeads: 0, // Will be calculated from leads table
     };
   }
 
-  async getAllUsersForAdmin(searchQuery?: string, statusFilter?: string): Promise<any[]> {
+  async getAllUsersForAdmin(
+    searchQuery?: string,
+    statusFilter?: string
+  ): Promise<any[]> {
     // Build where conditions array
     const whereConditions = [];
 
@@ -624,7 +694,12 @@ export class DatabaseStorage implements IStorage {
           whereConditions.push(eq(users.isTrialActive, true));
           break;
         case "expired":
-          whereConditions.push(and(eq(users.hasUnlockedTrial, true), eq(users.isTrialActive, false)));
+          whereConditions.push(
+            and(
+              eq(users.hasUnlockedTrial, true),
+              eq(users.isTrialActive, false)
+            )
+          );
           break;
         default:
           whereConditions.push(eq(users.subscriptionType, statusFilter));
@@ -654,8 +729,8 @@ export class DatabaseStorage implements IStorage {
     if (whereConditions.length > 0) {
       return await baseSelect
         .where(
-          whereConditions.length === 1 
-            ? whereConditions[0] 
+          whereConditions.length === 1
+            ? whereConditions[0]
             : and(...whereConditions)
         )
         .groupBy(users.id)
@@ -663,9 +738,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // No where conditions - just group and order
-    return await baseSelect
-      .groupBy(users.id)
-      .orderBy(desc(users.createdAt));
+    return await baseSelect.groupBy(users.id).orderBy(desc(users.createdAt));
   }
 
   async getRecentActivities(limit: number = 50): Promise<any[]> {
@@ -677,7 +750,7 @@ export class DatabaseStorage implements IStorage {
         resource: userActivities.resource,
         details: userActivities.details,
         createdAt: userActivities.createdAt,
-        userEmail: users.email
+        userEmail: users.email,
       })
       .from(userActivities)
       .innerJoin(users, eq(userActivities.userId, users.id))
@@ -687,7 +760,7 @@ export class DatabaseStorage implements IStorage {
 
   async recordSystemMetrics(): Promise<any> {
     const dashboard = await this.getSuperAdminDashboard();
-    
+
     const [metrics] = await db
       .insert(systemMetrics)
       .values({
@@ -697,7 +770,7 @@ export class DatabaseStorage implements IStorage {
         totalClients: dashboard.totalClients,
         totalLeads: dashboard.totalLeads,
         avgResponseTime: sql`(SELECT AVG(response_time_seconds) FROM leads WHERE response_time_seconds IS NOT NULL)`,
-        conversionRate: sql`(SELECT COUNT(*) FILTER (WHERE status = 'converted') * 100.0 / COUNT(*) FROM leads WHERE created_at > NOW() - INTERVAL '30 days')`
+        conversionRate: sql`(SELECT COUNT(*) FILTER (WHERE status = 'converted') * 100.0 / COUNT(*) FROM leads WHERE created_at > NOW() - INTERVAL '30 days')`,
       })
       .returning();
 
@@ -737,9 +810,11 @@ export class DatabaseStorage implements IStorage {
     return newBooking;
   }
 
-  
   // Update booking
-  async updateBooking(id: string, updates: Partial<InsertBooking>): Promise<Booking> {
+  async updateBooking(
+    id: string,
+    updates: Partial<InsertBooking>
+  ): Promise<Booking> {
     const [updated] = await db
       .update(bookings)
       .set({ ...updates, updatedAt: new Date() })
@@ -750,9 +825,7 @@ export class DatabaseStorage implements IStorage {
 
   // Delete lead
   async deleteLead(id: string): Promise<void> {
-    await db
-      .delete(leads)
-      .where(eq(leads.id, id));
+    await db.delete(leads).where(eq(leads.id, id));
   }
 
   // Analytics operations
@@ -770,10 +843,7 @@ export class DatabaseStorage implements IStorage {
       .select({ count: count() })
       .from(leads)
       .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, thirtyDaysAgo)
-        )
+        and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
       );
 
     // Conversion rate (leads with bookings / total leads)
@@ -782,10 +852,7 @@ export class DatabaseStorage implements IStorage {
       .from(leads)
       .innerJoin(bookings, eq(leads.id, bookings.leadId))
       .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, thirtyDaysAgo)
-        )
+        and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
       );
 
     // Average response time
@@ -795,10 +862,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(leads)
       .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, thirtyDaysAgo)
-        )
+        and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
       );
 
     // AI handled percentage
@@ -825,13 +889,15 @@ export class DatabaseStorage implements IStorage {
 
     return {
       totalLeads: totalLeadsResult.count,
-      conversionRate: totalLeadsResult.count > 0 
-        ? (conversionsResult.count / totalLeadsResult.count) * 100 
-        : 0,
+      conversionRate:
+        totalLeadsResult.count > 0
+          ? (conversionsResult.count / totalLeadsResult.count) * 100
+          : 0,
       avgResponseTime: avgResponseResult.avg || 0,
-      aiHandledPercentage: totalConversationsResult.count > 0 
-        ? (aiHandledResult.count / totalConversationsResult.count) * 100 
-        : 0,
+      aiHandledPercentage:
+        totalConversationsResult.count > 0
+          ? (aiHandledResult.count / totalConversationsResult.count) * 100
+          : 0,
     };
   }
 
