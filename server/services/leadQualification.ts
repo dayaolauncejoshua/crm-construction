@@ -201,21 +201,48 @@ export class LeadQualificationService {
       if (!lead) {
         console.log("📝 Unknown number - creating new lead automatically");
 
-        // Get the first available client (or create logic to assign to specific client)
-        const clients = await storage.getClients("demo-user-id");
-        if (clients.length === 0) {
-          console.error("No clients found - cannot create lead");
+        // Get ALL active clients and try to match by WhatsApp number
+        const allUsers = await storage.getAllUsersForAdmin();
+        let targetClient = null;
+
+        // Try to find client that matches the WhatsApp number
+        for (const user of allUsers) {
+          const userClients = await storage.getClients(user.id);
+          const matchingClient = userClients.find(
+            (c) => c.isActive && c.whatsappNumber === from
+          );
+          if (matchingClient) {
+            targetClient = matchingClient;
+            break;
+          }
+        }
+
+        // If no match by phone, get the most recently created active client
+        if (!targetClient) {
+          for (const user of allUsers) {
+            const userClients = await storage.getClients(user.id);
+            if (userClients.length > 0) {
+              targetClient = userClients[0]; // Get first active client
+              break;
+            }
+          }
+        }
+
+        if (!targetClient) {
+          console.error("No active clients found - cannot create lead");
           return;
         }
 
-        const defaultClient = clients[0];
+        console.log(
+          `Assigning to client: ${targetClient.name} (${targetClient.id})`
+        );
 
         // Auto-create lead from unknown WhatsApp number
         lead = await storage.createLead({
-          clientId: defaultClient.id,
+          clientId: targetClient.id,
           firstName: "WhatsApp",
           lastName: "Lead",
-          email: `whatsapp_${from}@temp.com`, // Temporary email
+          email: `whatsapp_${from.replace(/\+/g, "")}@temp.com`,
           phone: from,
           company: "Unknown",
           source: "whatsapp-inbound",
@@ -249,6 +276,7 @@ export class LeadQualificationService {
           status: "active",
           isAiHandled: false,
           qualificationScore: "0.0",
+          lastMessageAt: new Date(),
         });
         conversation = { ...newConv, lead } as any;
         console.log("✅ New conversation created:", conversation!.id);
@@ -272,11 +300,6 @@ export class LeadQualificationService {
 
       // Increment unread count for incoming messages
       await storage.incrementUnreadCount(conversation.id);
-
-      // Update conversation timestamp
-      await storage.updateConversation(conversation.id, {
-        lastMessageAt: new Date(),
-      });
 
       // Update conversation timestamp
       await storage.updateConversation(conversation.id, {

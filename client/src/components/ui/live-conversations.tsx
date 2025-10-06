@@ -28,8 +28,12 @@ export function LiveConversations({
 }: LiveConversationsProps) {
   const [, setLocation] = useLocation();
 
-  const handleViewConversation = () => {
-    setLocation("/conversations");
+  const handleViewConversation = (conversationId?: string) => {
+    if (conversationId) {
+      setLocation(`/conversations?id=${conversationId}`);
+    } else {
+      setLocation("/conversations");
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -55,20 +59,20 @@ export function LiveConversations({
         </Badge>
       );
     } else if (numScore >= 0.4) {
-      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Warm</Badge>;
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 text-xs">Warm</Badge>
+      );
     }
     return <Badge className="bg-blue-100 text-blue-800 text-xs">Cold</Badge>;
   };
 
   // Filter: Needs Response (unread OR last message from lead)
-  const needsResponse = conversations.filter(
-    (conv) => conv.unreadCount > 0
-  );
+  const needsResponse = conversations.filter((conv) => conv.unreadCount > 0);
 
   // Filter: Recent Activity (last 24 hours)
   const oneDayAgo = new Date();
   oneDayAgo.setHours(oneDayAgo.getHours() - 24);
-  
+
   const recentActivity = conversations.filter(
     (conv) => new Date(conv.lastMessageAt) > oneDayAgo
   );
@@ -77,7 +81,7 @@ export function LiveConversations({
   const ConversationCard = ({ conversation }: { conversation: any }) => (
     <div
       className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
-      onClick={handleViewConversation}
+      onClick={() => handleViewConversation(conversation.id)}
     >
       <div className="flex items-center space-x-3 flex-1 min-w-0">
         <div className="relative flex-shrink-0">
@@ -104,7 +108,8 @@ export function LiveConversations({
             {getScoreBadge(conversation.qualificationScore)}
           </div>
           <p className="text-xs text-slate-500 truncate">
-            {conversation.lead?.company} • {formatTime(conversation.lastMessageAt)}
+            {conversation.lead?.company} •{" "}
+            {formatTime(conversation.lastMessageAt)}
           </p>
         </div>
       </div>
@@ -115,7 +120,7 @@ export function LiveConversations({
         className="h-8 px-3 flex-shrink-0"
         onClick={(e) => {
           e.stopPropagation();
-          handleViewConversation();
+          handleViewConversation(conversation.id);
         }}
       >
         <Send className="w-3.5 h-3.5 mr-1" />
@@ -126,6 +131,51 @@ export function LiveConversations({
 
   return (
     <div className="space-y-6">
+      <Card className="bg-gradient-to-br from-slate-50 to-white">
+        <CardContent className="p-3">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div
+              className="cursor-pointer hover:bg-white rounded-lg p-3 transition-colors"
+              onClick={() => handleViewConversation()}
+            >
+              <div className="flex items-center justify-center space-x-1 text-slate-600 mb-1">
+                <MessageCircle className="w-4 h-4" />
+                <span className="text-xs font-medium">Total</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-900">
+                {conversations.length}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">All conversations</p>
+            </div>
+            <div
+              className="cursor-pointer hover:bg-white rounded-lg p-3 transition-colors"
+              onClick={() => handleViewConversation()}
+            >
+              <div className="flex items-center justify-center space-x-1 text-red-600 mb-1">
+                <Flame className="w-4 h-4" />
+                <span className="text-xs font-medium">Hot</span>
+              </div>
+              <p className="text-2xl font-bold text-red-600">
+                {hotLeads.length}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">High priority</p>
+            </div>
+            <div
+              className="cursor-pointer hover:bg-white rounded-lg p-3 transition-colors"
+              onClick={() => handleViewConversation()}
+            >
+              <div className="flex items-center justify-center space-x-1 text-orange-600 mb-1">
+                <BellRing className="w-4 h-4" />
+                <span className="text-xs font-medium">Unread</span>
+              </div>
+              <p className="text-2xl font-bold text-orange-600">
+                {needsResponse.length}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">Need response</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       {/* Section 1: Hot Leads Alert */}
       {hotLeads.length > 0 && (
         <Card className="border-red-200 bg-red-50">
@@ -134,12 +184,14 @@ export function LiveConversations({
               <div className="flex items-center space-x-2">
                 <Flame className="w-5 h-5 text-red-600" />
                 <h3 className="font-semibold text-red-900">Hot Leads</h3>
-                <Badge className="bg-red-600 text-white">{hotLeads.length}</Badge>
+                <Badge className="bg-red-600 text-white">
+                  {hotLeads.length}
+                </Badge>
               </div>
               <Button
                 variant="link"
                 size="sm"
-                onClick={handleViewConversation}
+                onClick={() => handleViewConversation()}
                 className="text-red-700"
               >
                 View All
@@ -165,11 +217,7 @@ export function LiveConversations({
                 <h3 className="font-semibold text-slate-900">Needs Response</h3>
                 <Badge variant="outline">{needsResponse.length}</Badge>
               </div>
-              <Button
-                variant="link"
-                size="sm"
-                onClick={handleViewConversation}
-              >
+              <Button variant="link" size="sm" onClick={() => handleViewConversation()}>
                 View All
               </Button>
             </div>
@@ -190,13 +238,11 @@ export function LiveConversations({
             <div className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-blue-600" />
               <h3 className="font-semibold text-slate-900">Recent Activity</h3>
-              <Badge variant="outline" className="text-xs">Last 24h</Badge>
+              <Badge variant="outline" className="text-xs">
+                Last 24h
+              </Badge>
             </div>
-            <Button
-              variant="link"
-              size="sm"
-              onClick={handleViewConversation}
-            >
+            <Button variant="link" size="sm" onClick={() => handleViewConversation()}>
               View All
             </Button>
           </div>
@@ -204,7 +250,9 @@ export function LiveConversations({
           {recentActivity.length === 0 ? (
             <div className="text-center py-8">
               <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-              <p className="text-sm text-slate-600">No activity in last 24 hours</p>
+              <p className="text-sm text-slate-600">
+                No activity in last 24 hours
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -213,50 +261,6 @@ export function LiveConversations({
               ))}
             </div>
           )}
-          </CardContent>
-        </Card>
-      
-
-      {/* Quick Stats Footer */}
-      <Card className="bg-slate-50">
-        <CardContent className="p-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
-              <div className="flex items-center justify-center space-x-1 text-slate-600 mb-1">
-                <MessageCircle className="w-4 h-4" />
-                <span className="text-xs font-medium">Total</span>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {conversations.length}
-              </p>
-            </div>
-            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
-              <div className="flex items-center justify-center space-x-1 text-red-600 mb-1">
-                <Flame className="w-4 h-4" />
-                <span className="text-xs font-medium">Hot</span>
-              </div>
-              <p className="text-2xl font-bold text-red-600">
-                {hotLeads.length}
-              </p>
-            </div>
-            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
-              <div className="flex items-center justify-center space-x-1 text-orange-600 mb-1">
-                <BellRing className="w-4 h-4" />
-                <span className="text-xs font-medium">Unread</span>
-              </div>
-              <p className="text-2xl font-bold text-orange-600">
-                {needsResponse.length}
-              </p>
-            </div>
-          </div>
-          
-          <Button
-            className="w-full mt-4"
-            onClick={handleViewConversation}
-          >
-            <MessageCircle className="w-4 h-4 mr-2" />
-            View All Conversations
-          </Button>
         </CardContent>
       </Card>
     </div>

@@ -313,7 +313,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(leads, eq(conversations.leadId, leads.id))
       .where(
         and(
-          eq(conversations.clientId, clientId),
+          eq(conversations.clientId, clientId), // MAKE SURE THIS IS HERE
           gte(conversations.qualificationScore, "0.7")
         )
       )

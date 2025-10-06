@@ -1,5 +1,5 @@
 // client/src/pages/conversations.tsx
-
+import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,11 @@ import {
 } from "lucide-react";
 
 export default function Conversations() {
+  const { user } = useAuth();
+  console.log("=== USER DEBUG ===");
+  console.log("User object:", user);
+  console.log("User ID:", user?.id);
+  console.log("User email:", user?.email);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -55,14 +60,15 @@ export default function Conversations() {
     isLoading: isLoadingClients,
     error: clientsError,
   } = useQuery({
-    queryKey: ["/api/clients"],
+    queryKey: ["/api/clients", user?.id],
     queryFn: async () => {
       console.log("Fetching clients...");
-      const response = await fetch(`/api/clients?userId=demo-user-id`);
+      const response = await fetch(`/api/clients?userId=${user?.id}`);
       const data = await response.json();
       console.log("Clients response:", data);
       return data;
     },
+    enabled: !!user?.id, // Only run if user ID is available
   });
 
   useEffect(() => {
@@ -194,6 +200,23 @@ export default function Conversations() {
   const conversations = dashboardData?.conversations || [];
   const hotLeads = dashboardData?.hotLeads || [];
 
+  // ADD THIS: Auto-select conversation from URL query parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const conversationId = urlParams.get("id");
+
+    if (conversationId && conversations.length > 0) {
+      const conversation = conversations.find((c) => c.id === conversationId);
+      if (conversation) {
+        setSelectedConversation(conversation);
+        markAsReadMutation.mutate(conversationId);
+
+        // Clear URL parameter after selecting
+        window.history.replaceState({}, "", "/conversations");
+      }
+    }
+  }, [conversations]); // Run when conversations load
+
   const filteredConversations = conversations.filter((conv: any) => {
     // Search filter
     const matchesSearch =
@@ -226,11 +249,26 @@ export default function Conversations() {
 
   //Debug Logging
   useEffect(() => {
+    console.log("=== CONVERSATIONS PAGE DEBUG ===");
     console.log("Selected Client ID:", selectedClientId);
+    console.log("Clients available:", clients);
     console.log("Dashboard Data:", dashboardData);
-    console.log("Conversations:", conversations);
+    console.log("Conversations count:", conversations.length);
+    console.log("Filtered conversations count:", filteredConversations.length);
     console.log("Is Loading:", isLoading);
-  }, [selectedClientId, dashboardData, isLoading]);
+  }, [
+    selectedClientId,
+    dashboardData,
+    isLoading,
+    conversations,
+    filteredConversations,
+  ]);
+
+  console.log("Hot leads from dashboard:", dashboardData?.hotLeads);
+  console.log(
+    "Hot leads client IDs:",
+    dashboardData?.hotLeads?.map((h) => h.clientId)
+  );
 
   useEffect(() => {
     if (!wsData) return;

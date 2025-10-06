@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { useAuth } from "@/contexts/AuthContext";
 import { KPICard } from "@/components/ui/kpi-card";
 import { LiveConversations } from "@/components/ui/live-conversations";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -24,6 +24,7 @@ import {
 
 export default function Dashboard() {
   const { clientId } = useParams();
+  const { user } = useAuth();
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("conversations");
 
@@ -32,11 +33,12 @@ export default function Dashboard() {
 
   // Fetch clients list FIRST
   const { data: clients } = useQuery({
-    queryKey: ["/api/clients"],
+    queryKey: ["/api/clients", user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user-id`); // CHANGED THIS
+      const response = await fetch(`/api/clients?userId=${user?.id}}`); // CHANGED THIS
       return response.json();
     },
+    enabled: !!user?.id, // Only run if user ID is available
   });
 
   // Set client ID from first available client
@@ -104,7 +106,7 @@ export default function Dashboard() {
         <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Welcome back, {user?.firstName || "User"}! 👋</h2>
               <p className="text-sm sm:text-base text-slate-600">Monitor your AI lead generation performance</p>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">

@@ -4,13 +4,13 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  Home, 
-  Users, 
-  MessageCircle, 
-  BarChart3, 
-  Settings, 
-  Shield, 
+import {
+  Home,
+  Users,
+  MessageCircle,
+  BarChart3,
+  Settings,
+  Shield,
   Rocket,
   Crown,
   Bell,
@@ -21,7 +21,7 @@ import {
   Zap,
   Palette,
   FileText,
-  LogOut
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,9 +29,19 @@ interface NavigationProps {
   userRole?: string;
   isTrialActive?: boolean;
   daysLeft?: number;
+  unreadCount?: number;
+  user?: any; 
+  onSignOut?: () => void;
 }
 
-export default function Navigation({ userRole = "user", isTrialActive = false, daysLeft = 0 }: NavigationProps) {
+export default function Navigation({
+  userRole = "user",
+  isTrialActive = false,
+  daysLeft = 0,
+  unreadCount = 0,
+  user,
+  onSignOut,
+}: NavigationProps) {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -43,14 +53,48 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
   const mainNavItems = [
     { path: "/", label: "Dashboard", icon: <Home className="w-4 h-4" /> },
     { path: "/clients", label: "Clients", icon: <Users className="w-4 h-4" /> },
-    { path: "/conversations", label: "Conversations", icon: <MessageCircle className="w-4 h-4" />, badge: "2" },
-    { path: "/leads", label: "Leads", icon: <Zap className="w-4 h-4" />, badge: "6" },
-    { path: "/vsl", label: "VSL Generator", icon: <Play className="w-4 h-4" /> },
-    { path: "/analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
-    { path: "/calendar", label: "Calendar", icon: <Calendar className="w-4 h-4" /> },
-    { path: "/monitoring", label: "Monitoring", icon: <Bell className="w-4 h-4" /> },
-    { path: "/follow-ups", label: "Follow-ups", icon: <Zap className="w-4 h-4" /> },
-    { path: "/white-label", label: "White Label", icon: <Palette className="w-4 h-4" /> },
+    {
+      path: "/conversations",
+      label: "Conversations",
+      icon: <MessageCircle className="w-4 h-4" />,
+      badge: unreadCount > 0 ? unreadCount.toString() : undefined,
+    },
+    {
+      path: "/leads",
+      label: "Leads",
+      icon: <Zap className="w-4 h-4" />,
+      badge: "6",
+    },
+    {
+      path: "/vsl",
+      label: "VSL Generator",
+      icon: <Play className="w-4 h-4" />,
+    },
+    {
+      path: "/analytics",
+      label: "Analytics",
+      icon: <BarChart3 className="w-4 h-4" />,
+    },
+    {
+      path: "/calendar",
+      label: "Calendar",
+      icon: <Calendar className="w-4 h-4" />,
+    },
+    {
+      path: "/monitoring",
+      label: "Monitoring",
+      icon: <Bell className="w-4 h-4" />,
+    },
+    {
+      path: "/follow-ups",
+      label: "Follow-ups",
+      icon: <Zap className="w-4 h-4" />,
+    },
+    {
+      path: "/white-label",
+      label: "White Label",
+      icon: <Palette className="w-4 h-4" />,
+    },
     { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
   ];
 
@@ -59,7 +103,7 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
     mainNavItems.push({
       path: "/super-admin",
       label: "Super Admin",
-      icon: <Shield className="w-4 h-4" />
+      icon: <Shield className="w-4 h-4" />,
     });
   }
 
@@ -76,7 +120,7 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
             </div>
             <h1 className="text-xl font-bold text-slate-900">LeadGen AI</h1>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             {/* Trial Status - Mobile */}
             {isTrialActive && (
@@ -84,7 +128,7 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
                 {daysLeft} days left
               </Badge>
             )}
-            
+
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
@@ -92,7 +136,11 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2"
             >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </Button>
           </div>
         </div>
@@ -100,13 +148,18 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40" onClick={closeMobileMenu} />
+        <div
+          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={closeMobileMenu}
+        />
       )}
 
       {/* Mobile Slide-out Menu */}
-      <nav className={`md:hidden fixed top-0 right-0 h-full w-80 bg-white border-l border-slate-200 transform transition-transform duration-300 ease-in-out z-50 ${
-        isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}>
+      <nav
+        className={`md:hidden fixed top-0 right-0 h-full w-80 bg-white border-l border-slate-200 transform transition-transform duration-300 ease-in-out z-50 ${
+          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Mobile Header */}
           <div className="p-6 border-b border-slate-200">
@@ -162,20 +215,27 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
                   </span>
                 </div>
                 <Link href="/trial-unlock">
-                  <Button size="sm" className="w-full mt-2 bg-amber-600 hover:bg-amber-700">
+                  <Button
+                    size="sm"
+                    className="w-full mt-2 bg-amber-600 hover:bg-amber-700"
+                  >
                     Upgrade Now
                   </Button>
                 </Link>
               </div>
             )}
-            
+
             <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
               <Avatar className="w-8 h-8">
                 <AvatarImage src="/placeholder-avatar.jpg" />
-                <AvatarFallback className="bg-blue-600 text-white text-sm">DA</AvatarFallback>
+                <AvatarFallback className="bg-blue-600 text-white text-sm">
+                  DA
+                </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">Demo Account</p>
+                <p className="text-sm font-medium text-slate-900 truncate">
+                  Demo Account
+                </p>
                 <p className="text-xs text-slate-500">demo@example.com</p>
               </div>
               <Button variant="ghost" size="sm" className="p-2">
@@ -195,7 +255,9 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
               <Rocket className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900">AI Lead System</h1>
+              <h1 className="text-lg font-bold text-slate-900">
+                AI Lead System
+              </h1>
               <p className="text-xs text-slate-600">Multi-Tenant Platform</p>
             </div>
           </div>
@@ -206,10 +268,15 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
           <div className="p-4 mx-4 mt-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center space-x-2 mb-1">
               <Crown className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-900">Trial Active</span>
+              <span className="text-sm font-medium text-blue-900">
+                Trial Active
+              </span>
             </div>
             <p className="text-xs text-blue-700">{daysLeft} days remaining</p>
-            <Button size="sm" className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-xs">
+            <Button
+              size="sm"
+              className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-xs"
+            >
               Upgrade Now
             </Button>
           </div>
@@ -250,30 +317,49 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
 
         {/* User Profile Section */}
         <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center space-x-3 mb-3">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-blue-100 text-blue-600 text-sm">
-                DU
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">Demo User</p>
-              <p className="text-xs text-slate-500">Admin</p>
-            </div>
-          </div>
-          
-          <div className="space-y-1">
-            <Button variant="ghost" className="w-full justify-start text-xs text-slate-600">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-            <Button variant="ghost" className="w-full justify-start text-xs text-slate-600">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
+    {isTrialActive && (
+      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex items-center space-x-2">
+          <Crown className="w-4 h-4 text-amber-600" />
+          <span className="text-sm font-medium text-amber-900">
+            Trial: {daysLeft} days left
+          </span>
         </div>
+        <Link href="/trial-unlock">
+          <Button size="sm" className="w-full mt-2 bg-amber-600 hover:bg-amber-700">
+            Upgrade Now
+          </Button>
+        </Link>
+      </div>
+    )}
+    
+    <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
+      <Avatar className="w-8 h-8">
+        <AvatarImage src="/placeholder-avatar.jpg" />
+        <AvatarFallback className="bg-blue-600 text-white text-sm">
+          {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+          {user?.lastName?.[0] || ""}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-slate-900 truncate">
+          {user?.firstName && user?.lastName 
+            ? `${user.firstName} ${user.lastName}`
+            : user?.email || "User"}
+        </p>
+        <p className="text-xs text-slate-500">{user?.email || ""}</p>
+      </div>
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        className="p-2"
+        onClick={onSignOut}
+      >
+        <LogOut className="w-4 h-4" />
+      </Button>
+    </div>
+  </div>
+  
       </nav>
 
       {/* Mobile Navigation */}
@@ -302,7 +388,7 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
         {/* Mobile Menu Overlay */}
         {isMobileMenuOpen && (
           <>
-            <div 
+            <div
               className="fixed inset-0 bg-black bg-opacity-50 z-40"
               onClick={closeMobileMenu}
             />
@@ -312,9 +398,13 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
                 <div className="p-4 mx-4 mt-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center space-x-2 mb-1">
                     <Crown className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-900">Trial Active</span>
+                    <span className="text-sm font-medium text-blue-900">
+                      Trial Active
+                    </span>
                   </div>
-                  <p className="text-xs text-blue-700">{daysLeft} days remaining</p>
+                  <p className="text-xs text-blue-700">
+                    {daysLeft} days remaining
+                  </p>
                 </div>
               )}
 
@@ -330,14 +420,22 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
                           onClick={closeMobileMenu}
                         >
                           {item.icon}
-                          <span className="ml-3 flex-1 text-left">{item.label}</span>
+                          <span className="ml-3 flex-1 text-left">
+                            {item.label}
+                          </span>
                           {item.badge && (
-                            <Badge variant="secondary" className="ml-auto text-xs">
+                            <Badge
+                              variant="secondary"
+                              className="ml-auto text-xs"
+                            >
                               {item.badge}
                             </Badge>
                           )}
                           {item.path === "/super-admin" && (
-                            <Badge variant="destructive" className="ml-auto text-xs">
+                            <Badge
+                              variant="destructive"
+                              className="ml-auto text-xs"
+                            >
                               Admin
                             </Badge>
                           )}
@@ -357,16 +455,26 @@ export default function Navigation({ userRole = "user", isTrialActive = false, d
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium text-slate-900">Demo User</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      Demo User
+                    </p>
                     <p className="text-xs text-slate-500">Admin</p>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Button variant="outline" className="w-full text-sm" onClick={closeMobileMenu}>
+                  <Button
+                    variant="outline"
+                    className="w-full text-sm"
+                    onClick={closeMobileMenu}
+                  >
                     <Settings className="w-4 h-4 mr-2" />
                     Settings
                   </Button>
-                  <Button variant="outline" className="w-full text-sm" onClick={closeMobileMenu}>
+                  <Button
+                    variant="outline"
+                    className="w-full text-sm"
+                    onClick={closeMobileMenu}
+                  >
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign Out
                   </Button>

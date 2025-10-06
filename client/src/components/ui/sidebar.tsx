@@ -1,18 +1,20 @@
+// client/src/components/ui/sidebar.tsx
+
 import { Link } from "wouter";
-import { 
-  Bot, 
-  Users, 
-  TrendingUp, 
-  MessageCircle, 
-  Video, 
-  Calendar, 
+import {
+  Bot,
+  Users,
+  TrendingUp,
+  MessageCircle,
+  Video,
+  Calendar,
   Settings,
   User,
   LogOut,
   Activity,
   Zap,
   Palette,
-  BookOpen
+  BookOpen,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -21,14 +23,16 @@ interface SidebarProps {
   clients: any[];
   hotLeadsCount: number;
   activeLeadsCount: number;
+  unreadCount: number;
 }
 
-export function Sidebar({ 
-  selectedClientId, 
-  onClientChange, 
-  clients, 
-  hotLeadsCount, 
-  activeLeadsCount 
+export function Sidebar({
+  selectedClientId,
+  onClientChange,
+  clients,
+  hotLeadsCount,
+  activeLeadsCount,
+  unreadCount,
 }: SidebarProps) {
   return (
     <div className="w-64 bg-white shadow-sm border-r border-slate-200 flex flex-col">
@@ -47,16 +51,16 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
-        <Link 
-          href="/dashboard" 
+        <Link
+          href="/dashboard"
           className="flex items-center space-x-3 px-4 py-3 bg-primary/10 text-primary rounded-lg font-medium"
         >
           <TrendingUp className="w-5 h-5" />
           <span>Dashboard</span>
         </Link>
-        
-        <Link 
-          href="/clients" 
+
+        <Link
+          href="/clients"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Users className="w-5 h-5" />
@@ -65,9 +69,9 @@ export function Sidebar({
             {clients.length}
           </span>
         </Link>
-        
-        <Link 
-          href="/leads" 
+
+        <Link
+          href="/leads"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <TrendingUp className="w-5 h-5" />
@@ -76,78 +80,78 @@ export function Sidebar({
             {activeLeadsCount}
           </span>
         </Link>
-        
-        <Link 
-          href="/conversations" 
+
+        <Link
+          href="/conversations"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <MessageCircle className="w-5 h-5" />
           <span>Conversations</span>
-          {hotLeadsCount > 0 && (
-            <span className="ml-auto bg-danger text-white text-xs px-2 py-1 rounded-full">
-              {hotLeadsCount}
+          {unreadCount > 0 && (
+            <span className="ml-auto bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
+              {unreadCount}
             </span>
           )}
         </Link>
-        
-        <Link 
-          href="/vsl" 
+
+        <Link
+          href="/vsl"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Video className="w-5 h-5" />
           <span>VSL Generator</span>
         </Link>
-        
-        <Link 
-          href="/analytics" 
+
+        <Link
+          href="/analytics"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <TrendingUp className="w-5 h-5" />
           <span>Analytics</span>
         </Link>
-        
-        <Link 
-          href="/calendar" 
+
+        <Link
+          href="/calendar"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Calendar className="w-5 h-5" />
           <span>Calendar</span>
         </Link>
-        
-        <Link 
-          href="/monitoring" 
+
+        <Link
+          href="/monitoring"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Activity className="w-5 h-5" />
           <span>Monitoring</span>
         </Link>
-        
-        <Link 
-          href="/follow-ups" 
+
+        <Link
+          href="/follow-ups"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Zap className="w-5 h-5" />
           <span>Follow-ups</span>
         </Link>
-        
-        <Link 
-          href="/white-label" 
+
+        <Link
+          href="/white-label"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Palette className="w-5 h-5" />
           <span>White Label</span>
         </Link>
-        
-        <Link 
-          href="/sops" 
+
+        <Link
+          href="/sops"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <BookOpen className="w-5 h-5" />
           <span>SOPs</span>
         </Link>
-        
-        <Link 
-          href="/settings" 
+
+        <Link
+          href="/settings"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Settings className="w-5 h-5" />

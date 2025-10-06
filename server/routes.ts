@@ -126,9 +126,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Client management
   app.get("/api/clients", async (req, res) => {
     try {
-      // For demo purposes, use a default user ID
-      const userId = (req.query.userId as string) || "demo-user-id";
+      const userId = req.query.userId as string;
+      console.log("=== CLIENTS API DEBUG ===");
+      console.log("Requested userId:", userId);
+
       const clients = await storage.getClients(userId);
+      console.log("Found clients:", clients.length);
+      clients.forEach((c) => console.log(`  - ${c.name} (id: ${c.id})`));
+
       res.json(clients);
     } catch (error) {
       console.error("Error fetching clients:", error);
@@ -154,27 +159,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { clientId } = req.params;
 
-      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
-        await Promise.all([
+      const [kpis, conversations, hotLeads, recentActivity] = await Promise.all(
+        [
           storage.getKPIs(clientId),
-          storage.getConversations(clientId, 10),
+          storage.getConversations(clientId, 50),
           storage.getHotLeads(clientId),
           storage.getRecentActivity(clientId),
-          storage.getLeads(clientId, 50),
-          storage.getBookings(clientId),
-        ]);
+        ]
+      );
+
+      // Merge hot leads into conversations to ensure they're visible
+      const conversationMap = new Map(conversations.map((c) => [c.id, c]));
+      hotLeads.forEach((hl) => {
+        if (!conversationMap.has(hl.id)) {
+          conversationMap.set(hl.id, hl);
+        }
+      });
+      const allConversations = Array.from(conversationMap.values());
 
       res.json({
         kpis,
-        conversations,
+        conversations: allConversations,
         hotLeads,
         recentActivity,
-        leads,
-        bookings,
       });
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-      res.status(500).json({ message: "Failed to fetch dashboard data" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
