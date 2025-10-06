@@ -24,34 +24,41 @@ import {
 
 export default function Dashboard() {
   const { clientId } = useParams();
-  const [selectedClientId, setSelectedClientId] = useState(clientId || "demo-client");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [activeTab, setActiveTab] = useState("conversations");
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
 
-  // Fetch dashboard data
-  const { data: dashboardData, isLoading, refetch } = useQuery({
-    queryKey: ["/api/dashboard", selectedClientId],
-    enabled: !!selectedClientId,
-  }) as { 
-    data: { 
-      kpis?: any; 
-      conversations?: any[]; 
-      hotLeads?: any[]; 
-      recentActivity?: any[] 
-    } | undefined; 
-    isLoading: boolean; 
-    refetch: () => void 
-  };
-
-  // Fetch clients list
+  // Fetch clients list FIRST
   const { data: clients } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
+      const response = await fetch(`/api/clients?userId=demo-user-id`); // CHANGED THIS
       return response.json();
     },
+  });
+
+  // Set client ID from first available client
+  useEffect(() => {
+    if (clients && clients.length > 0 && !selectedClientId) {
+      console.log("Setting client ID to:", clients[0].id);
+      setSelectedClientId(clients[0].id);
+    }
+  }, [clients, selectedClientId]);
+
+  // Fetch dashboard data
+   // Fetch dashboard data - only when we have a valid clientId
+  const { data: dashboardData, isLoading, refetch } = useQuery<{
+    conversations: any[];
+    hotLeads: any[];
+    kpis: any;
+    recentActivity: any[];
+    leads: any[];
+    bookings: any[];
+  }>({
+    queryKey: [`/api/dashboard/${selectedClientId}`],
+    enabled: !!selectedClientId, // Only fetch when we have a clientId
   });
 
   // Fetch system health

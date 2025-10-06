@@ -78,6 +78,8 @@ export interface IStorage {
     clientId: string
   ): Promise<(Conversation & { lead: Lead })[]>;
   getHotLeads(clientId: string): Promise<(Conversation & { lead: Lead })[]>;
+  markConversationAsRead(conversationId: string): Promise<void>; // ADD THIS
+  incrementUnreadCount(conversationId: string): Promise<void>;
 
   // Message operations
   getMessages(conversationId: string, limit?: number): Promise<Message[]>;
@@ -216,6 +218,8 @@ export class DatabaseStorage implements IStorage {
         createdAt: conversations.createdAt,
         updatedAt: conversations.updatedAt,
         lead: leads,
+        unreadCount: conversations.unreadCount,
+        lastReadAt: conversations.lastReadAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
@@ -271,6 +275,8 @@ export class DatabaseStorage implements IStorage {
         createdAt: conversations.createdAt,
         updatedAt: conversations.updatedAt,
         lead: leads,
+        unreadCount: conversations.unreadCount,
+        lastReadAt: conversations.lastReadAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
@@ -300,6 +306,8 @@ export class DatabaseStorage implements IStorage {
         createdAt: conversations.createdAt,
         updatedAt: conversations.updatedAt,
         lead: leads,
+        unreadCount: conversations.unreadCount,
+        lastReadAt: conversations.lastReadAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
@@ -310,6 +318,32 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(desc(conversations.qualificationScore));
+  }
+
+  async markConversationAsRead(conversationId: string): Promise<void> {
+    await db
+      .update(conversations)
+      .set({
+        unreadCount: 0,
+        lastReadAt: new Date(),
+      })
+      .where(eq(conversations.id, conversationId));
+  }
+
+  async incrementUnreadCount(conversationId: string): Promise<void> {
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+
+    if (conversation) {
+      await db
+        .update(conversations)
+        .set({
+          unreadCount: (conversation.unreadCount || 0) + 1,
+        })
+        .where(eq(conversations.id, conversationId));
+    }
   }
 
   // Message operations

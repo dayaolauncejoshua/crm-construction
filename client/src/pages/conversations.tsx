@@ -110,6 +110,26 @@ export default function Conversations() {
     },
   });
 
+  // Mark as read mutation
+  const markAsReadMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      const response = await fetch(
+        `/api/conversations/${conversationId}/read`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+      if (!response.ok) throw new Error("Failed to mark as read");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+    },
+  });
+
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({
@@ -432,20 +452,40 @@ export default function Conversations() {
                         ? "ring-2 ring-primary"
                         : ""
                     }`}
-                    onClick={() => setSelectedConversation(conversation)}
+                    onClick={() => {
+                      setSelectedConversation(conversation);
+                      markAsReadMutation.mutate(conversation.id);
+                    }}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start space-x-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback>
-                            {(conversation.lead?.firstName?.[0] || "U") +
-                              (conversation.lead?.lastName?.[0] || "")}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
+                              {(conversation.lead?.firstName?.[0] || "U") +
+                                (conversation.lead?.lastName?.[0] || "")}
+                            </AvatarFallback>
+                          </Avatar>
+
+                          {/* Unread badge with count */}
+                          {conversation.unreadCount > 0 && (
+                            <div className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center px-1">
+                              <span className="text-xs font-bold text-white">
+                                {conversation.unreadCount}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <h4 className="text-sm font-medium text-slate-900 truncate">
+                            <h4
+                              className={`text-sm font-medium truncate ${
+                                conversation.unreadCount > 0
+                                  ? "text-slate-900 font-semibold"
+                                  : "text-slate-900"
+                              }`}
+                            >
                               {conversation.lead?.firstName}{" "}
                               {conversation.lead?.lastName}
                             </h4>

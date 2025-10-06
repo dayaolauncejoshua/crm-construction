@@ -133,6 +133,8 @@ export const conversations = pgTable("conversations", {
   qualificationScore: decimal("qualification_score", { precision: 3, scale: 2 }).default("0.0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+   unreadCount: integer("unread_count").default(0),
+  lastReadAt: timestamp("last_read_at"),
 });
 
 // Messages table

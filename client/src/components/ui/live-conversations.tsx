@@ -1,19 +1,18 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { 
-  User, 
-  MessageCircle, 
-  Calendar, 
-  Eye, 
-  Reply, 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useLocation } from "wouter";
+import {
+  MessageCircle,
+  Send,
+  Eye,
   AlertTriangle,
-  Bot,
-  Smartphone
+  Clock,
+  TrendingUp,
+  Flame,
+  BellRing,
+  Activity,
 } from "lucide-react";
 
 interface LiveConversationsProps {
@@ -22,240 +21,244 @@ interface LiveConversationsProps {
   clientId: string;
 }
 
-export function LiveConversations({ conversations, hotLeads, clientId }: LiveConversationsProps) {
-  const [expandedConversation, setExpandedConversation] = useState<string | null>(null);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+export function LiveConversations({
+  conversations,
+  hotLeads,
+  clientId,
+}: LiveConversationsProps) {
+  const [, setLocation] = useLocation();
 
-  const takeoverMutation = useMutation({
-    mutationFn: async (conversationId: string) => {
-      const response = await apiRequest("POST", `/api/conversations/${conversationId}/takeover`);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard", clientId] });
-      toast({
-        title: "Conversation taken over",
-        description: "You are now handling this conversation manually.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleTakeover = (conversationId: string) => {
-    takeoverMutation.mutate(conversationId);
+  const handleViewConversation = () => {
+    setLocation("/conversations");
   };
 
-  const getChannelIcon = (channel: string) => {
-    switch (channel) {
-      case "whatsapp":
-        return <MessageCircle className="w-4 h-4 text-green-500" />;
-      case "sms":
-        return <Smartphone className="w-4 h-4 text-blue-500" />;
-      default:
-        return <MessageCircle className="w-4 h-4 text-slate-500" />;
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInMinutes = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60)
+    );
+
+    if (diffInMinutes < 1) return "Just now";
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getScoreBadge = (score: string) => {
+    const numScore = parseFloat(score || "0");
+    if (numScore >= 0.7) {
+      return (
+        <Badge className="bg-red-100 text-red-800 text-xs">
+          <Flame className="w-3 h-3 mr-1" />
+          Hot
+        </Badge>
+      );
+    } else if (numScore >= 0.4) {
+      return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Warm</Badge>;
     }
+    return <Badge className="bg-blue-100 text-blue-800 text-xs">Cold</Badge>;
   };
 
-  const getStatusBadge = (conversation: any) => {
-    const score = parseFloat(conversation.qualificationScore || "0");
-    
-    if (score >= 0.7) {
-      return <Badge variant="destructive">Hot Lead (Score: {score.toFixed(1)})</Badge>;
-    } else if (conversation.isAiHandled) {
-      return <Badge className="bg-primary text-white">AI Handling</Badge>;
-    } else {
-      return <Badge variant="secondary">Human Active</Badge>;
-    }
-  };
+  // Filter: Needs Response (unread OR last message from lead)
+  const needsResponse = conversations.filter(
+    (conv) => conv.unreadCount > 0
+  );
+
+  // Filter: Recent Activity (last 24 hours)
+  const oneDayAgo = new Date();
+  oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+  
+  const recentActivity = conversations.filter(
+    (conv) => new Date(conv.lastMessageAt) > oneDayAgo
+  );
+
+  // Compact Conversation Card Component
+  const ConversationCard = ({ conversation }: { conversation: any }) => (
+    <div
+      className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
+      onClick={handleViewConversation}
+    >
+      <div className="flex items-center space-x-3 flex-1 min-w-0">
+        <div className="relative flex-shrink-0">
+          <Avatar className="h-9 w-9">
+            <AvatarFallback className="text-xs">
+              {(conversation.lead?.firstName?.[0] || "U") +
+                (conversation.lead?.lastName?.[0] || "")}
+            </AvatarFallback>
+          </Avatar>
+          {conversation.unreadCount > 0 && (
+            <div className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center px-1">
+              <span className="text-[10px] font-bold text-white">
+                {conversation.unreadCount}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-2">
+            <h4 className="font-medium text-sm text-slate-900 truncate">
+              {conversation.lead?.firstName} {conversation.lead?.lastName}
+            </h4>
+            {getScoreBadge(conversation.qualificationScore)}
+          </div>
+          <p className="text-xs text-slate-500 truncate">
+            {conversation.lead?.company} • {formatTime(conversation.lastMessageAt)}
+          </p>
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-8 px-3 flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleViewConversation();
+        }}
+      >
+        <Send className="w-3.5 h-3.5 mr-1" />
+        Reply
+      </Button>
+    </div>
+  );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-slate-900">Active Conversations</h3>
-        <div className="flex items-center space-x-3">
-          <span className="text-sm text-slate-600">Auto-refresh: ON</span>
-          <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
-        </div>
-      </div>
-
-      {/* Hot Leads Alert */}
+    <div className="space-y-6">
+      {/* Section 1: Hot Leads Alert */}
       {hotLeads.length > 0 && (
-        <div className="bg-danger/10 border border-danger/20 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <AlertTriangle className="text-danger mr-3" />
-            <div>
-              <h4 className="font-medium text-danger">
-                {hotLeads.length} High-Priority Lead{hotLeads.length > 1 ? 's' : ''} Require Human Attention
-              </h4>
-              <p className="text-sm text-danger/80">
-                Leads with qualification score {'>'} 0.7 detected
-              </p>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Flame className="w-5 h-5 text-red-600" />
+                <h3 className="font-semibold text-red-900">Hot Leads</h3>
+                <Badge className="bg-red-600 text-white">{hotLeads.length}</Badge>
+              </div>
+              <Button
+                variant="link"
+                size="sm"
+                onClick={handleViewConversation}
+                className="text-red-700"
+              >
+                View All
+              </Button>
             </div>
-            <Button 
-              className="ml-auto bg-danger text-white hover:bg-danger/90"
-              onClick={() => {
-                // Handle taking action on all hot leads
-                hotLeads.forEach(lead => handleTakeover(lead.id));
-              }}
+
+            <div className="space-y-2">
+              {hotLeads.slice(0, 3).map((lead) => (
+                <ConversationCard key={lead.id} conversation={lead} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 2: Needs Response */}
+      {needsResponse.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <BellRing className="w-5 h-5 text-orange-600" />
+                <h3 className="font-semibold text-slate-900">Needs Response</h3>
+                <Badge variant="outline">{needsResponse.length}</Badge>
+              </div>
+              <Button
+                variant="link"
+                size="sm"
+                onClick={handleViewConversation}
+              >
+                View All
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {needsResponse.slice(0, 3).map((conv) => (
+                <ConversationCard key={conv.id} conversation={conv} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 3: Recent Activity (Last 24h) */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Activity className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold text-slate-900">Recent Activity</h3>
+              <Badge variant="outline" className="text-xs">Last 24h</Badge>
+            </div>
+            <Button
+              variant="link"
+              size="sm"
+              onClick={handleViewConversation}
             >
-              Take Action
+              View All
             </Button>
           </div>
-        </div>
-      )}
 
-      {/* Conversation List */}
-      <div className="space-y-4">
-        {conversations.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <MessageCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">No Active Conversations</h3>
-              <p className="text-slate-600">New conversations will appear here as leads engage with your system.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          conversations.map((conversation) => (
-            <Card key={conversation.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center">
-                        <User className="text-slate-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-slate-900">
-                          {conversation.lead.firstName} {conversation.lead.lastName}
-                        </h4>
-                        <p className="text-sm text-slate-500">{conversation.lead.company}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {getStatusBadge(conversation)}
-                      </div>
-                    </div>
+          {recentActivity.length === 0 ? (
+            <div className="text-center py-8">
+              <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-600">No activity in last 24 hours</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentActivity.slice(0, 5).map((conv) => (
+                <ConversationCard key={conv.id} conversation={conv} />
+              ))}
+            </div>
+          )}
+          </CardContent>
+        </Card>
+      
 
-                    {/* Last message preview */}
-                    <div className="bg-slate-50 rounded-lg p-3 mb-3">
-                      <p className="text-sm text-slate-700">
-                        {conversation.isAiHandled 
-                          ? "AI: Thanks for your interest! How can I help you today?"
-                          : "Lead is waiting for human response..."
-                        }
-                      </p>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-slate-500">
-                          via {conversation.channel} • {new Date(conversation.lastMessageAt).toLocaleTimeString()}
-                        </span>
-                        <div className="flex items-center space-x-1">
-                          {getChannelIcon(conversation.channel)}
-                          <span className="text-xs text-slate-500">
-                            {conversation.isAiHandled ? "AI Active" : "Human Active"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      {conversation.isAiHandled ? (
-                        <Button 
-                          size="sm" 
-                          className="bg-primary text-white hover:bg-primary/90"
-                          onClick={() => handleTakeover(conversation.id)}
-                          disabled={takeoverMutation.isPending}
-                        >
-                          <Reply className="w-4 h-4 mr-1" />
-                          Take Over
-                        </Button>
-                      ) : (
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => {
-                            // Navigate to conversation detail
-                            window.open(`/conversations/${conversation.id}`, '_blank');
-                          }}
-                        >
-                          <MessageCircle className="w-4 h-4 mr-1" />
-                          Continue Chat
-                        </Button>
-                      )}
-                      
-                      <Button 
-                        size="sm" 
-                        className="bg-accent text-white hover:bg-accent/90"
-                        onClick={() => {
-                          // Handle booking
-                          toast({
-                            title: "Booking feature",
-                            description: "Calendar integration coming soon",
-                          });
-                        }}
-                      >
-                        <Calendar className="w-4 h-4 mr-1" />
-                        Book Now
-                      </Button>
-                      
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => {
-                          const newExpanded = expandedConversation === conversation.id ? null : conversation.id;
-                          setExpandedConversation(newExpanded);
-                        }}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    {/* Expanded conversation details */}
-                    {expandedConversation === conversation.id && (
-                      <div className="mt-4 pt-4 border-t border-slate-200">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="font-medium text-slate-900">Email:</span>
-                            <p className="text-slate-600">{conversation.lead.email}</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-slate-900">Phone:</span>
-                            <p className="text-slate-600">{conversation.lead.phone}</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-slate-900">Source:</span>
-                            <p className="text-slate-600">{conversation.lead.source}</p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-slate-900">Created:</span>
-                            <p className="text-slate-600">
-                              {new Date(conversation.lead.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* Show More Button */}
-      {conversations.length > 0 && (
-        <div className="text-center mt-6">
-          <Button variant="ghost" className="text-primary hover:text-primary/80">
-            View All Conversations ({Math.max(0, conversations.length - 10)} more)
+      {/* Quick Stats Footer */}
+      <Card className="bg-slate-50">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
+              <div className="flex items-center justify-center space-x-1 text-slate-600 mb-1">
+                <MessageCircle className="w-4 h-4" />
+                <span className="text-xs font-medium">Total</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-900">
+                {conversations.length}
+              </p>
+            </div>
+            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
+              <div className="flex items-center justify-center space-x-1 text-red-600 mb-1">
+                <Flame className="w-4 h-4" />
+                <span className="text-xs font-medium">Hot</span>
+              </div>
+              <p className="text-2xl font-bold text-red-600">
+                {hotLeads.length}
+              </p>
+            </div>
+            <div className="cursor-pointer hover:bg-white rounded-lg p-2 transition-colors" onClick={handleViewConversation}>
+              <div className="flex items-center justify-center space-x-1 text-orange-600 mb-1">
+                <BellRing className="w-4 h-4" />
+                <span className="text-xs font-medium">Unread</span>
+              </div>
+              <p className="text-2xl font-bold text-orange-600">
+                {needsResponse.length}
+              </p>
+            </div>
+          </div>
+          
+          <Button
+            className="w-full mt-4"
+            onClick={handleViewConversation}
+          >
+            <MessageCircle className="w-4 h-4 mr-2" />
+            View All Conversations
           </Button>
-        </div>
-      )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

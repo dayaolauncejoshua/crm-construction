@@ -102,25 +102,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // WhatsApp webhook verification
   app.get("/api/webhooks/whatsapp", (req, res) => {
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+    const verifyToken =
+      process.env.WHATSAPP_VERIFY_TOKEN || "default_verify_token";
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
 
-  console.log("=== WEBHOOK VERIFICATION ===");
-  console.log("Expected token:", verifyToken);
-  console.log("Received token:", token);
-  console.log("Mode:", mode);
-  console.log("Challenge:", challenge);
+    console.log("=== WEBHOOK VERIFICATION ===");
+    console.log("Expected token:", verifyToken);
+    console.log("Received token:", token);
+    console.log("Mode:", mode);
+    console.log("Challenge:", challenge);
 
-  if (mode && token === verifyToken) {
-    console.log("✅ Verification successful");
-    res.status(200).send(challenge);
-  } else {
-    console.log("❌ Verification failed - token mismatch");
-    res.status(403).send("Forbidden");
-  }
-});
+    if (mode && token === verifyToken) {
+      console.log("✅ Verification successful");
+      res.status(200).send(challenge);
+    } else {
+      console.log("❌ Verification failed - token mismatch");
+      res.status(403).send("Forbidden");
+    }
+  });
 
   // Client management
   app.get("/api/clients", async (req, res) => {
@@ -189,6 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get messages in a conversation
   app.get("/api/conversations/:conversationId/messages", async (req, res) => {
     try {
       const { conversationId } = req.params;
@@ -197,6 +199,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  // Mark conversation as read
+  app.post("/api/conversations/:id/read", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.markConversationAsRead(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
