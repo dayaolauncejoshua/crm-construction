@@ -138,9 +138,48 @@ export const leads = pgTable("leads", {
   utmData: jsonb("utm_data"),
   consentGiven: boolean("consent_given").default(false),
   responseTimeSeconds: integer("response_time_seconds"),
+  manualScore: varchar("manual_score"), // Manual override score
+  isManualOverride: boolean("is_manual_override").default(false),
+  tags: jsonb("tags").default(sql`'[]'::jsonb`),
+  internalNotes: text("internal_notes"),
+  lastContactedAt: timestamp("last_contacted_at"),
+  nextFollowUpAt: timestamp("next_follow_up_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Lead activity log table
+export const leadActivityLog = pgTable("lead_activity_log", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  action: varchar("action").notNull(), // "score_changed", "status_changed", "tag_added", "note_added"
+  fieldChanged: varchar("field_changed"), // "status", "score", "tags"
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// NEW TABLE: Lead Tags (predefined tags)
+export const leadTags = pgTable("lead_tags", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
+  name: varchar("name").notNull(), // "urgent", "vip", "follow-up"
+  color: varchar("color").notNull().default("blue"), // "red", "green", "blue", "yellow"
+  icon: varchar("icon"), // Optional icon name
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
 
 // Conversations table
 export const conversations = pgTable("conversations", {
@@ -208,6 +247,7 @@ export const quickReplyTemplates = pgTable("quick_reply_templates", {
 
 export type QuickReplyTemplate = typeof quickReplyTemplates.$inferSelect;
 export type InsertQuickReplyTemplate = typeof quickReplyTemplates.$inferInsert;
+
 
 // VSL (Video Sales Letter) table
 export const vsls = pgTable("vsls", {
@@ -397,6 +437,10 @@ export type InsertClient = z.infer<typeof insertClientSchema>;
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = z.infer<typeof insertLeadSchema>;
+export type LeadActivityLog = typeof leadActivityLog.$inferSelect;
+export type InsertLeadActivityLog = typeof leadActivityLog.$inferInsert;
+export type LeadTag = typeof leadTags.$inferSelect;
+export type InsertLeadTag = typeof leadTags.$inferInsert;
 
 export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;

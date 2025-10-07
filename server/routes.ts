@@ -80,6 +80,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual Lead Controls Routes
+
+  // Update lead with manual overrides
+  app.patch("/api/leads/:leadId/manual", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+      const userId = (req as any).user?.id; // Get from session if available
+
+      console.log("📝 Manual lead update:", leadId, req.body);
+
+      const lead = await storage.updateLeadManual(leadId, req.body, userId);
+
+      console.log("✅ Lead updated:", lead);
+
+      res.json(lead);
+    } catch (error) {
+      console.error("❌ Error updating lead:", error);
+      res.status(500).json({ message: "Failed to update lead" });
+    }
+  });
+
+  // Get lead activity log
+  app.get("/api/leads/:leadId/activity", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+      const activity = await storage.getLeadActivityLog(leadId);
+      res.json(activity);
+    } catch (error) {
+      console.error("Error fetching activity log:", error);
+      res.status(500).json({ message: "Failed to fetch activity log" });
+    }
+  });
+
+  // Get available tags for client
+  app.get("/api/lead-tags/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const tags = await storage.getLeadTags(clientId);
+      res.json(tags);
+    } catch (error) {
+      console.error("Error fetching tags:", error);
+      res.status(500).json({ message: "Failed to fetch tags" });
+    }
+  });
+
+  // Create new tag
+  app.post("/api/lead-tags", async (req, res) => {
+    try {
+      const tag = await storage.createLeadTag(req.body);
+      res.json(tag);
+    } catch (error) {
+      console.error("Error creating tag:", error);
+      res.status(500).json({ message: "Failed to create tag" });
+    }
+  });
+
   // WhatsApp webhook
   app.post("/api/webhooks/whatsapp", async (req, res) => {
     try {

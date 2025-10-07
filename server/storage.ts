@@ -45,6 +45,12 @@ import {
 import { db } from "./db";
 import { eq, desc, and, gte, sql, count } from "drizzle-orm";
 import { quickReplyTemplates } from "@shared/schema";
+import {
+  leadActivityLog,
+  leadTags,
+  InsertLeadActivityLog,
+  InsertLeadTag,
+} from "@shared/schema";
 
 export interface IStorage {
   // User operations (required for auth)
@@ -198,6 +204,145 @@ export class DatabaseStorage implements IStorage {
     const cleanPhone = phone.replace(/\D/g, "");
     const allLeads = await db.select().from(leads);
     return allLeads.find((l) => l.phone?.replace(/\D/g, "") === cleanPhone);
+  }
+
+  // Lead Activity Log
+  async logLeadActivity(activity: InsertLeadActivityLog): Promise<any> {
+    const [newLog] = await db
+      .insert(leadActivityLog)
+      .values(activity)
+      .returning();
+    return newLog;
+  }
+
+  async getLeadActivityLog(leadId: string): Promise<any[]> {
+    return await db
+      .select({
+        id: leadActivityLog.id,
+        action: leadActivityLog.action,
+        fieldChanged: leadActivityLog.fieldChanged,
+        oldValue: leadActivityLog.oldValue,
+        newValue: leadActivityLog.newValue,
+        notes: leadActivityLog.notes,
+        createdAt: leadActivityLog.createdAt,
+        user: {
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        },
+      })
+      .from(leadActivityLog)
+      .leftJoin(users, eq(leadActivityLog.userId, users.id))
+      .where(eq(leadActivityLog.leadId, leadId))
+      .orderBy(desc(leadActivityLog.createdAt))
+      .limit(50);
+  }
+
+  // Lead Tags
+  async getLeadTags(clientId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(leadTags)
+      .where(eq(leadTags.clientId, clientId))
+      .orderBy(leadTags.name);
+  }
+
+  async createLeadTag(tag: InsertLeadTag): Promise<any> {
+    const [newTag] = await db.insert(leadTags).values(tag).returning();
+    return newTag;
+  }
+
+  // Update lead with manual controls
+  // Update lead with manual controls
+  async updateLeadManual(
+    leadId: string,
+    updates: Partial<InsertLead>,
+    userId?: string
+  ): Promise<Lead> {
+    console.log("🔄 Updating lead in database:", leadId, updates);
+
+    // Get old lead for logging
+    const oldLead = await this.getLead(leadId);
+
+    // Update the lead
+    const [updated] = await db
+      .update(leads)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, leadId))
+      .returning();
+
+    console.log("✅ Database updated. New values:", {
+      manualScore: updated.manualScore,
+      isManualOverride: updated.isManualOverride,
+      tags: updated.tags,
+    });
+
+    // Log activity if userId provided
+    if (userId && oldLead) {
+      const changes: any[] = [];
+
+      if (updates.status && updates.status !== oldLead.status) {
+        changes.push({
+          leadId,
+          userId,
+          action: "status_changed",
+          fieldChanged: "status",
+          oldValue: oldLead.status,
+          newValue: updates.status,
+        });
+      }
+
+      if (updates.manualScore && updates.manualScore !== oldLead.manualScore) {
+        changes.push({
+          leadId,
+          userId,
+          action: "score_changed",
+          fieldChanged: "manualScore",
+          oldValue: oldLead.manualScore || oldLead.qualificationScore,
+          newValue: updates.manualScore,
+        });
+      }
+
+      if (updates.tags) {
+        changes.push({
+          leadId,
+          userId,
+          action: "tags_updated",
+          fieldChanged: "tags",
+          oldValue: JSON.stringify(oldLead.tags || []),
+          newValue: JSON.stringify(updates.tags),
+        });
+      }
+
+      if (
+        updates.internalNotes &&
+        updates.internalNotes !== oldLead.internalNotes
+      ) {
+        changes.push({
+          leadId,
+          userId,
+          action: "note_added",
+          fieldChanged: "internalNotes",
+          oldValue: oldLead.internalNotes,
+          newValue: updates.internalNotes,
+        });
+      }
+
+      // Log all changes
+      for (const change of changes) {
+        try {
+          await this.logLeadActivity(change);
+        } catch (err) {
+          console.error("Failed to log activity:", err);
+        }
+      }
+    }
+
+    return updated;
   }
 
   // Conversation operations

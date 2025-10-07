@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "../db";
 import { messages, conversations, leads } from "@shared/schema";
 
 async function resetEverything() {

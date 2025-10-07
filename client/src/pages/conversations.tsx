@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -34,8 +35,14 @@ import {
   RefreshCw,
   Info,
   Sparkles,
+  Tag,
+  Edit3,
+  Calendar,
+  History,
+  Target,
 } from "lucide-react";
 import { space } from "postcss/lib/list";
+
 
 export default function Conversations() {
   const { user } = useAuth();
@@ -48,7 +55,23 @@ export default function Conversations() {
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
   const [showLeadDetails, setShowLeadDetails] = useState(false);
+  const [showManualControls, setShowManualControls] = useState(false);
+  const [manualScore, setManualScore] = useState(0);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [internalNote, setInternalNote] = useState("");
+
+  const { data: availableTags } = useQuery<any[]>({
+    queryKey: ["/api/lead-tags", selectedClientId],
+    enabled: !!selectedClientId,
+  });
+
+  // Fetch activity log for selected lead
+  const { data: activityLog } = useQuery<any[]>({
+    queryKey: ["/api/leads", selectedConversation?.lead?.id, "activity"],
+    enabled: !!selectedConversation?.lead?.id,
+  });
 
   const [searchQuery, setSearchQuery] = useState(""); // ADD THIS
   const [filterStatus, setFilterStatus] = useState("all");
@@ -214,6 +237,82 @@ export default function Conversations() {
 
   const conversations = dashboardData?.conversations || [];
   const hotLeads = dashboardData?.hotLeads || [];
+
+  // Update lead manually
+  const updateLeadMutation = useMutation({
+    mutationFn: async (updates: any) => {
+      const response = await apiRequest(
+        "PATCH",
+        `/api/leads/${selectedConversation.lead.id}/manual`,
+        updates
+      );
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Update the selected conversation with new data
+      setSelectedConversation((prev: any) => ({
+        ...prev,
+        lead: { ...prev.lead, ...data },
+        qualificationScore: data.manualScore || prev.qualificationScore,
+      }));
+
+      // Refetch dashboard data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+
+      refetch();
+
+      toast({
+        title: "Lead updated",
+        description: "Changes saved successfully",
+      });
+    },
+  });
+
+  // Update lead score
+  const updateScore = (score: number) => {
+    updateLeadMutation.mutate({
+      manualScore: (score / 100).toString(),
+      isManualOverride: true,
+    });
+  };
+
+  // Update lead status
+  const updateStatus = (status: string) => {
+    updateLeadMutation.mutate({ status });
+  };
+
+  // Toggle tag
+  const toggleTag = (tagName: string) => {
+    const currentTags = selectedConversation?.lead?.tags || [];
+    const newTags = currentTags.includes(tagName)
+      ? currentTags.filter((t: string) => t !== tagName)
+      : [...currentTags, tagName];
+
+    updateLeadMutation.mutate({ tags: newTags });
+    setSelectedTags(newTags);
+  };
+
+  // Save internal note
+  const saveNote = () => {
+    if (!internalNote.trim()) return;
+
+    updateLeadMutation.mutate({
+      internalNotes: internalNote,
+    });
+    setInternalNote("");
+  };
+
+  // Set follow-up reminder
+  const setFollowUpReminder = (days: number) => {
+    const followUpDate = new Date();
+    followUpDate.setDate(followUpDate.getDate() + days);
+
+    updateLeadMutation.mutate({
+      nextFollowUpAt: followUpDate,
+    });
+  };
 
   // ADD THIS: Auto-select conversation from URL query parameter
   useEffect(() => {
@@ -939,246 +1038,374 @@ export default function Conversations() {
 
         {/* Right: Lead Detail Sidebar */}
 
+        {/* Right: Lead Detail Sidebar - MINIMAL VERSION */}
         {selectedConversation && showLeadDetails && (
-          <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden pb-4">
+          <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+            {/* Header with Hot Lead Indicator */}
             <div className="p-4 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-slate-900">
                 Lead Details
               </h3>
+
+              {/* Hot Lead Banner */}
+              {parseFloat(
+                selectedConversation.lead?.manualScore ||
+                  selectedConversation.lead?.qualificationScore ||
+                  selectedConversation.qualificationScore ||
+                  "0"
+              ) >= 0.7 && (
+                <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-semibold text-red-800">
+                    🔥 HOT LEAD
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Contact Information */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  Contact Information
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2 text-sm">
-                    <User className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-900">
-                      {selectedConversation.lead?.firstName}{" "}
-                      {selectedConversation.lead?.lastName}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <Phone className="w-4 h-4 text-slate-500" />
-                    <span className="text-slate-600">
-                      {selectedConversation.lead?.phone || "No phone"}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm break-all">
-                    <span className="text-slate-500">@</span>
-                    <span className="text-slate-600">
-                      {selectedConversation.lead?.email || "No email"}
-                    </span>
-                  </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Contact Info - Compact */}
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-xs">Phone</span>
+                  <span className="text-slate-900 font-medium">
+                    {selectedConversation.lead?.phone || "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-xs">Email</span>
+                  <span className="text-slate-900 text-xs truncate ml-2">
+                    {selectedConversation.lead?.email || "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-xs">Company</span>
+                  <span className="text-slate-900 font-medium">
+                    {selectedConversation.lead?.company || "—"}
+                  </span>
                 </div>
               </div>
 
               <Separator />
 
-              {/* Lead Status */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  Status
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Lead Status</span>
-                    <Badge variant="outline">
-                      {selectedConversation.lead?.status || "new"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Source</span>
-                    <Badge variant="outline">
-                      {selectedConversation.lead?.source || "unknown"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">
-                      Qualification Score
-                    </span>
-                    <Badge
-                      className={
-                        parseFloat(
-                          selectedConversation.qualificationScore || "0"
-                        ) >= 0.7
-                          ? "bg-red-100 text-red-800"
-                          : parseFloat(
-                              selectedConversation.qualificationScore || "0"
-                            ) >= 0.4
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-green-100 text-green-800"
-                      }
-                    >
-                      {(
-                        parseFloat(
-                          selectedConversation.qualificationScore || "0"
-                        ) * 100
-                      ).toFixed(0)}
-                      %
-                    </Badge>
-                  </div>
+              {/* Status & Score - Compact */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Status</span>
+                  <Badge variant="outline" className="text-xs">
+                    {selectedConversation.lead?.status || "new"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Score</span>
+                  <Badge
+                    className={`text-xs ${
+                      parseFloat(
+                        selectedConversation.lead?.manualScore ||
+                          selectedConversation.lead?.qualificationScore ||
+                          selectedConversation.qualificationScore ||
+                          "0"
+                      ) >= 0.7
+                        ? "bg-red-100 text-red-800"
+                        : parseFloat(
+                            selectedConversation.lead?.manualScore ||
+                              selectedConversation.lead?.qualificationScore ||
+                              selectedConversation.qualificationScore ||
+                              "0"
+                          ) >= 0.4
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-green-100 text-green-800"
+                    }`}
+                  >
+                    {(
+                      parseFloat(
+                        selectedConversation.lead?.manualScore ||
+                          selectedConversation.lead?.qualificationScore ||
+                          selectedConversation.qualificationScore ||
+                          "0"
+                      ) * 100
+                    ).toFixed(0)}
+                    %
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Source</span>
+                  <span className="text-xs text-slate-600">
+                    {selectedConversation.lead?.source || "unknown"}
+                  </span>
                 </div>
               </div>
 
               <Separator />
 
-              {/* Audit Results */}
-              {selectedConversation.lead?.auditResults && (
-                <>
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                      Audit Results
-                    </h4>
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-xs font-medium text-slate-500">
-                          Score
+              {/* Manual Controls - Collapsible */}
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowManualControls(!showManualControls)}
+                  className="w-full justify-between p-2 h-auto hover:bg-slate-50"
+                >
+                  <span className="text-xs font-semibold text-slate-700">
+                    Manual Controls
+                  </span>
+                  <Target
+                    className={`w-3 h-3 transition-transform ${
+                      showManualControls ? "rotate-90" : ""
+                    }`}
+                  />
+                </Button>
+
+                {showManualControls && (
+                  <div className="mt-3 space-y-3">
+                    {/* Score Slider - Compact */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-slate-500">
+                          Override Score
                         </span>
-                        <div className="mt-1 flex items-center space-x-2">
-                          <div className="flex-1 bg-slate-200 rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full"
-                              style={{
-                                width: `${
-                                  selectedConversation.lead.auditResults
-                                    .score || 0
-                                }%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span className="text-sm font-semibold text-slate-900">
-                            {selectedConversation.lead.auditResults.score || 0}
-                          </span>
+                        <span className="text-xs font-semibold text-slate-900">
+                          {(
+                            parseFloat(
+                              selectedConversation.lead?.manualScore ||
+                                selectedConversation.qualificationScore ||
+                                "0"
+                            ) * 100
+                          ).toFixed(0)}
+                          %
+                        </span>
+                      </div>
+                      <Slider
+                        value={[
+                          parseFloat(
+                            selectedConversation.lead?.manualScore ||
+                              selectedConversation.qualificationScore ||
+                              "0"
+                          ) * 100,
+                        ]}
+                        onValueChange={(value) => updateScore(value[0])}
+                        max={100}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+
+                    {/* Status Dropdown - Compact */}
+                    <div>
+                      <span className="text-xs text-slate-500 block mb-1">
+                        Change Status
+                      </span>
+                      <Select
+                        value={selectedConversation.lead?.status}
+                        onValueChange={updateStatus}
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="new">New</SelectItem>
+                          <SelectItem value="contacted">Contacted</SelectItem>
+                          <SelectItem value="qualified">Qualified</SelectItem>
+                          <SelectItem value="converted">Converted</SelectItem>
+                          <SelectItem value="lost">Lost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Tags - Compact */}
+                    <div>
+                      <span className="text-xs text-slate-500 block mb-1">
+                        Tags
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {availableTags?.slice(0, 6).map((tag: any) => {
+                          const isSelected =
+                            selectedConversation.lead?.tags?.includes(tag.name);
+                          return (
+                            <button
+                              key={tag.id}
+                              onClick={() => toggleTag(tag.name)}
+                              className={`px-2 py-1 rounded-full text-xs font-medium transition-all ${
+                                isSelected
+                                  ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              }`}
+                            >
+                              {tag.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Internal Note - Compact */}
+                    <div>
+                      <span className="text-xs text-slate-500 block mb-1">
+                        Internal Note
+                      </span>
+                      {selectedConversation.lead?.internalNotes && (
+                        <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                          {selectedConversation.lead.internalNotes}
                         </div>
+                      )}
+                      <div className="flex gap-1">
+                        <Input
+                          placeholder="Add note..."
+                          value={internalNote}
+                          onChange={(e) => setInternalNote(e.target.value)}
+                          className="text-xs h-8"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={saveNote}
+                          disabled={!internalNote.trim()}
+                          className="h-8 px-2"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </Button>
                       </div>
+                    </div>
 
-                      <div>
-                        <span className="text-xs font-medium text-slate-500">
-                          Top Finding
-                        </span>
-                        <p className="text-sm text-slate-900 mt-1">
-                          {selectedConversation.lead.auditResults.topFinding ||
-                            "N/A"}
+                    {/* Follow-up - Compact */}
+                    <div>
+                      <span className="text-xs text-slate-500 block mb-1">
+                        Follow-up
+                      </span>
+                      <div className="grid grid-cols-3 gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setFollowUpReminder(1)}
+                          className="h-7 text-xs"
+                        >
+                          1d
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setFollowUpReminder(3)}
+                          className="h-7 text-xs"
+                        >
+                          3d
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setFollowUpReminder(7)}
+                          className="h-7 text-xs"
+                        >
+                          7d
+                        </Button>
+                      </div>
+                      {selectedConversation.lead?.nextFollowUpAt && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          📅{" "}
+                          {new Date(
+                            selectedConversation.lead.nextFollowUpAt
+                          ).toLocaleDateString()}
                         </p>
-                      </div>
-
-                      <div>
-                        <span className="text-xs font-medium text-slate-500">
-                          Estimated ROI
-                        </span>
-                        <p className="text-sm text-green-600 font-semibold mt-1">
-                          {selectedConversation.lead.auditResults
-                            .estimatedROI || "N/A"}
-                        </p>
-                      </div>
-
-                      <div>
-                        <span className="text-xs font-medium text-slate-500">
-                          Timeline
-                        </span>
-                        <p className="text-sm text-slate-900 mt-1">
-                          {selectedConversation.lead.auditResults.timeline ||
-                            "N/A"}
-                        </p>
-                      </div>
-
-                      {selectedConversation.lead.auditResults.wins?.length >
-                        0 && (
-                        <div>
-                          <span className="text-xs font-medium text-slate-500">
-                            Opportunities
-                          </span>
-                          <ul className="mt-1 space-y-1">
-                            {selectedConversation.lead.auditResults.wins.map(
-                              (win: string, idx: number) => (
-                                <li
-                                  key={idx}
-                                  className="text-sm text-slate-700 flex items-start"
-                                >
-                                  <CheckCircle className="w-3 h-3 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                                  <span>{win}</span>
-                                </li>
-                              )
-                            )}
-                          </ul>
-                        </div>
                       )}
                     </div>
                   </div>
-                  <Separator />
-                </>
-              )}
-
-              {/* Quick Actions */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  Quick Actions
-                </h4>
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    size="sm"
-                  >
-                    <Star className="w-4 h-4 mr-2" />
-                    Mark as Hot Lead
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    size="sm"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Mark as Converted
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-red-600 hover:text-red-700"
-                    size="sm"
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    Flag for Review
-                  </Button>
-                </div>
+                )}
               </div>
 
               <Separator />
 
-              {/* Timestamps */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  Activity
-                </h4>
-                <div className="space-y-2 text-xs text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Lead Created</span>
-                    <span>
-                      {new Date(
-                        selectedConversation.lead?.createdAt
-                      ).toLocaleDateString()}
+              {/* Quick Actions - Compact */}
+              <div className="space-y-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => {
+                    updateLeadMutation.mutate({
+                      tags: [
+                        ...(selectedConversation.lead?.tags || []),
+                        "Hot Lead",
+                      ],
+                      manualScore: "0.9",
+                      isManualOverride: true,
+                    });
+                  }}
+                >
+                  <Star className="w-3 h-3 mr-1" />
+                  Mark Hot Lead
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={() => updateStatus("converted")}
+                >
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Mark Converted
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs text-red-600"
+                  onClick={() => updateStatus("lost")}
+                >
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Mark Lost
+                </Button>
+              </div>
+
+              <Separator />
+
+              {/* Activity Log - Compact */}
+              {showManualControls && activityLog && activityLog.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-700">
+                      Activity Log
                     </span>
+                    <History className="w-3 h-3 text-slate-400" />
                   </div>
-                  <div className="flex justify-between">
-                    <span>Last Message</span>
-                    <span>
-                      {new Date(
-                        selectedConversation.lastMessageAt
-                      ).toLocaleString()}
-                    </span>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {activityLog.slice(0, 5).map((log: any) => (
+                      <div
+                        key={log.id}
+                        className="text-xs p-2 bg-slate-50 rounded"
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className="font-medium text-slate-900 text-xs">
+                            {log.action.replace(/_/g, " ")}
+                          </span>
+                          <span className="text-slate-400 text-xs">
+                            {new Date(log.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {log.oldValue && log.newValue && (
+                          <div className="text-slate-600 text-xs mt-0.5">
+                            {log.oldValue} → {log.newValue}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  {selectedConversation.lead?.responseTimeSeconds && (
-                    <div className="flex justify-between">
-                      <span>Response Time</span>
-                      <span className="font-semibold text-green-600">
-                        {selectedConversation.lead.responseTimeSeconds}s
-                      </span>
-                    </div>
-                  )}
                 </div>
+              )}
+
+              {/* Timestamps - Minimal */}
+              <div className="pt-2 border-t border-slate-200">
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>Created</span>
+                  <span>
+                    {new Date(
+                      selectedConversation.lead?.createdAt
+                    ).toLocaleDateString()}
+                  </span>
+                </div>
+                {selectedConversation.lead?.responseTimeSeconds && (
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>Response</span>
+                    <span className="font-semibold text-green-600">
+                      {selectedConversation.lead.responseTimeSeconds}s
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
