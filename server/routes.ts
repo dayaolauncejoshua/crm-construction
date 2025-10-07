@@ -303,29 +303,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark messages as read
-  app.post("/api/conversations/:conversationId/messages/read", async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { messageIds } = req.body;
+  app.post(
+    "/api/conversations/:conversationId/messages/read",
+    async (req, res) => {
+      try {
+        const { conversationId } = req.params;
+        const { messageIds } = req.body;
 
-    if (!messageIds || !Array.isArray(messageIds)) {
-      return res.status(400).json({ error: "messageIds array required" });
+        if (!messageIds || !Array.isArray(messageIds)) {
+          return res.status(400).json({ error: "messageIds array required" });
+        }
+
+        console.log(
+          `Marking ${messageIds.length} messages as read in conversation ${conversationId}`
+        );
+
+        // Mark messages as read
+        await storage.markMessagesAsRead(messageIds);
+
+        // Also mark conversation as read
+        await storage.markConversationAsRead(conversationId);
+
+        res.json({ success: true });
+      } catch (error: any) {
+        console.error("Error marking messages as read:", error);
+        res.status(500).json({ error: error.message });
+      }
     }
+  );
 
-    console.log(`Marking ${messageIds.length} messages as read in conversation ${conversationId}`);
+  // Quick Reply Templates Routes
+  app.get("/api/quick-replies/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const templates = await storage.getQuickReplyTemplates(clientId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      res.status(500).json({ message: "Failed to fetch templates" });
+    }
+  });
 
-    // Mark messages as read
-    await storage.markMessagesAsRead(messageIds);
+  app.post("/api/quick-replies", async (req, res) => {
+    try {
+      const template = await storage.createQuickReplyTemplate(req.body);
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating template:", error);
+      res.status(500).json({ message: "Failed to create template" });
+    }
+  });
 
-    // Also mark conversation as read
-    await storage.markConversationAsRead(conversationId);
+  app.patch("/api/quick-replies/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const template = await storage.updateQuickReplyTemplate(id, req.body);
+      res.json(template);
+    } catch (error) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ message: "Failed to update template" });
+    }
+  });
 
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error("Error marking messages as read:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  app.delete("/api/quick-replies/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteQuickReplyTemplate(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
+  app.post("/api/quick-replies/:id/use", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.incrementTemplateUsage(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error incrementing usage:", error);
+      res.status(500).json({ message: "Failed to track usage" });
+    }
+  });
 
   // VSL Management
   app.get("/api/vsls/:clientId", async (req, res) => {

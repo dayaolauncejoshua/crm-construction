@@ -1,4 +1,4 @@
-import { storage } from "./storage";
+import { storage } from "../storage";
 
 async function seedMoreConversations() {
   console.log("Adding more test conversations...\n");

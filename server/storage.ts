@@ -44,6 +44,7 @@ import {
 } from "@shared/advanced-schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql, count } from "drizzle-orm";
+import { quickReplyTemplates } from "@shared/schema";
 
 export interface IStorage {
   // User operations (required for auth)
@@ -397,6 +398,53 @@ export class DatabaseStorage implements IStorage {
       const messageIds = unreadOutgoingMessages.map((m) => m.id);
       await this.markMessagesAsRead(messageIds);
     }
+  }
+
+  // Quick Reply Templates
+  async getQuickReplyTemplates(clientId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(quickReplyTemplates)
+      .where(
+        and(
+          eq(quickReplyTemplates.clientId, clientId),
+          eq(quickReplyTemplates.isActive, true)
+        )
+      )
+      .orderBy(desc(quickReplyTemplates.usageCount));
+  }
+
+  async createQuickReplyTemplate(template: any): Promise<any> {
+    const [newTemplate] = await db
+      .insert(quickReplyTemplates)
+      .values(template)
+      .returning();
+    return newTemplate;
+  }
+
+  async updateQuickReplyTemplate(id: string, updates: any): Promise<any> {
+    const [updated] = await db
+      .update(quickReplyTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(quickReplyTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQuickReplyTemplate(id: string): Promise<void> {
+    await db
+      .update(quickReplyTemplates)
+      .set({ isActive: false })
+      .where(eq(quickReplyTemplates.id, id));
+  }
+
+  async incrementTemplateUsage(id: string): Promise<void> {
+    await db
+      .update(quickReplyTemplates)
+      .set({
+        usageCount: sql`${quickReplyTemplates.usageCount} + 1`,
+      })
+      .where(eq(quickReplyTemplates.id, id));
   }
 
   // VSL operations

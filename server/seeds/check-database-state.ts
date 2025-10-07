@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "../db";
 import { users, clients, leads, conversations } from "@shared/schema";
 
 async function checkDatabaseState() {

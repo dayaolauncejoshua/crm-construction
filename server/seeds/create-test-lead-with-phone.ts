@@ -1,4 +1,4 @@
-import { storage } from "./storage";
+import { storage } from "../storage";
 
 async function createTestLeadWithYourPhone() {
   console.log("Creating test lead with your phone number...\n");

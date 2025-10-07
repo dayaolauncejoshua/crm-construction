@@ -33,6 +33,7 @@ import {
   UserCheck,
   RefreshCw,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { space } from "postcss/lib/list";
 
@@ -51,6 +52,15 @@ export default function Conversations() {
 
   const [searchQuery, setSearchQuery] = useState(""); // ADD THIS
   const [filterStatus, setFilterStatus] = useState("all");
+
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+
+  const { data: templates } = useQuery({
+    queryKey: ["/api/quick-replies", selectedClientId],
+    enabled: !!selectedClientId,
+  });
 
   const [typingIndicators, setTypingIndicators] = useState<
     Record<string, { isTyping: boolean; sender: string }>
@@ -105,7 +115,6 @@ export default function Conversations() {
   }>({
     queryKey: [`/api/dashboard/${selectedClientId}`],
     enabled: !!selectedClientId,
-    
   });
 
   // Fetch messages for selected conversation
@@ -423,6 +432,51 @@ export default function Conversations() {
       </div>
     );
   }
+
+  // Replace variables in template
+  const replaceVariables = (content: string, lead: any) => {
+    return content
+      .replace(/{firstName}/g, lead?.firstName || "[First Name]")
+      .replace(/{lastName}/g, lead?.lastName || "[Last Name]")
+      .replace(/{company}/g, lead?.company || "[Company]")
+      .replace(/{service}/g, "construction")
+      .replace(/{price}/g, "[Price]")
+      .replace(/{date}/g, "[Date]")
+      .replace(/{time}/g, "[Time]")
+      .replace(/{location}/g, "[Location]");
+  };
+
+  // Use template
+  const useTemplate = async (template: any) => {
+    if (!selectedConversation) return;
+
+    const replacedContent = replaceVariables(
+      template.content,
+      selectedConversation.lead
+    );
+
+    setNewMessage(replacedContent);
+    setShowTemplates(false);
+
+    // Track usage
+    await fetch(`/api/quick-replies/${template.id}/use`, {
+      method: "POST",
+      credentials: "include",
+    });
+  };
+
+  // Filter templates
+  const filteredTemplates = (templates || []).filter((t: any) => {
+    const matchesSearch =
+      templateSearch === "" ||
+      t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.content.toLowerCase().includes(templateSearch.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === "all" || t.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <div className="h-screen flex flex-col">
@@ -760,13 +814,25 @@ export default function Conversations() {
               </div>
 
               <div className="bg-white border-t border-slate-200 p-4 flex-shrink-0">
-                <div className="flex space-x-3">
+                <div className="flex space-x-2">
+                  {/* Templates Button */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className={showTemplates ? "bg-blue-50" : ""}
+                    title="Quick Replies"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </Button>
+
                   <Input
                     placeholder="Type your message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                     disabled={sendMessageMutation.isPending}
+                    className="flex-1"
                   />
                   <Button
                     onClick={handleSendMessage}
@@ -778,6 +844,82 @@ export default function Conversations() {
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
+
+                {/* Templates Dropdown */}
+                {showTemplates && (
+                  <div className="mt-3 border border-slate-200 rounded-lg bg-white shadow-lg max-h-96 overflow-hidden flex flex-col">
+                    {/* Search and Filter */}
+                    <div className="p-3 border-b border-slate-200 space-y-2">
+                      <Input
+                        placeholder="Search templates..."
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        className="w-full"
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          "all",
+                          "greeting",
+                          "pricing",
+                          "booking",
+                          "follow-up",
+                          "general",
+                        ].map((cat) => (
+                          <Button
+                            key={cat}
+                            variant={
+                              selectedCategory === cat ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setSelectedCategory(cat)}
+                            className="capitalize"
+                          >
+                            {cat}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Templates List */}
+                    <div className="overflow-y-auto flex-1 p-2">
+                      {filteredTemplates.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500">
+                          No templates found
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredTemplates.map((template: any) => (
+                            <button
+                              key={template.id}
+                              onClick={() => useTemplate(template)}
+                              className="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-slate-200 transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-sm text-slate-900">
+                                  {template.name}
+                                </span>
+                                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                  {template.category}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-600 line-clamp-2">
+                                {replaceVariables(
+                                  template.content,
+                                  selectedConversation?.lead
+                                )}
+                              </p>
+                              {template.usageCount > 0 && (
+                                <div className="mt-1 text-xs text-slate-400">
+                                  Used {template.usageCount} times
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (

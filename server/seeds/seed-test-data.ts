@@ -1,4 +1,4 @@
-import { storage } from "./storage";
+import { storage } from "../storage";
 
 async function seedTestData() {
   console.log("Seeding test data...\n");

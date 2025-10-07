@@ -24,14 +24,16 @@ export const sessions = pgTable(
     sess: jsonb("sess").notNull(),
     expire: timestamp("expire").notNull(),
   },
-  (table) => [index("IDX_session_expire").on(table.expire)],
+  (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
 // Users table
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
-  passwordHash: text("password_hash"), 
+  passwordHash: text("password_hash"),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
@@ -49,8 +51,12 @@ export const users = pgTable("users", {
 
 // Trial activations tracking
 export const trialActivations = pgTable("trial_activations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .references(() => users.id)
+    .notNull(),
   activatedAt: timestamp("activated_at").defaultNow(),
   trialDays: integer("trial_days").default(14),
   source: varchar("source").default("dashboard"), // dashboard, landing, referral
@@ -60,8 +66,12 @@ export const trialActivations = pgTable("trial_activations", {
 
 // User activity logs for super admin
 export const userActivities = pgTable("user_activities", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .references(() => users.id)
+    .notNull(),
   action: varchar("action").notNull(), // login, trial_activated, feature_used, etc.
   resource: varchar("resource"), // leads, clients, conversations, etc.
   details: jsonb("details"),
@@ -72,7 +82,9 @@ export const userActivities = pgTable("user_activities", {
 
 // System metrics for super admin dashboard
 export const systemMetrics = pgTable("system_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   date: timestamp("date").defaultNow(),
   totalUsers: integer("total_users").default(0),
   activeTrials: integer("active_trials").default(0),
@@ -87,7 +99,9 @@ export const systemMetrics = pgTable("system_metrics", {
 
 // Clients table (multi-tenant)
 export const clients = pgTable("clients", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
   industry: varchar("industry").notNull(),
   website: varchar("website"),
@@ -103,8 +117,12 @@ export const clients = pgTable("clients", {
 
 // Leads table
 export const leads = pgTable("leads", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   email: varchar("email").notNull(),
@@ -112,7 +130,10 @@ export const leads = pgTable("leads", {
   company: varchar("company"),
   source: varchar("source").default("landing_page"),
   status: varchar("status").default("new"), // new, qualified, hot, converted, lost
-  qualificationScore: decimal("qualification_score", { precision: 3, scale: 2 }).default("0.0"),
+  qualificationScore: decimal("qualification_score", {
+    precision: 3,
+    scale: 2,
+  }).default("0.0"),
   auditResults: jsonb("audit_results"),
   utmData: jsonb("utm_data"),
   consentGiven: boolean("consent_given").default(false),
@@ -123,25 +144,38 @@ export const leads = pgTable("leads", {
 
 // Conversations table
 export const conversations = pgTable("conversations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").references(() => leads.id).notNull(),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   channel: varchar("channel").notNull(), // whatsapp, sms, email
   status: varchar("status").default("active"), // active, paused, completed
   isAiHandled: boolean("is_ai_handled").default(true),
   humanTakeoverAt: timestamp("human_takeover_at"),
   lastMessageAt: timestamp("last_message_at").defaultNow(),
-  qualificationScore: decimal("qualification_score", { precision: 3, scale: 2 }).default("0.0"),
+  qualificationScore: decimal("qualification_score", {
+    precision: 3,
+    scale: 2,
+  }).default("0.0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-   unreadCount: integer("unread_count").default(0),
+  unreadCount: integer("unread_count").default(0),
   lastReadAt: timestamp("last_read_at"),
 });
 
 // Messages table
 export const messages = pgTable("messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  conversationId: varchar("conversation_id").references(() => conversations.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id")
+    .references(() => conversations.id)
+    .notNull(),
   content: text("content").notNull(),
   sender: varchar("sender").notNull(), // ai, human, lead
   channel: varchar("channel").notNull(),
@@ -150,20 +184,49 @@ export const messages = pgTable("messages", {
   sentAt: timestamp("sent_at").defaultNow(),
   deliveredAt: timestamp("delivered_at"),
   readAt: timestamp("read_at"),
-  isStatusMessage: boolean("is_status_message").default(false), 
+  isStatusMessage: boolean("is_status_message").default(false),
 });
+
+// Quick Reply Templates table
+export const quickReplyTemplates = pgTable("quick_reply_templates", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
+  name: varchar("name").notNull(), // "Greeting - Morning"
+  content: text("content").notNull(), // "Hi {firstName}! How can I help?"
+  category: varchar("category").notNull(), // "greeting", "pricing", "booking", "follow-up"
+  variables: jsonb("variables").default([]), // ["firstName", "company"]
+  shortcut: varchar("shortcut"), // Optional: "/morning"
+  usageCount: integer("usage_count").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type QuickReplyTemplate = typeof quickReplyTemplates.$inferSelect;
+export type InsertQuickReplyTemplate = typeof quickReplyTemplates.$inferInsert;
 
 // VSL (Video Sales Letter) table
 export const vsls = pgTable("vsls", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   title: varchar("title").notNull(),
   script: text("script"),
   videoUrl: varchar("video_url"),
   thumbnailUrl: varchar("thumbnail_url"),
   duration: integer("duration"), // in seconds
   viewCount: integer("view_count").default(0),
-  conversionRate: decimal("conversion_rate", { precision: 5, scale: 2 }).default("0.0"),
+  conversionRate: decimal("conversion_rate", {
+    precision: 5,
+    scale: 2,
+  }).default("0.0"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -171,9 +234,15 @@ export const vsls = pgTable("vsls", {
 
 // Bookings table
 export const bookings = pgTable("bookings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").references(() => leads.id).notNull(),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   scheduledAt: timestamp("scheduled_at").notNull(),
   duration: integer("duration").default(30), // in minutes
   status: varchar("status").default("scheduled"), // scheduled, confirmed, completed, cancelled, no_show
@@ -186,15 +255,17 @@ export const bookings = pgTable("bookings", {
 
 // Analytics table
 export const analytics = pgTable("analytics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   date: timestamp("date").notNull(),
   metric: varchar("metric").notNull(), // total_leads, conversion_rate, avg_response_time, etc.
   value: decimal("value", { precision: 10, scale: 2 }).notNull(),
   metadata: jsonb("metadata"),
 });
-
-
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
@@ -222,17 +293,20 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   bookings: many(bookings),
 }));
 
-export const conversationsRelations = relations(conversations, ({ one, many }) => ({
-  lead: one(leads, {
-    fields: [conversations.leadId],
-    references: [leads.id],
-  }),
-  client: one(clients, {
-    fields: [conversations.clientId],
-    references: [clients.id],
-  }),
-  messages: many(messages),
-}));
+export const conversationsRelations = relations(
+  conversations,
+  ({ one, many }) => ({
+    lead: one(leads, {
+      fields: [conversations.leadId],
+      references: [leads.id],
+    }),
+    client: one(clients, {
+      fields: [conversations.clientId],
+      references: [clients.id],
+    }),
+    messages: many(messages),
+  })
+);
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   conversation: one(conversations, {
