@@ -1,3 +1,4 @@
+// client/src/App.tsx
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -29,17 +30,17 @@ function ProtectedRouter() {
   const [location, setLocation] = useLocation();
 
   // MOVED: Fetch dashboard data BEFORE any conditional returns
-  const { data: dashboardData } = useQuery<{
-    conversations: any[];
-  }>({
-    queryKey: [`/api/dashboard/${user?.id}`],
-    enabled: !!user && isAuthenticated,
-    staleTime: 30 * 1000,
-  });
+  // const { data: dashboardData } = useQuery<{
+  //   conversations: any[];
+  // }>({
+  //   queryKey: [`/api/dashboard/${user?.id}`],
+  //   enabled: !!user && isAuthenticated,
+  //   staleTime: 30 * 1000,
+  // });
 
-  const unreadCount =
-    dashboardData?.conversations?.filter((c: any) => c.unreadCount > 0)
-      .length || 0;
+  // const unreadCount =
+  //   dashboardData?.conversations?.filter((c: any) => c.unreadCount > 0)
+  //     .length || 0;
 
   // Pages that don't need navigation layout
   const fullScreenPages = ["/trial-unlock", "/landing", "/login", "/signup"];
@@ -82,7 +83,7 @@ function ProtectedRouter() {
           userRole={user?.role || "user"}
           isTrialActive={user?.isTrialActive || false}
           daysLeft={0}
-          unreadCount={unreadCount}
+          unreadCount={0}
           user={user}
           onSignOut={handleSignOut}
         />

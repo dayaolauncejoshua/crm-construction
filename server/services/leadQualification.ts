@@ -1,5 +1,5 @@
 // server/services/leadQualification.ts
-
+import { messageQueue } from "./messageQueue";
 import { storage } from "../storage";
 import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
@@ -73,7 +73,20 @@ export class LeadQualificationService {
     }
   }
 
-  async handleIncomingMessage(
+  async queueIncomingMessage(
+    from: string,
+    message: string,
+    timestamp: number
+  ): Promise<void> {
+    await messageQueue.enqueueMessage(
+      from,
+      message,
+      timestamp,
+      this.handleIncomingMessage.bind(this)
+    );
+  }
+
+  private async handleIncomingMessage(
     from: string,
     message: string,
     timestamp: number

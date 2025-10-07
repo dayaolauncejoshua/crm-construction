@@ -32,10 +32,10 @@ export default function Dashboard() {
   const { data: wsData, isConnected } = useWebSocket();
 
   // Fetch clients list FIRST
-  const { data: clients } = useQuery({
+  const { data: clients, isLoading: isLoadingClients } = useQuery({
     queryKey: ["/api/clients", user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=${user?.id}}`); // CHANGED THIS
+      const response = await fetch(`/api/clients?userId=${user?.id}`); // CHANGED THIS
       return response.json();
     },
     enabled: !!user?.id, // Only run if user ID is available
@@ -63,6 +63,14 @@ export default function Dashboard() {
     enabled: !!selectedClientId, // Only fetch when we have a clientId
   });
 
+  // Force refetch when clientId changes
+  useEffect(() => {
+    if (selectedClientId) {
+      console.log("ClientId set, refetching dashboard data for:", selectedClientId);
+      refetch();
+    }
+  } , [selectedClientId, refetch]);
+
   // Fetch system health
   const { data: systemHealth } = useQuery({
     queryKey: ["/api/health"],
@@ -78,12 +86,13 @@ export default function Dashboard() {
     }
   }, [wsData, refetch]);
 
-  if (isLoading) {
+  // Show loading state while fetching clients or dashboard data
+  if (isLoadingClients || (isLoading && selectedClientId)) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading dashboard...</p>
+          <p className="text-slate-600">{isLoadingClients ? "Loading clients..." : "Loading dashboard data..."}</p>
         </div>
       </div>
     );

@@ -86,7 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const incomingMessage = whatsappService.parseWebhook(req.body);
 
       if (incomingMessage) {
-        await leadQualificationService.handleIncomingMessage(
+        await leadQualificationService.queueIncomingMessage(
           incomingMessage.from,
           incomingMessage.message,
           incomingMessage.timestamp

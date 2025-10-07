@@ -105,6 +105,7 @@ export default function Conversations() {
   }>({
     queryKey: [`/api/dashboard/${selectedClientId}`],
     enabled: !!selectedClientId,
+    
   });
 
   // Fetch messages for selected conversation
@@ -278,6 +279,11 @@ export default function Conversations() {
   useEffect(() => {
     if (!wsData) return;
 
+    console.log("=== WEBSOCKET EVENT ===");
+    console.log("Type:", wsData.type);
+    console.log("Full data:", wsData);
+    console.log("Current conversations count:", conversations.length);
+
     console.log("WebSocket update received:", wsData);
 
     switch (wsData.type) {
@@ -323,6 +329,7 @@ export default function Conversations() {
         break;
 
       default:
+        console.log("⚠️ Unknown event type, calling refetch");
         refetch();
     }
   }, [wsData, selectedClientId, queryClient, toast, refetch]);
