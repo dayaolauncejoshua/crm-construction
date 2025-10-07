@@ -130,6 +130,8 @@ export const leads = pgTable("leads", {
   company: varchar("company"),
   source: varchar("source").default("landing_page"),
   status: varchar("status").default("new"), // new, qualified, hot, converted, lost
+  temperature: varchar("temperature").default("cold"),
+
   qualificationScore: decimal("qualification_score", {
     precision: 3,
     scale: 2,
@@ -178,8 +180,6 @@ export const leadTags = pgTable("lead_tags", {
   icon: varchar("icon"), // Optional icon name
   createdAt: timestamp("created_at").defaultNow(),
 });
-
-
 
 // Conversations table
 export const conversations = pgTable("conversations", {
@@ -247,7 +247,6 @@ export const quickReplyTemplates = pgTable("quick_reply_templates", {
 
 export type QuickReplyTemplate = typeof quickReplyTemplates.$inferSelect;
 export type InsertQuickReplyTemplate = typeof quickReplyTemplates.$inferInsert;
-
 
 // VSL (Video Sales Letter) table
 export const vsls = pgTable("vsls", {
