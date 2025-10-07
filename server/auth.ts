@@ -1,5 +1,3 @@
-// server/auth.ts
-
 import { Router } from "express";
 import { db } from "./db";
 import { users } from "@shared/schema";
@@ -12,6 +10,9 @@ const SALT_ROUNDS = 10;
 // Signup
 router.post("/api/auth/signup", async (req, res) => {
   try {
+    console.log("=== SIGNUP DEBUG ===");
+    console.log("Request body:", req.body);
+
     const { email, password, firstName, lastName } = req.body;
 
     if (!email || !password) {
@@ -49,9 +50,11 @@ router.post("/api/auth/signup", async (req, res) => {
       })
       .returning();
 
-    // Create session
-    req.session.userId = newUser.id;
+    // Create session (use type assertion)
+    (req.session as any).userId = newUser.id;
     
+    console.log("✅ User created:", newUser.email);
+
     res.json({
       user: {
         id: newUser.id,
@@ -70,27 +73,40 @@ router.post("/api/auth/signup", async (req, res) => {
 // Login
 router.post("/api/auth/login", async (req, res) => {
   try {
+    console.log("=== LOGIN BACKEND DEBUG ===");
+    console.log("Request body:", req.body);
+    console.log("Email:", req.body?.email);
+    console.log("Password:", req.body?.password ? "***" : "missing");
+
     const { email, password } = req.body;
 
     if (!email || !password) {
+      console.log("❌ Missing credentials");
       return res.status(400).json({ error: "Email and password required" });
     }
 
     // Find user
+    console.log("🔍 Looking up user:", email.toLowerCase());
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.email, email.toLowerCase()));
 
     if (!user || !user.passwordHash) {
+      console.log("❌ User not found or no password hash");
       return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    console.log("✅ User found:", user.email);
 
     // Verify password
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
+      console.log("❌ Password incorrect");
       return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    console.log("✅ Password valid");
 
     // Update login stats
     await db
@@ -101,8 +117,10 @@ router.post("/api/auth/login", async (req, res) => {
       })
       .where(eq(users.id, user.id));
 
-    // Create session
-    req.session.userId = user.id;
+    // Create session (use type assertion)
+    (req.session as any).userId = user.id;
+
+    console.log("✅ Session created, userId:", user.id);
 
     res.json({
       user: {
@@ -114,7 +132,7 @@ router.post("/api/auth/login", async (req, res) => {
       },
     });
   } catch (error: any) {
-    console.error("Login error:", error);
+    console.error("❌ Login error:", error);
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -133,14 +151,16 @@ router.post("/api/auth/logout", (req, res) => {
 // Get current user
 router.get("/api/auth/me", async (req, res) => {
   try {
-    if (!req.session.userId) {
+    const userId = (req.session as any).userId;
+    
+    if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.id, req.session.userId));
+      .where(eq(users.id, userId));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });

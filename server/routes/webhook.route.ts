@@ -1,13 +1,21 @@
+import "dotenv/config"; // ADD THIS LINE
 import { Router, Request, Response } from "express";
 import OpenAI from "openai";
 import { phoneService } from "../phone/phone.phone";
 
+
 const router = Router();
-const client = new OpenAI();
+// const client = new OpenAI();
 const WEBHOOK_SECRET = process.env.OPENAI_WEBHOOK_SIGNING_SECRET;
 
 interface RawBodyRequest extends Request {
   rawBody?: Buffer;
+}
+
+function getOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
 }
 
 router.post("/", async (req: RawBodyRequest, res: Response) => {
@@ -21,6 +29,8 @@ router.post("/", async (req: RawBodyRequest, res: Response) => {
     const rawBody = req.body;
     const signature =
       req.headers["openai-signature"] || req.headers["x-openai-signature"];
+
+       const client = getOpenAIClient();
 
     // Verify and unwrap the webhook event
     const event = await client.webhooks.unwrap(

@@ -280,6 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sender: "human",
         channel,
         sentAt: new Date(),
+        deliveredAt: new Date(),
       });
 
       // Update conversation last message time
@@ -300,6 +301,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to send message" });
     }
   });
+
+  // Mark messages as read
+  app.post("/api/conversations/:conversationId/messages/read", async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { messageIds } = req.body;
+
+    if (!messageIds || !Array.isArray(messageIds)) {
+      return res.status(400).json({ error: "messageIds array required" });
+    }
+
+    console.log(`Marking ${messageIds.length} messages as read in conversation ${conversationId}`);
+
+    // Mark messages as read
+    await storage.markMessagesAsRead(messageIds);
+
+    // Also mark conversation as read
+    await storage.markConversationAsRead(conversationId);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Error marking messages as read:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
   // VSL Management
   app.get("/api/vsls/:clientId", async (req, res) => {

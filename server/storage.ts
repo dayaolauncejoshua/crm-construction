@@ -361,6 +361,44 @@ export class DatabaseStorage implements IStorage {
     return newMessage;
   }
 
+  // Mark messages as read
+  async markMessagesAsRead(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    await db
+      .update(messages)
+      .set({
+        readAt: new Date(),
+      })
+      .where(
+        sql`${messages.id} = ANY(ARRAY[${sql.join(
+          messageIds.map((id) => sql`${id}`),
+          sql`, `
+        )}])`
+      );
+  }
+
+  // Mark previous outgoing messages as read when lead responds
+  async markPreviousMessagesAsRead(conversationId: string): Promise<void> {
+    // Get all messages from this conversation that aren't from the lead
+    // and don't have readAt set yet
+    const unreadOutgoingMessages = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          sql`${messages.sender} != 'lead'`,
+          sql`${messages.readAt} IS NULL`
+        )
+      );
+
+    if (unreadOutgoingMessages.length > 0) {
+      const messageIds = unreadOutgoingMessages.map((m) => m.id);
+      await this.markMessagesAsRead(messageIds);
+    }
+  }
+
   // VSL operations
   async getVSLs(clientId: string): Promise<VSL[]> {
     return await db

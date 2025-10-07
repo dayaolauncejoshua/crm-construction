@@ -1,3 +1,5 @@
+// client/src/pages/login.tsx
+
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +24,11 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
+    console.log("=== LOGIN DEBUG ===");
+  console.log("Email:", email);
+  console.log("Password:", password ? "***" : "empty");
+  console.log("Form data:", { email, password: password ? "provided" : "missing" });
 
     try {
       await login(email, password);

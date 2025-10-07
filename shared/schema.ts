@@ -150,6 +150,7 @@ export const messages = pgTable("messages", {
   sentAt: timestamp("sent_at").defaultNow(),
   deliveredAt: timestamp("delivered_at"),
   readAt: timestamp("read_at"),
+  isStatusMessage: boolean("is_status_message").default(false), 
 });
 
 // VSL (Video Sales Letter) table
@@ -192,6 +193,8 @@ export const analytics = pgTable("analytics", {
   value: decimal("value", { precision: 10, scale: 2 }).notNull(),
   metadata: jsonb("metadata"),
 });
+
+
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({

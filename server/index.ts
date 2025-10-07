@@ -10,6 +10,7 @@ config();
 
 const app = express();
 app.use("/webhook", express.raw({ type: "application/json" }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);
 app.use(

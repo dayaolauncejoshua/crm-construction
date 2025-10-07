@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Info,
 } from "lucide-react";
+import { space } from "postcss/lib/list";
 
 export default function Conversations() {
   const { user } = useAuth();
@@ -50,6 +51,10 @@ export default function Conversations() {
 
   const [searchQuery, setSearchQuery] = useState(""); // ADD THIS
   const [filterStatus, setFilterStatus] = useState("all");
+
+  const [typingIndicators, setTypingIndicators] = useState<
+    Record<string, { isTyping: boolean; sender: string }>
+  >({});
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
@@ -269,26 +274,34 @@ export default function Conversations() {
     "Hot leads client IDs:",
     dashboardData?.hotLeads?.map((h) => h.clientId)
   );
-
+  // Handle WebSocket messages
   useEffect(() => {
     if (!wsData) return;
 
     console.log("WebSocket update received:", wsData);
 
     switch (wsData.type) {
+      case "typing_indicator":
+        // Update typing state
+        setTypingIndicators((prev) => ({
+          ...prev,
+          [wsData.conversationId]: {
+            isTyping: wsData.isTyping,
+            sender: wsData.sender,
+          },
+        }));
+        break;
+
       case "conversation_updated":
-        // Refetch dashboard to update conversation list
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
         break;
 
       case "new_message":
-        // Refetch messages for the conversation
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
-        // Also refetch dashboard to update last message time
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
@@ -296,12 +309,10 @@ export default function Conversations() {
 
       case "new_conversation":
       case "hot_lead_alert":
-        // Refetch entire dashboard
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
 
-        // Show notification for hot leads
         if (wsData.type === "hot_lead_alert") {
           toast({
             title: "Hot Lead Alert!",
@@ -312,7 +323,6 @@ export default function Conversations() {
         break;
 
       default:
-        // Fallback: refetch everything
         refetch();
     }
   }, [wsData, selectedClientId, queryClient, toast, refetch]);
@@ -335,6 +345,28 @@ export default function Conversations() {
       }, 200);
     }
   }, [selectedConversation?.id]);
+
+  // Mark messages as read when conversation is selected
+  useEffect(() => {
+    if (selectedConversation && messages && messages.length > 0) {
+      const unreadMessages = messages.filter(
+        (m: any) => m.sender === "lead" && !m.readAt
+      );
+
+      if (unreadMessages.length > 0) {
+        console.log(`Marking ${unreadMessages.length} messages as read`);
+
+        fetch(`/api/conversations/${selectedConversation.id}/messages/read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            messageIds: unreadMessages.map((m: any) => m.id),
+          }),
+        }).catch((err) => console.error("Failed to mark as read:", err));
+      }
+    }
+  }, [selectedConversation, messages]);
 
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
@@ -633,6 +665,10 @@ export default function Conversations() {
                               : message.sender === "ai"
                               ? "bg-blue-100 text-blue-900"
                               : "bg-primary text-white"
+                          } ${
+                            message.isStatusMessage
+                              ? "opacity-60 italic text-xs"
+                              : ""
                           }`}
                         >
                           <div className="flex items-center space-x-2 mb-1">
@@ -654,13 +690,64 @@ export default function Conversations() {
                             </span>
                           </div>
                           <p className="text-sm">{message.content}</p>
-                          <p className="text-xs opacity-60 mt-1">
-                            {formatTime(message.sentAt)}
+                          <p className="text-xs opacity-60 mt-1 flex items-center space-x-1">
+                            <span>{formatTime(message.sentAt)}</span>
+
+                            {/* Show delivery status for outgoing messages */}
+                            {message.sender !== "lead" && (
+                              <>
+                                {!message.deliveredAt ? (
+                                  <span title="Sending...">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                  </span>
+                                ) : message.readAt ? (
+                                  <span title="Delivered and Read">
+                                    <CheckCircle className="w-3 h-3 text-blue-500" />
+                                  </span>
+                                ) : (
+                                  <span title="Delivered">
+                                    <CheckCircle className="w-3 h-3 text-green-500" />
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </p>
                         </div>
                       </div>
                     ))
                   )}
+
+                  {/* Typing Indicator */}
+                  {typingIndicators[selectedConversation?.id]?.isTyping && (
+                    <div className="flex justify-start">
+                      <div className="bg-blue-50 px-4 py-3 rounded-lg border border-blue-200 shadow-sm">
+                        <div className="flex items-center space-x-3">
+                          <Bot className="w-4 h-4 text-blue-600" />
+                          <div className="flex space-x-1">
+                            <div
+                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                              style={{ animationDelay: "0ms" }}
+                            ></div>
+                            <div
+                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                              style={{ animationDelay: "150ms" }}
+                            ></div>
+                            <div
+                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                              style={{ animationDelay: "300ms" }}
+                            ></div>
+                          </div>
+                          <span className="text-sm text-blue-700 font-medium">
+                            {typingIndicators[selectedConversation.id]
+                              .sender === "ai"
+                              ? "AI is responding..."
+                              : "Agent is typing..."}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div ref={messagesEndRef} />
                 </div>
               </div>
