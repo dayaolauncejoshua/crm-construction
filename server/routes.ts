@@ -13,6 +13,7 @@ import { generateAudit, generateVSLScript } from "./services/openai";
 import { whatsappService } from "./services/whatsapp";
 import { leadQualificationService } from "./services/leadQualification";
 import advancedRoutes from "./advanced-routes";
+import { emailService } from "./services/email";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -527,6 +528,225 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating booking:", error);
       res.status(500).json({ message: "Failed to update booking" });
+    }
+  });
+
+  // Create booking with calendar invite
+  app.post("/api/bookings/schedule", async (req, res) => {
+    try {
+      const {
+        leadId,
+        clientId,
+        scheduledFor, // From frontend
+        duration = 60,
+        meetingType = "consultation",
+        location = "Office",
+        notes,
+      } = req.body;
+
+      console.log("📅 Creating booking:", {
+        leadId,
+        scheduledFor,
+        meetingType,
+      });
+
+      // Get lead
+      const lead = await storage.getLead(leadId);
+      if (!lead) {
+        return res.status(404).json({ message: "Lead not found" });
+      }
+
+      // Get client
+      const client = await storage.getClient(clientId);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+
+      const scheduledDate = new Date(scheduledFor);
+
+      // Create booking
+      const booking = await storage.createBooking({
+        leadId,
+        clientId,
+        title: `${
+          meetingType === "site-visit" ? "Site Visit" : "Consultation"
+        } - ${lead.firstName} ${lead.lastName}`,
+        description: notes || `${meetingType} with ${client.name}`,
+        location,
+        scheduledAt: scheduledDate, // Your existing field
+        scheduledFor: scheduledDate, // New field
+        duration,
+        status: "scheduled",
+        attendeeEmail: lead.email,
+        attendeeName: `${lead.firstName} ${lead.lastName}`,
+        attendeePhone: lead.phone,
+        meetingType,
+        notes,
+      });
+
+      console.log("✅ Booking created:", booking.id);
+
+      // Save booking notification as a message in the conversation
+      try {
+        console.log("🔍 Looking for conversation for leadId:", leadId);
+
+        const conversations = await storage.getConversations(clientId, 100);
+        console.log(
+          `📊 Found ${conversations.length} conversations for clientId ${clientId}`
+        );
+
+        const conversation = conversations.find((c) => c.leadId === leadId);
+
+        if (!conversation) {
+          console.error("❌ No conversation found for this lead!");
+          console.log(
+            "Available leadIds:",
+            conversations.map((c) => c.leadId)
+          );
+        } else {
+          console.log("✅ Found conversation:", conversation.id);
+
+          const messageContent =
+            `📅 Meeting Scheduled!\n\n` +
+            `Type: ${
+              meetingType === "site-visit" ? "Site Visit" : "Consultation"
+            }\n` +
+            `Date: ${scheduledDate.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}\n` +
+            `Time: ${scheduledDate.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}\n` +
+            `Duration: ${duration} minutes\n` +
+            `Location: ${location}\n` +
+            (notes ? `\nNotes: ${notes}` : "");
+
+          const savedMessage = await storage.createMessage({
+            conversationId: conversation.id,
+            sender: "human",
+            content: messageContent,
+            channel: "whatsapp",
+            isStatusMessage: true,
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+          });
+
+          console.log("✅ Booking message saved:", savedMessage.id);
+
+          // Broadcast the new message
+          broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: savedMessage,
+          });
+
+          console.log("✅ Broadcast sent to WebSocket clients");
+        }
+      } catch (error) {
+        console.error("❌ Failed to save booking message:", error);
+      }
+
+      // Calculate end time
+      const startTime = scheduledDate;
+      const endTime = new Date(startTime.getTime() + duration * 60000);
+
+      // Send email with .ics if email exists
+      if (lead.email) {
+        const icsContent = emailService.generateICS({
+          title: booking.title,
+          description: booking.description || "",
+          location: booking.location || "TBD",
+          startTime,
+          endTime,
+          organizerEmail: process.env.EMAIL_USER || "noreply@aileadsystem.com",
+          organizerName: client.name,
+          attendeeEmail: lead.email,
+          attendeeName: `${lead.firstName} ${lead.lastName}`,
+        });
+
+        const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #2563eb;">Meeting Confirmed! 🎉</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>Your ${
+            meetingType === "site-visit" ? "site visit" : "consultation"
+          } has been scheduled.</p>
+          
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">📅 Meeting Details</h3>
+            <p><strong>Date:</strong> ${startTime.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}</p>
+            <p><strong>Time:</strong> ${startTime.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}</p>
+            <p><strong>Duration:</strong> ${duration} minutes</p>
+            <p><strong>Location:</strong> ${location}</p>
+          </div>
+          
+          <p>The meeting has been added to your calendar. See you then!</p>
+          
+          <p style="margin-top: 30px;">Best regards,<br>${client.name}</p>
+        </div>
+      `;
+
+        await emailService.sendCalendarInvite({
+          to: lead.email,
+          toName: `${lead.firstName} ${lead.lastName}`,
+          subject: `Meeting Confirmed - ${startTime.toLocaleDateString()}`,
+          htmlBody: emailBody,
+          icsContent,
+          icsFilename: "meeting.ics",
+        });
+      }
+
+      // Send WhatsApp confirmation
+      if (lead.phone) {
+        const whatsappMsg = `✅ Meeting Confirmed!
+
+📅 ${startTime.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })}
+🕐 ${startTime.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+⏱️ ${duration} minutes
+📍 ${location}
+
+Check your email for the calendar invite. See you then!`;
+
+        await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+      }
+
+      // Update lead status
+      await storage.updateLead(leadId, { status: "contacted" });
+
+      res.json({ success: true, booking });
+    } catch (error) {
+      console.error("❌ Error creating booking:", error);
+      res.status(500).json({ message: "Failed to create booking" });
+    }
+  });
+
+  // Get bookings for client
+  app.get("/api/bookings/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const bookings = await storage.getBookings(clientId);
+      res.json(bookings);
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      res.status(500).json({ message: "Failed to fetch bookings" });
     }
   });
 

@@ -37,11 +37,28 @@ import {
   Sparkles,
   Tag,
   Edit3,
-  Calendar,
   History,
   Target,
 } from "lucide-react";
 import { space } from "postcss/lib/list";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";  
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export default function Conversations() {
   const { user } = useAuth();
@@ -60,6 +77,14 @@ export default function Conversations() {
   const [manualScore, setManualScore] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [internalNote, setInternalNote] = useState("");
+
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingDate, setBookingDate] = useState<Date>();
+  const [bookingTime, setBookingTime] = useState("10:00");
+  const [bookingDuration, setBookingDuration] = useState("60");
+  const [bookingType, setBookingType] = useState("consultation");
+  const [bookingLocation, setBookingLocation] = useState("Office");
+  const [bookingNotes, setBookingNotes] = useState("");
 
   const { data: availableTags } = useQuery<any[]>({
     queryKey: ["/api/lead-tags", selectedClientId],
@@ -291,6 +316,67 @@ export default function Conversations() {
 
     updateLeadMutation.mutate({ tags: newTags });
     setSelectedTags(newTags);
+  };
+
+  // Book meeting mutation
+  const bookMeetingMutation = useMutation({
+    mutationFn: async (bookingData: any) => {
+      const response = await fetch("/api/bookings/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(bookingData),
+      });
+
+      if (!response.ok) throw new Error("Failed to create booking");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Meeting Scheduled!",
+        description: "Calendar invite sent to lead via email and WhatsApp.",
+      });
+      setShowBookingModal(false);
+      // Reset form
+      setBookingDate(undefined);
+      setBookingTime("10:00");
+      setBookingDuration("60");
+      setBookingNotes("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle booking submission
+  const handleBookMeeting = () => {
+    if (!bookingDate || !selectedConversation) {
+      toast({
+        title: "Error",
+        description: "Please select a date and time",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Combine date and time
+    const [hours, minutes] = bookingTime.split(":");
+    const scheduledFor = new Date(bookingDate);
+    scheduledFor.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    bookMeetingMutation.mutate({
+      leadId: selectedConversation.lead.id,
+      clientId: selectedConversation.clientId,
+      scheduledFor: scheduledFor.toISOString(),
+      duration: parseInt(bookingDuration),
+      meetingType: bookingType,
+      location: bookingLocation,
+      notes: bookingNotes,
+    });
   };
 
   // Save internal note
@@ -614,7 +700,7 @@ export default function Conversations() {
   };
 
   // Filter templates
-  const filteredTemplates = (templates || []).filter((t: any) => {
+  const filteredTemplates = ((templates as any[]) || []).filter((t: any) => {
     const matchesSearch =
       templateSearch === "" ||
       t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
@@ -972,6 +1058,16 @@ export default function Conversations() {
                     title="Quick Replies"
                   >
                     <Sparkles className="w-4 h-4" />
+                  </Button>
+
+                  {/* 🆕 ADD THIS BOOK MEETING BUTTON */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowBookingModal(true)}
+                    title="Book Meeting"
+                  >
+                    <CalendarIcon className="w-4 h-4" />
                   </Button>
 
                   <Input
@@ -1521,6 +1617,135 @@ export default function Conversations() {
           </div>
         )}
       </div>
+      {/* Book Meeting Modal */}
+      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule Meeting</DialogTitle>
+            <DialogDescription>
+              Book a meeting with {selectedConversation?.lead?.firstName}{" "}
+              {selectedConversation?.lead?.lastName}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Meeting Type */}
+            <div className="space-y-2">
+              <Label>Meeting Type</Label>
+              <Select value={bookingType} onValueChange={setBookingType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consultation">Consultation</SelectItem>
+                  <SelectItem value="site-visit">Site Visit</SelectItem>
+                  <SelectItem value="follow-up">Follow-up</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date Picker */}
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {bookingDate ? (
+                      format(bookingDate, "PPP")
+                    ) : (
+                      <span>Pick a date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={bookingDate}
+                    onSelect={setBookingDate}
+                    disabled={(date: Date) =>
+                      date < new Date() || date < new Date("1900-01-01")
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Time */}
+            <div className="space-y-2">
+              <Label>Time</Label>
+              <Input
+                type="time"
+                value={bookingTime}
+                onChange={(e) => setBookingTime(e.target.value)}
+              />
+            </div>
+
+            {/* Duration */}
+            <div className="space-y-2">
+              <Label>Duration (minutes)</Label>
+              <Select
+                value={bookingDuration}
+                onValueChange={setBookingDuration}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="90">1.5 hours</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Input
+                value={bookingLocation}
+                onChange={(e) => setBookingLocation(e.target.value)}
+                placeholder="Office, Site, Virtual, etc."
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                value={bookingNotes}
+                onChange={(e) => setBookingNotes(e.target.value)}
+                placeholder="Any additional details..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowBookingModal(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBookMeeting}
+              disabled={!bookingDate || bookMeetingMutation.isPending}
+              className="flex-1"
+            >
+              {bookMeetingMutation.isPending
+                ? "Scheduling..."
+                : "Schedule Meeting"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,11 +1,22 @@
 import { db } from "../db";
-import { messages, conversations, leads, leadActivityLog } from "@shared/schema";
+import { 
+  messages, 
+  conversations, 
+  leads, 
+  leadActivityLog,
+  bookings,
+  quickReplyTemplates,
+  vsls
+} from "@shared/schema";
+import { config } from "dotenv";
+
+config();
 
 async function resetEverything() {
   console.log("🗑️  RESETTING DATABASE...");
 
   try {
-    // Delete in correct order (respect foreign keys)
+    // Delete in correct order to respect foreign key constraints
     
     console.log("1️⃣  Deleting all messages...");
     await db.delete(messages);
@@ -19,23 +30,38 @@ async function resetEverything() {
     await db.delete(leadActivityLog);
     console.log("   ✅ Activity logs deleted");
 
-    console.log("4️⃣  Deleting all leads...");
+    console.log("4️⃣  Deleting all bookings..."); // ✅ ADD THIS BEFORE LEADS
+    await db.delete(bookings);
+    console.log("   ✅ Bookings deleted");
+
+    console.log("5️⃣  Deleting all leads...");
     await db.delete(leads);
     console.log("   ✅ Leads deleted");
 
+    console.log("6️⃣  Deleting all quick reply templates...");
+    await db.delete(quickReplyTemplates);
+    console.log("   ✅ Templates deleted");
+
+    console.log("7️⃣  Deleting all VSLs...");
+    await db.delete(vsls);
+    console.log("   ✅ VSLs deleted");
+
     console.log("\n✅ DATABASE RESET COMPLETE!");
-    console.log("📊 All conversations, leads, and messages have been deleted.");
-    console.log("🎯 Ready for fresh testing!\n");
+    console.log("📊 All conversations, messages, leads, bookings, and related data deleted");
+    console.log("🔄 You can now start fresh with new test data\n");
 
   } catch (error) {
     console.error("❌ Error:", error);
-    process.exit(1);
+    throw error;
   }
 }
 
 resetEverything()
-  .then(() => process.exit(0))
+  .then(() => {
+    console.log("Done!");
+    process.exit(0);
+  })
   .catch((error) => {
-    console.error("Fatal error:", error);
+    console.error("Failed:", error);
     process.exit(1);
   });

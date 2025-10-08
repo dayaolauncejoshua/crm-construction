@@ -283,12 +283,31 @@ export const bookings = pgTable("bookings", {
   clientId: varchar("client_id")
     .references(() => clients.id)
     .notNull(),
-  scheduledAt: timestamp("scheduled_at").notNull(),
-  duration: integer("duration").default(30), // in minutes
+
+  // Meeting details
+  title: text("title").notNull(),
+  description: text("description"),
+  location: text("location"),
+
+  // Scheduling
+  scheduledAt: timestamp("scheduled_at").notNull(), // Keep existing field name
+  scheduledFor: timestamp("scheduled_for").notNull(), // Add new field for clarity
+  duration: integer("duration").default(60), // changed from 30 to 60 minutes
+
+  // Status
   status: varchar("status").default("scheduled"), // scheduled, confirmed, completed, cancelled, no_show
+
+  // Attendee info
+  attendeeEmail: varchar("attendee_email"),
+  attendeeName: varchar("attendee_name"),
+  attendeePhone: varchar("attendee_phone"),
+
+  // Additional fields
+  meetingType: varchar("meeting_type"), // site-visit, consultation, follow-up
   meetingUrl: varchar("meeting_url"),
   notes: text("notes"),
   reminderSent: boolean("reminder_sent").default(false),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

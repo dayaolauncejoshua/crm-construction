@@ -97,8 +97,15 @@ export interface IStorage {
   createVSL(vsl: InsertVSL): Promise<VSL>;
 
   // Booking operations
-  getBookings(clientId: string): Promise<(Booking & { lead: Lead })[]>;
+  getBookings(clientId: string): Promise<any[]>;
+  getBooking(bookingId: string): Promise<Booking | undefined>;
   createBooking(booking: InsertBooking): Promise<Booking>;
+  updateBooking(
+    bookingId: string,
+    updates: Partial<InsertBooking>
+  ): Promise<Booking>;
+  deleteBooking(bookingId: string): Promise<void>;
+  getLeadBookings(leadId: string): Promise<Booking[]>;
 
   // Analytics operations
   getKPIs(clientId: string): Promise<{
@@ -1071,45 +1078,69 @@ export class DatabaseStorage implements IStorage {
     return newVSL;
   }
 
-  // Booking operations
-  async getBookings(clientId: string): Promise<(Booking & { lead: Lead })[]> {
-    return await db
+  // ============= BOOKING METHODS =============
+
+  async getBookings(clientId: string) {
+    return db
       .select({
         id: bookings.id,
         leadId: bookings.leadId,
         clientId: bookings.clientId,
+        title: bookings.title,
+        description: bookings.description,
+        location: bookings.location,
+        scheduledFor: bookings.scheduledFor,
         scheduledAt: bookings.scheduledAt,
         duration: bookings.duration,
         status: bookings.status,
+        attendeeEmail: bookings.attendeeEmail,
+        attendeeName: bookings.attendeeName,
+        attendeePhone: bookings.attendeePhone,
+        meetingType: bookings.meetingType,
         meetingUrl: bookings.meetingUrl,
         notes: bookings.notes,
         reminderSent: bookings.reminderSent,
         createdAt: bookings.createdAt,
         updatedAt: bookings.updatedAt,
-        lead: leads,
       })
       .from(bookings)
-      .innerJoin(leads, eq(bookings.leadId, leads.id))
       .where(eq(bookings.clientId, clientId))
-      .orderBy(desc(bookings.scheduledAt));
+      .orderBy(desc(bookings.scheduledFor));
   }
 
-  async createBooking(booking: InsertBooking): Promise<Booking> {
-    const [newBooking] = await db.insert(bookings).values(booking).returning();
-    return newBooking;
+  async getBooking(bookingId: string) {
+    const [booking] = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.id, bookingId));
+    return booking;
   }
 
-  // Update booking
-  async updateBooking(
-    id: string,
-    updates: Partial<InsertBooking>
-  ): Promise<Booking> {
-    const [updated] = await db
+  async createBooking(data: InsertBooking) {
+    const [booking] = await db.insert(bookings).values(data).returning();
+    return booking;
+  }
+
+  async updateBooking(bookingId: string, updates: Partial<InsertBooking>) {
+    const [booking] = await db
       .update(bookings)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(bookings.id, id))
+      .where(eq(bookings.id, bookingId))
       .returning();
-    return updated;
+    return booking;
+  }
+
+  async deleteBooking(bookingId: string) {
+    await db.delete(bookings).where(eq(bookings.id, bookingId));
+  }
+
+  // Get upcoming bookings for a lead
+  async getLeadBookings(leadId: string) {
+    return db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.leadId, leadId))
+      .orderBy(desc(bookings.scheduledFor));
   }
 
   // Delete lead

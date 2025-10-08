@@ -1,154 +1,195 @@
-// client/src/pages/calendar.tsx
-
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
-
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { queryClient } from "@/lib/queryClient";
+import { useEffect } from "react";
 import {
   Calendar as CalendarIcon,
   Clock,
-  User,
-  Video,
-  Phone,
-  Plus,
-  Check,
-  X,
-  MoreVertical,
+  MapPin,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  TrendingUp,
   Users,
-  MessageCircle
+  ChevronLeft,
+  ChevronRight,
+  Phone,
+  Mail,
+  User,
+  FileText,
 } from "lucide-react";
 
-const createBookingSchema = z.object({
-  leadId: z.string().min(1, "Lead is required"),
-  scheduledAt: z.string().min(1, "Date and time is required"),
-  duration: z.number().min(15).max(180).default(30),
-  notes: z.string().optional(),
-});
-
-type CreateBookingData = z.infer<typeof createBookingSchema>;
-
-export default function Calendar() {
-  const [selectedClientId, setSelectedClientId] = useState("demo-client");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+export default function CalendarPage() {
+  const { user } = useAuth();
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const { toast } = useToast();
+  const [showBookingModal, setShowBookingModal] = useState(false);
 
   // Fetch clients
   const { data: clients } = useQuery({
-    queryKey: ["/api/clients"],
+    queryKey: ["/api/clients", user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
+      const response = await fetch(`/api/clients?userId=${user?.id}`);
       return response.json();
     },
+    enabled: !!user?.id,
   });
 
-  // Fetch dashboard data for leads and bookings
-  const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ["/api/dashboard", selectedClientId],
+  const selectedClientId = clients?.[0]?.id;
+
+  // Fetch bookings
+  const { data: bookings = [], isLoading } = useQuery({
+    queryKey: ["/api/bookings", selectedClientId],
+    queryFn: async () => {
+      const response = await fetch(`/api/bookings/${selectedClientId}`);
+      return response.json();
+    },
     enabled: !!selectedClientId,
-  }) as { data: { leads?: any[]; bookings?: any[] } | undefined; isLoading: boolean };
-
-  // Create booking form
-  const form = useForm<CreateBookingData>({
-    resolver: zodResolver(createBookingSchema),
-    defaultValues: {
-      leadId: "",
-      scheduledAt: "",
-      duration: 30,
-      notes: "",
-    },
   });
 
-  // Create booking mutation
-  const createBookingMutation = useMutation({
-    mutationFn: async (data: CreateBookingData) => {
-      const response = await apiRequest("POST", "/api/bookings", {
-        ...data,
-        clientId: selectedClientId,
-        scheduledAt: new Date(data.scheduledAt),
+  // WebSocket for real-time updates
+  const { data: wsData } = useWebSocket();
+
+  useEffect(() => {
+    if (!wsData || !selectedClientId) return;
+
+    if (
+      wsData.type === "new_conversation" ||
+      wsData.type === "booking_created" ||
+      wsData.type === "booking_updated"
+    ) {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
       });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard", selectedClientId] });
-      setShowCreateDialog(false);
-      form.reset();
-      toast({
-        title: "Success!",
-        description: "Booking created successfully.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+    }
+  }, [wsData, selectedClientId]);
+
+  // Calculate stats
+  const now = new Date();
+  const upcomingBookings = bookings.filter(
+    (b: any) => new Date(b.scheduledFor) > now && b.status === "scheduled"
+  );
+  const todayBookings = bookings.filter((b: any) => {
+    const bookingDate = new Date(b.scheduledFor);
+    return (
+      bookingDate.getDate() === now.getDate() &&
+      bookingDate.getMonth() === now.getMonth() &&
+      bookingDate.getFullYear() === now.getFullYear()
+    );
   });
+  const completedBookings = bookings.filter((b: any) => b.status === "completed");
+  const totalBookings = bookings.length;
+  const showRate =
+    totalBookings > 0
+      ? Math.round((completedBookings.length / totalBookings) * 100)
+      : 0;
 
-  // Update booking status mutation
-  const updateBookingMutation = useMutation({
-    mutationFn: async ({ bookingId, status }: { bookingId: string; status: string }) => {
-      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard", selectedClientId] });
-      toast({
-        title: "Updated",
-        description: "Booking status updated successfully.",
-      });
-    },
-  });
+  // Calendar generation
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
 
-  const leads = dashboardData?.leads || [];
-  const bookings = dashboardData?.bookings || [];
+    const days = [];
+    
+    // Previous month's days
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      const prevDate = new Date(year, month, -startingDayOfWeek + i + 1);
+      days.push({ date: prevDate, isCurrentMonth: false });
+    }
+    
+    // Current month's days
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+    }
+    
+    // Next month's days to fill the grid
+    const remainingDays = 42 - days.length;
+    for (let i = 1; i <= remainingDays; i++) {
+      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+    }
+    
+    return days;
+  };
 
-  const onSubmit = (data: CreateBookingData) => {
-    createBookingMutation.mutate(data);
+  // Get bookings for a specific date
+  const getBookingsForDate = (date: Date) => {
+    return bookings.filter((b: any) => {
+      const bookingDate = new Date(b.scheduledFor);
+      return (
+        bookingDate.getDate() === date.getDate() &&
+        bookingDate.getMonth() === date.getMonth() &&
+        bookingDate.getFullYear() === date.getFullYear()
+      );
+    });
+  };
+
+  // Handle event click
+  const handleEventClick = (booking: any) => {
+    setSelectedBooking(booking);
+    setShowBookingModal(true);
+  };
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const previousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      scheduled: "bg-blue-500",
+      completed: "bg-green-500",
+      cancelled: "bg-red-500",
+      "no-show": "bg-yellow-500",
+    };
+    return colors[status] || "bg-blue-500";
   };
 
   const getStatusBadge = (status: string) => {
-    const variants = {
-      scheduled: "bg-blue-100 text-blue-800",
-      confirmed: "bg-green-100 text-green-800",
-      completed: "bg-purple-100 text-purple-800",
-      cancelled: "bg-red-100 text-red-800",
-      no_show: "bg-gray-100 text-gray-800"
+    const variants: Record<string, { bg: string; text: string; icon: any }> = {
+      scheduled: { bg: "bg-blue-50", text: "text-blue-700", icon: Clock },
+      completed: { bg: "bg-green-50", text: "text-green-700", icon: CheckCircle },
+      cancelled: { bg: "bg-red-50", text: "text-red-700", icon: XCircle },
+      "no-show": { bg: "bg-yellow-50", text: "text-yellow-700", icon: AlertCircle },
     };
-    return variants[status as keyof typeof variants] || variants.scheduled;
+
+    const variant = variants[status] || variants.scheduled;
+    const Icon = variant.icon;
+
+    return (
+      <Badge variant="outline" className={`${variant.bg} ${variant.text} border-0`}>
+        <Icon className="w-3 h-3 mr-1" />
+        {status.charAt(0).toUpperCase() + status.slice(1).replace("-", " ")}
+      </Badge>
+    );
   };
 
-  const formatDateTime = (dateTime: string) => {
-    const date = new Date(dateTime);
-    return {
-      date: date.toLocaleDateString(),
-      time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
   };
-
-  const upcomingBookings = bookings.filter(booking => 
-    new Date(booking.scheduledAt) >= new Date() && 
-    !['cancelled', 'completed', 'no_show'].includes(booking.status)
-  );
-
-  const pastBookings = bookings.filter(booking => 
-    new Date(booking.scheduledAt) < new Date() || 
-    ['completed', 'cancelled', 'no_show'].includes(booking.status)
-  );
 
   if (isLoading) {
     return (
@@ -161,301 +202,379 @@ export default function Calendar() {
     );
   }
 
+  const calendarDays = getDaysInMonth(currentDate);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="bg-white border-b border-slate-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Calendar & Bookings</h2>
-              <p className="text-slate-600">Manage appointments and client meetings</p>
-            </div>
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-              <DialogTrigger asChild>
-                <Button className="bg-primary text-white hover:bg-primary/90">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Schedule Meeting
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Schedule New Meeting</DialogTitle>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="leadId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Select Lead</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Choose a lead" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {leads.map((lead: any) => (
-                                <SelectItem key={lead.id} value={lead.id}>
-                                  {lead.firstName} {lead.lastName} - {lead.company}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="scheduledAt"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Date & Time</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="datetime-local" 
-                              {...field} 
-                              min={new Date().toISOString().slice(0, 16)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="duration"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Duration (minutes)</FormLabel>
-                          <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value.toString()}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="15">15 minutes</SelectItem>
-                              <SelectItem value="30">30 minutes</SelectItem>
-                              <SelectItem value="45">45 minutes</SelectItem>
-                              <SelectItem value="60">1 hour</SelectItem>
-                              <SelectItem value="90">1.5 hours</SelectItem>
-                              <SelectItem value="120">2 hours</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Meeting Notes (Optional)</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Add any notes about this meeting..."
-                              rows={3}
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="flex justify-end space-x-3 pt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowCreateDialog(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={createBookingMutation.isPending}
-                        className="bg-primary text-white hover:bg-primary/90"
-                      >
-                        {createBookingMutation.isPending ? "Scheduling..." : "Schedule Meeting"}
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+              Calendar & Bookings
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600">
+              Manage your appointments and meetings
+            </p>
           </div>
-        </header>
+          <Button variant="outline" className="w-full sm:w-auto">
+            Export Schedule
+          </Button>
+        </div>
+      </header>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-auto p-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{bookings.length}</div>
-                <p className="text-xs text-muted-foreground">This month</p>
-              </CardContent>
-            </Card>
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalBookings}</div>
+              <p className="text-xs text-muted-foreground">All time bookings</p>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Upcoming</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{upcomingBookings.length}</div>
-                <p className="text-xs text-muted-foreground">Next 7 days</p>
-              </CardContent>
-            </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Meetings</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{todayBookings.length}</div>
+              <p className="text-xs text-muted-foreground">
+                <TrendingUp className="w-3 h-3 inline mr-1" />
+                Active today
+              </p>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Upcoming</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{upcomingBookings.length}</div>
+              <p className="text-xs text-muted-foreground">Scheduled meetings</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Show Rate</CardTitle>
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{showRate}%</div>
+              <p className="text-xs text-muted-foreground">Completion rate</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="calendar" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          </TabsList>
+
+          {/* Calendar Tab */}
+          <TabsContent value="calendar">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Completed</CardTitle>
-                <Check className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {bookings.filter(b => b.status === 'completed').length}
+              <CardHeader className="border-b py-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl">Calendar View</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" onClick={previousMonth}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xl font-semibold min-w-[140px] text-center">
+                      {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                    </span>
+                    <Button variant="ghost" size="icon" onClick={nextMonth}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">This month</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Show Rate</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">85%</div>
-                <p className="text-xs text-muted-foreground">+5% vs last month</p>
+              <CardContent className="p-0">
+                {/* Calendar Grid */}
+                <div className="w-full">
+                  {/* Day Headers */}
+                  <div className="grid grid-cols-7 border-b bg-slate-50">
+                    {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
+                      <div
+                        key={day}
+                        className="text-center text-sm font-semibold text-slate-600 py-2 border-r last:border-r-0"
+                      >
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Days */}
+                  <div className="grid grid-cols-7">
+                    {calendarDays.map((day, index) => {
+                      const dayBookings = getBookingsForDate(day.date);
+                      const isTodayDate = isToday(day.date);
+
+                      return (
+                        <div
+                          key={index}
+                          className={`h-[98px] border-r border-b last:border-r-0 p-1.5 overflow-hidden ${
+                            !day.isCurrentMonth ? "bg-slate-50" : "bg-white"
+                          }`}
+                        >
+                          <div
+                            className={`text-sm font-medium mb-1 ${
+                              isTodayDate
+                                ? "w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center text-[12px]"
+                                : day.isCurrentMonth
+                                ? "text-slate-900"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {day.date.getDate()}
+                          </div>
+
+                          {/* Events for this day */}
+                          <div className="space-y-0.5">
+                            {dayBookings.slice(0, 2).map((booking: any) => (
+                              <div
+                                key={booking.id}
+                                onClick={() => handleEventClick(booking)}
+                                className={`text-[12px] leading-tight px-1 py-0.5 rounded ${getStatusColor(
+                                  booking.status
+                                )} text-white truncate cursor-pointer hover:opacity-80 hover:scale-105 transition-all`}
+                                title="Click to view details"
+                              >
+                                {new Date(booking.scheduledFor).toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}{" "}
+                                {booking.attendeeName}
+                              </div>
+                            ))}
+                            {dayBookings.length > 2 && (
+                              <div 
+                                className="text-[9px] text-slate-500 px-1 cursor-pointer hover:text-slate-700"
+                                onClick={() => handleEventClick(dayBookings[2])}
+                                title="Click to view more"
+                              >
+                                +{dayBookings.length - 2} more
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Legend */}
+                <div className="px-4 py-2 border-t bg-slate-50">
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                      <span className="text-slate-600">Scheduled</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-green-500 rounded"></div>
+                      <span className="text-slate-600">Completed</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-red-500 rounded"></div>
+                      <span className="text-slate-600">Cancelled</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+                      <span className="text-slate-600">No-show</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </div>
+          </TabsContent>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Upcoming Bookings */}
+          {/* Bookings Tab */}
+          <TabsContent value="bookings">
             <Card>
               <CardHeader>
-                <CardTitle>Upcoming Bookings</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>All Bookings</CardTitle>
+                  <Badge variant="secondary">
+                    {upcomingBookings.length} upcoming
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 {upcomingBookings.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CalendarIcon className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-600">No upcoming bookings</p>
+                  <div className="text-center py-12">
+                    <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <h3 className="text-base font-medium text-slate-900 mb-1">
+                      No upcoming bookings
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Schedule meetings from the Conversations page
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {upcomingBookings.map((booking: any) => {
-                      const dateTime = formatDateTime(booking.scheduledAt);
-                      return (
-                        <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                              <User className="text-primary text-lg" />
-                            </div>
-                            <div>
-                              <h4 className="font-medium">
-                                {booking.lead?.firstName} {booking.lead?.lastName}
+                  <div className="space-y-3">
+                    {upcomingBookings.map((booking: any) => (
+                      <Card
+                        key={booking.id}
+                        className="border border-slate-200 hover:shadow-sm transition-shadow cursor-pointer"
+                        onClick={() => handleEventClick(booking)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-900 text-sm mb-1">
+                                {booking.title}
                               </h4>
-                              <p className="text-sm text-slate-600">{booking.lead?.company}</p>
-                              <div className="flex items-center space-x-4 mt-1">
-                                <span className="text-xs text-slate-500 flex items-center">
-                                  <CalendarIcon className="w-3 h-3 mr-1" />
-                                  {dateTime.date}
-                                </span>
-                                <span className="text-xs text-slate-500 flex items-center">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  {dateTime.time}
-                                </span>
-                              </div>
+                              <p className="text-xs text-slate-600">{booking.attendeeName}</p>
                             </div>
+                            {getStatusBadge(booking.status)}
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge className={getStatusBadge(booking.status)}>
-                              {booking.status}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateBookingMutation.mutate({ 
-                                bookingId: booking.id, 
-                                status: 'confirmed' 
-                              })}
-                            >
-                              <Check className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* Recent Bookings */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Bookings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {pastBookings.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CalendarIcon className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-600">No past bookings</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {pastBookings.slice(0, 5).map((booking: any) => {
-                      const dateTime = formatDateTime(booking.scheduledAt);
-                      return (
-                        <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                              <User className="text-slate-600 text-lg" />
+                          <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
+                            <div className="flex items-center">
+                              <CalendarIcon className="w-3 h-3 mr-1" />
+                              {new Date(booking.scheduledFor).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}
                             </div>
-                            <div>
-                              <h4 className="font-medium">
-                                {booking.lead?.firstName} {booking.lead?.lastName}
-                              </h4>
-                              <p className="text-sm text-slate-600">{booking.lead?.company}</p>
-                              <div className="flex items-center space-x-4 mt-1">
-                                <span className="text-xs text-slate-500 flex items-center">
-                                  <CalendarIcon className="w-3 h-3 mr-1" />
-                                  {dateTime.date}
-                                </span>
-                                <span className="text-xs text-slate-500 flex items-center">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  {dateTime.time}
-                                </span>
-                              </div>
+                            <div className="flex items-center">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {new Date(booking.scheduledFor).toLocaleTimeString("en-US", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                            <div className="flex items-center">
+                              <MapPin className="w-3 h-3 mr-1" />
+                              {booking.location}
                             </div>
                           </div>
-                          <Badge className={getStatusBadge(booking.status)}>
-                            {booking.status}
-                          </Badge>
-                        </div>
-                      );
-                    })}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
               </CardContent>
             </Card>
-          </div>
-        </main>
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* Booking Details Modal */}
+      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Meeting Details</DialogTitle>
+          </DialogHeader>
+
+          {selectedBooking && (
+            <div className="space-y-4">
+              {/* Status Badge */}
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg">{selectedBooking.title}</h3>
+                {getStatusBadge(selectedBooking.status)}
+              </div>
+
+              {/* Date & Time */}
+              <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                <div className="flex items-center text-sm">
+                  <CalendarIcon className="w-4 h-4 mr-2 text-slate-600" />
+                  <span className="font-medium">
+                    {new Date(selectedBooking.scheduledFor).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Clock className="w-4 h-4 mr-2 text-slate-600" />
+                  <span>
+                    {new Date(selectedBooking.scheduledFor).toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}{" "}
+                    ({selectedBooking.duration} minutes)
+                  </span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <MapPin className="w-4 h-4 mr-2 text-slate-600" />
+                  <span>{selectedBooking.location || "TBD"}</span>
+                </div>
+              </div>
+
+              {/* Attendee Info */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-slate-700">Attendee Information</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center text-sm">
+                    <User className="w-4 h-4 mr-2 text-slate-600" />
+                    <span>{selectedBooking.attendeeName}</span>
+                  </div>
+                  {selectedBooking.attendeeEmail && (
+                    <div className="flex items-center text-sm">
+                      <Mail className="w-4 h-4 mr-2 text-slate-600" />
+                      <a 
+                        href={`mailto:${selectedBooking.attendeeEmail}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {selectedBooking.attendeeEmail}
+                      </a>
+                    </div>
+                  )}
+                  {selectedBooking.attendeePhone && (
+                    <div className="flex items-center text-sm">
+                      <Phone className="w-4 h-4 mr-2 text-slate-600" />
+                      <a 
+                        href={`tel:${selectedBooking.attendeePhone}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {selectedBooking.attendeePhone}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedBooking.notes && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm text-slate-700 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Notes
+                  </h4>
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-900">{selectedBooking.notes}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" className="flex-1">
+                  Reschedule
+                </Button>
+                <Button variant="outline" className="flex-1 text-red-600 hover:bg-red-50">
+                  Cancel Meeting
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
