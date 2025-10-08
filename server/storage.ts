@@ -278,6 +278,8 @@ export class DatabaseStorage implements IStorage {
     console.log("✅ Database updated. New values:", {
       manualScore: updated.manualScore,
       isManualOverride: updated.isManualOverride,
+      temperature: updated.temperature, // ADD THIS LINE
+      status: updated.status, // ADD THIS LINE
       tags: updated.tags,
     });
 
@@ -293,6 +295,28 @@ export class DatabaseStorage implements IStorage {
           fieldChanged: "status",
           oldValue: oldLead.status,
           newValue: updates.status,
+        });
+      }
+
+      if (updates.temperature && updates.temperature !== oldLead.temperature) {
+        changes.push({
+          leadId,
+          userId,
+          action: "temperature_changed",
+          fieldChanged: "temperature",
+          oldValue: oldLead.temperature,
+          newValue: updates.temperature,
+        });
+      }
+
+      if (updates.manualScore && updates.manualScore !== oldLead.manualScore) {
+        changes.push({
+          leadId,
+          userId,
+          action: "score_changed",
+          fieldChanged: "manualScore",
+          oldValue: oldLead.manualScore || oldLead.qualificationScore,
+          newValue: updates.manualScore,
         });
       }
 

@@ -43,7 +43,6 @@ import {
 } from "lucide-react";
 import { space } from "postcss/lib/list";
 
-
 export default function Conversations() {
   const { user } = useAuth();
   console.log("=== USER DEBUG ===");
@@ -361,23 +360,6 @@ export default function Conversations() {
     (c: any) => c.isAiHandled === false
   ).length;
 
-  //Debug Logging
-  useEffect(() => {
-    console.log("=== CONVERSATIONS PAGE DEBUG ===");
-    console.log("Selected Client ID:", selectedClientId);
-    console.log("Clients available:", clients);
-    console.log("Dashboard Data:", dashboardData);
-    console.log("Conversations count:", conversations.length);
-    console.log("Filtered conversations count:", filteredConversations.length);
-    console.log("Is Loading:", isLoading);
-  }, [
-    selectedClientId,
-    dashboardData,
-    isLoading,
-    conversations,
-    filteredConversations,
-  ]);
-
   console.log("Hot leads from dashboard:", dashboardData?.hotLeads);
   console.log(
     "Hot leads client IDs:",
@@ -436,6 +418,55 @@ export default function Conversations() {
         }
         break;
 
+      case "lead_updated":
+        console.log("🔄 Lead updated via WebSocket:", wsData.lead);
+
+        // Update conversations list with new lead data
+        queryClient.setQueryData(
+          [`/api/dashboard/${selectedClientId}`],
+          (oldData: any) => {
+            if (!oldData) return oldData;
+
+            return {
+              ...oldData,
+              conversations: oldData.conversations.map((conv: any) => {
+                if (conv.id === wsData.conversationId) {
+                  return {
+                    ...conv,
+                    lead: wsData.lead, // Update with fresh lead data
+                  };
+                }
+                return conv;
+              }),
+            };
+          }
+        );
+
+        // If this is the selected conversation, update it too
+        if (selectedConversation?.id === wsData.conversationId) {
+          setSelectedConversation((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              lead: wsData.lead,
+            };
+          });
+        }
+
+        // Show toast notification if temperature changed to hot
+        if (wsData.lead.temperature === "hot") {
+          toast({
+            title: "🔥 Lead is now HOT!",
+            description: `${
+              wsData.lead.firstName || "Lead"
+            } is now a hot lead (${(
+              parseFloat(wsData.lead.qualificationScore || "0") * 100
+            ).toFixed(0)}%)`,
+            variant: "default",
+          });
+        }
+        break;
+
       default:
         console.log("⚠️ Unknown event type, calling refetch");
         refetch();
@@ -483,6 +514,20 @@ export default function Conversations() {
     }
   }, [selectedConversation, messages]);
 
+  // Mark lead as viewed when conversation is selected
+  useEffect(() => {
+    if (
+      selectedConversation?.lead?.id &&
+      selectedConversation.lead.viewedAt === null
+    ) {
+      // Mark lead as viewed
+      fetch(`/api/leads/${selectedConversation.lead.id}/view`, {
+        method: "POST",
+        credentials: "include",
+      }).catch((err) => console.error("Failed to mark lead as viewed:", err));
+    }
+  }, [selectedConversation?.lead?.id]);
+
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
@@ -497,19 +542,23 @@ export default function Conversations() {
   };
 
   const getStatusBadge = (conversation: any) => {
-    const score = parseFloat(conversation.qualificationScore || "0");
+    const temperature = conversation.lead?.temperature;
+    const status = conversation.lead?.status;
 
-    if (score >= 0.7) {
+    // Show temperature badge
+    if (temperature === "hot") {
+      return <Badge className="bg-red-100 text-red-800">🔥 Hot Lead</Badge>;
+    } else if (temperature === "warm") {
       return (
-        <Badge className="bg-red-100 text-red-800">
-          Hot Lead (Score: {score.toFixed(1)})
-        </Badge>
+        <Badge className="bg-yellow-100 text-yellow-800">😐 Warm Lead</Badge>
       );
     } else if (conversation.isAiHandled) {
-      return <Badge className="bg-blue-100 text-blue-800">AI Handling</Badge>;
+      return (
+        <Badge className="bg-blue-100 text-blue-800">❄️ AI Handling</Badge>
+      );
     } else {
       return (
-        <Badge className="bg-green-100 text-green-800">Human Active</Badge>
+        <Badge className="bg-green-100 text-green-800">👤 Human Active</Badge>
       );
     }
   };
@@ -1090,12 +1139,36 @@ export default function Conversations() {
 
               {/* Status & Score - Compact */}
               <div className="space-y-2">
+                {/* Temperature (AI Quality) */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Temperature</span>
+                  <Badge
+                    className={`text-xs ${
+                      selectedConversation.lead?.temperature === "hot"
+                        ? "bg-red-100 text-red-800"
+                        : selectedConversation.lead?.temperature === "warm"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-blue-100 text-blue-800"
+                    }`}
+                  >
+                    {selectedConversation.lead?.temperature === "hot" &&
+                      "🔥 Hot"}
+                    {selectedConversation.lead?.temperature === "warm" &&
+                      "😐 Warm"}
+                    {selectedConversation.lead?.temperature === "cold" &&
+                      "❄️ Cold"}
+                  </Badge>
+                </div>
+
+                {/* Status (Sales Stage) */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Status</span>
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-xs capitalize">
                     {selectedConversation.lead?.status || "new"}
                   </Badge>
                 </div>
+
+                {/* Score */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Score</span>
                   <Badge
@@ -1128,6 +1201,8 @@ export default function Conversations() {
                     %
                   </Badge>
                 </div>
+
+                {/* Source */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Source</span>
                   <span className="text-xs text-slate-600">
@@ -1190,24 +1265,59 @@ export default function Conversations() {
                       />
                     </div>
 
+                    {/* Temperature Control - Compact */}
+                    <div>
+                      <span className="text-xs text-slate-500 block mb-1">
+                        Temperature Override
+                      </span>
+                      <Select
+                        value={selectedConversation.lead?.temperature || "cold"}
+                        onValueChange={(temp) =>
+                          updateLeadMutation.mutate({ temperature: temp })
+                        }
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cold">❄️ Cold</SelectItem>
+                          <SelectItem value="warm">😐 Warm</SelectItem>
+                          <SelectItem value="hot">🔥 Hot</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     {/* Status Dropdown - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
-                        Change Status
+                        Sales Stage
                       </span>
                       <Select
-                        value={selectedConversation.lead?.status}
+                        value={selectedConversation.lead?.status || "new"}
                         onValueChange={updateStatus}
                       >
                         <SelectTrigger className="w-full h-8 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="new">New</SelectItem>
-                          <SelectItem value="contacted">Contacted</SelectItem>
-                          <SelectItem value="qualified">Qualified</SelectItem>
-                          <SelectItem value="converted">Converted</SelectItem>
-                          <SelectItem value="lost">Lost</SelectItem>
+                          <SelectItem value="new">🆕 New</SelectItem>
+                          <SelectItem value="contacted">
+                            📞 Contacted
+                          </SelectItem>
+                          <SelectItem value="qualified">
+                            ✅ Qualified
+                          </SelectItem>
+                          <SelectItem value="proposal-sent">
+                            📄 Proposal Sent
+                          </SelectItem>
+                          <SelectItem value="negotiation">
+                            🤝 Negotiation
+                          </SelectItem>
+                          <SelectItem value="converted">
+                            💰 Converted
+                          </SelectItem>
+                          <SelectItem value="lost">❌ Lost</SelectItem>
+                          <SelectItem value="on-hold">⏸️ On Hold</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

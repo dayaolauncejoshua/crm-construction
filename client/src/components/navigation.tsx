@@ -30,6 +30,7 @@ interface NavigationProps {
   isTrialActive?: boolean;
   daysLeft?: number;
   unreadCount?: number;
+  newLeadsCount?: number;
   user?: any; 
   onSignOut?: () => void;
 }
@@ -39,6 +40,7 @@ export default function Navigation({
   isTrialActive = false,
   daysLeft = 0,
   unreadCount = 0,
+  newLeadsCount = 0,
   user,
   onSignOut,
 }: NavigationProps) {
@@ -63,7 +65,7 @@ export default function Navigation({
       path: "/leads",
       label: "Leads",
       icon: <Zap className="w-4 h-4" />,
-      badge: "6",
+      badge: newLeadsCount > 0 ? newLeadsCount.toString() : undefined,
     },
     {
       path: "/vsl",

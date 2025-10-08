@@ -24,30 +24,77 @@ import FollowUps from "@/pages/follow-ups";
 import WhiteLabel from "@/pages/white-label";
 import SOPs from "@/pages/sops";
 import NotFound from "@/pages/not-found";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { useEffect } from "react";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
   const [location, setLocation] = useLocation();
 
-  // MOVED: Fetch dashboard data BEFORE any conditional returns
-  // const { data: dashboardData } = useQuery<{
-  //   conversations: any[];
-  // }>({
-  //   queryKey: [`/api/dashboard/${user?.id}`],
-  //   enabled: !!user && isAuthenticated,
-  //   staleTime: 30 * 1000,
-  // });
+  // Fetch clients to get the first client ID
+  const { data: clients } = useQuery({
+    queryKey: ["/api/clients", user?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/clients?userId=${user?.id}`);
+      return response.json();
+    },
+    enabled: !!user?.id && isAuthenticated,
+  });
 
-  // const unreadCount =
-  //   dashboardData?.conversations?.filter((c: any) => c.unreadCount > 0)
-  //     .length || 0;
+  const selectedClientId = clients?.[0]?.id;
+
+  // Fetch dashboard data for unread count
+  const { data: dashboardData } = useQuery<{
+    conversations: any[];
+    kpis: any;
+  }>({
+    queryKey: [`/api/dashboard/${selectedClientId}`],
+    enabled: !!selectedClientId && isAuthenticated,
+    staleTime: 30 * 1000,
+  });
+
+  // Calculate unread count from conversations
+  const unreadCount =
+    dashboardData?.conversations?.reduce((total: number, conv: any) => {
+      return total + (conv.unreadCount || 0);
+    }, 0) || 0;
+
+  // Calculate new leads count (status = "new")
+  const newLeadsCount =
+  dashboardData?.conversations?.filter((conv: any) => 
+    conv.lead?.status === "new" && !conv.lead?.viewedAt
+  ).length || 0;
+
+  const { data: wsData } = useWebSocket();
+
+  useEffect(() => {
+    if (!wsData || !selectedClientId) return;
+
+    console.log("🌐 App-level WebSocket event:", wsData.type);
+
+    // Refresh dashboard data (for sidebar badges) on any relevant event
+    if (
+      wsData.type === "new_message" ||
+      wsData.type === "new_conversation" ||
+      wsData.type === "conversation_updated" ||
+      wsData.type === "lead_updated" ||
+      wsData.type === "hot_lead_alert"
+    ) {
+      console.log("🔄 Invalidating dashboard query for sidebar update");
+
+      // Invalidate dashboard to update unread counts
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+    }
+  }, [wsData, selectedClientId]);
 
   // Pages that don't need navigation layout
   const fullScreenPages = ["/trial-unlock", "/landing", "/login", "/signup"];
   const shouldShowNavigation =
     !fullScreenPages.includes(location) && isAuthenticated;
 
-  // NOW: Conditional returns AFTER all hooks
+  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -83,7 +130,8 @@ function ProtectedRouter() {
           userRole={user?.role || "user"}
           isTrialActive={user?.isTrialActive || false}
           daysLeft={0}
-          unreadCount={0}
+          unreadCount={unreadCount}
+          newLeadsCount={newLeadsCount}
           user={user}
           onSignOut={handleSignOut}
         />

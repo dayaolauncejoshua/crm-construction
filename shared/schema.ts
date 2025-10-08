@@ -148,6 +148,7 @@ export const leads = pgTable("leads", {
   nextFollowUpAt: timestamp("next_follow_up_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  viewedAt: timestamp("viewed_at"),
 });
 
 // Lead activity log table

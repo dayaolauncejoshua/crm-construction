@@ -237,9 +237,37 @@ export class LeadQualificationService {
 
         console.log("AI Qualification:", qualification);
 
+        // Determine temperature based on score
+        let temperature: "hot" | "warm" | "cold";
+        if (qualification.score >= 0.7) {
+          temperature = "hot";
+        } else if (qualification.score >= 0.4) {
+          temperature = "warm";
+        } else {
+          temperature = "cold";
+        }
+
+        // Update conversation with score
         await storage.updateConversation(conversation.id, {
           qualificationScore: qualification.score.toString(),
           lastMessageAt: new Date(),
+        });
+
+        // Update lead with temperature and auto-qualify hot leads
+        await storage.updateLead(lead.id, {
+          qualificationScore: qualification.score.toString(),
+          temperature: temperature,
+          status: qualification.score >= 0.7 ? "qualified" : lead.status, // Auto-qualify hot leads
+        });
+
+        console.log(`🌡️ Temperature set to: ${temperature}`);
+
+        // Broadcast lead update to dashboard
+        const updatedLead = await storage.getLead(lead.id);
+        this.broadcastUpdate({
+          type: "lead_updated",
+          lead: updatedLead,
+          conversationId: conversation.id,
         });
 
         // Hot lead detection
@@ -259,11 +287,18 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
+          const updatedLead = await storage.getLead(lead.id);
+          this.broadcastUpdate({
+            type: "lead_updated",
+            lead: updatedLead,
+            conversationId: conversation.id,
+          });
+
           this.broadcastUpdate({
             type: "hot_lead_alert",
             conversation: {
               ...conversation,
-              lead,
+              lead: updatedLead,
               qualificationScore: qualification.score.toString(),
             },
             qualification,

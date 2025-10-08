@@ -531,6 +531,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Lead management routes
+  app.get("/api/leads/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const leads = await storage.getLeads(clientId, 100); // Get up to 100 leads
+      res.json(leads);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      res.status(500).json({ message: "Failed to fetch leads" });
+    }
+  });
+
+  // Mark lead as viewed
+  app.post("/api/leads/:leadId/view", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+
+      // Update lead with viewedAt timestamp
+      const lead = await storage.updateLead(leadId, {
+        viewedAt: new Date(),
+      });
+
+      res.json({ success: true, lead });
+    } catch (error) {
+      console.error("Error marking lead as viewed:", error);
+      res.status(500).json({ message: "Failed to mark lead as viewed" });
+    }
+  });
+
   app.patch("/api/leads/:leadId", async (req, res) => {
     try {
       const { leadId } = req.params;

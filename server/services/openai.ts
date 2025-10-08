@@ -2,8 +2,8 @@
 
 import OpenAI from "openai";
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY2
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY2,
 });
 
 export interface LeadQualificationResult {
@@ -30,45 +30,71 @@ export async function qualifyLead(
   conversationHistory: any[]
 ): Promise<LeadQualificationResult> {
   try {
-    const prompt = `
-    You are an expert lead qualification AI. Analyze this lead and conversation to determine qualification score.
-    
-    Lead Data:
-    - Name: ${leadData.firstName} ${leadData.lastName}
-    - Company: ${leadData.company}
-    - Email: ${leadData.email}
-    - Phone: ${leadData.phone}
-    - Source: ${leadData.source}
-    
-    Conversation History:
-    ${conversationHistory.map(msg => `${msg.sender}: ${msg.content}`).join('\n')}
-    
-    Score this lead from 0.0 to 1.0 based on:
-    - Buying intent (40%)
-    - Urgency (30%) 
-    - Budget qualification (20%)
-    - Decision making authority (10%)
-    
-    Score >0.7 needs human attention immediately.
-    
-    Respond with JSON in this exact format: {
-      "score": number,
-      "intent": "high|medium|low",
-      "urgency": "immediate|soon|later",
-      "budget": "qualified|unqualified|unknown",
-      "timeline": "days|weeks|months",
-      "needsHumanAttention": boolean,
-      "reasoning": "brief explanation",
-      "nextAction": "specific next step"
-    }
-    `;
+    const conversationText = conversationHistory
+      .map((msg) => `${msg.sender}: ${msg.content}`)
+      .join("\n");
+
+    const prompt = `You are a lead qualification expert for a construction company.
+
+Analyze this conversation and score from 0.0 to 1.0 based on:
+
+**HIGH SCORE (0.7-1.0) - Hot Lead (REQUIRES MULTIPLE SIGNALS):**
+Must have BUDGET (2M+) **PLUS at least TWO of these:**
+- ⏰ URGENCY: "ASAP", "urgent", "need to start in 2-6 weeks", "time-sensitive"
+- 👔 DECISION MAKER: "owner", "CEO", "CFO", "I'm authorized", "my company", "I decide"
+- 📅 MEETING REQUEST: "meet today/this week", "can we schedule", "site visit", "when can you come"
+- 🏆 COMPETITIVE: "comparing 3 contractors", "need proposal by Friday", "choosing next week"
+- 📋 DETAILED SCOPE: Full project plan, specific requirements, ready to start
+
+**MEDIUM SCORE (0.4-0.69) - Warm Lead:**
+- Budget mentioned (even large) but NO urgency
+- Budget + project details (type, location, size)
+- Engaged, asks relevant questions
+- Timeline mentioned but flexible ("in a few months", "planning stage")
+- Interested but shopping around casually
+
+**LOW SCORE (0.0-0.39) - Cold Lead:**
+- Only asks "price?", "how much?", "cost?"
+- No budget mentioned
+- No project details
+- Just browsing
+- One-word responses
+
+SCORING EXAMPLES:
+- "5M budget, office renovation, 300 sqm, La Union" = 0.55 (WARM - has budget & details but no urgency)
+- "5M budget, URGENT, need in 4 weeks, I'm the CEO, meet this week?" = 0.85 (HOT - has budget + urgency + decision maker + meeting)
+- "How much?" = 0.15 (COLD)
+
+Lead Data:
+- Name: ${leadData.firstName} ${leadData.lastName}
+- Company: ${leadData.company}
+- Email: ${leadData.email}
+- Phone: ${leadData.phone}
+
+CONVERSATION:
+${conversationText}
+
+CRITICAL: Set needsHumanAttention to true ONLY if score >= 0.7
+
+Respond with JSON only:
+{
+  "score": 0.55,
+  "intent": "medium",
+  "urgency": "later",
+  "budget": "qualified",
+  "timeline": "weeks",
+  "needsHumanAttention": false,  // false because score < 0.7
+  "reasoning": "Has 3-5M budget and project details but no urgency or decision maker identified",
+  "nextAction": "Qualify urgency and decision-making authority"
+}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: "You are a lead qualification expert. Always respond with valid JSON.",
+          content:
+            "You are a lead qualification expert. Always respond with valid JSON. Be aggressive in scoring - urgency and budget are most important.",
         },
         {
           role: "user",
@@ -76,23 +102,29 @@ export async function qualifyLead(
         },
       ],
       response_format: { type: "json_object" },
+      temperature: 0.3,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
-    
+
+    const finalScore = Math.max(0, Math.min(1, result.score || 0.5));
+
     return {
-      score: Math.max(0, Math.min(1, result.score)),
+      score: finalScore,
       intent: result.intent || "unknown",
       urgency: result.urgency || "unknown",
       budget: result.budget || "unknown",
       timeline: result.timeline || "unknown",
-      needsHumanAttention: result.needsHumanAttention || false,
-      reasoning: result.reasoning || "",
+      needsHumanAttention: finalScore >= 0.7, // Force based on score only
+      reasoning: result.reasoning || "Lead qualified based on conversation",
       nextAction: result.nextAction || "continue conversation",
     };
   } catch (error) {
     console.error("Error qualifying lead:", error);
-    throw new Error("Failed to qualify lead: " + (error instanceof Error ? error.message : "Unknown error"));
+    throw new Error(
+      "Failed to qualify lead: " +
+        (error instanceof Error ? error.message : "Unknown error")
+    );
   }
 }
 
@@ -102,40 +134,75 @@ export async function generateAIResponse(
   clientData: any
 ): Promise<string> {
   try {
-    const prompt = `
-    You are an AI sales assistant for ${clientData.name}, a ${clientData.industry} company.
-    
-    Your goal is to:
-    1. Qualify the lead by understanding their needs, timeline, and budget
-    2. Build rapport and trust
-    3. Guide them toward booking a consultation
-    4. Keep responses under 160 characters for SMS/WhatsApp
-    
-    Lead: ${leadData.firstName} from ${leadData.company || 'their business'}
-    
-    Recent conversation:
-    ${conversationHistory.slice(-5).map(msg => `${msg.sender}: ${msg.content}`).join('\n')}
-    
-    Respond naturally and helpfully. If they seem qualified (expressing urgency, budget, timeline), 
-    suggest booking a consultation.
-    `;
+    // Build full conversation context
+    const conversationText = conversationHistory
+      .map(
+        (msg) => `${msg.sender === "lead" ? "Customer" : "You"}: ${msg.content}`
+      )
+      .join("\n");
+
+    const prompt = `You are a professional construction project manager for ${
+      clientData?.name || "a construction company"
+    }. You're chatting on WhatsApp with a potential client.
+
+CRITICAL RULES:
+1. **Read conversation carefully** - Don't ask for info they already gave
+2. **Acknowledge specifics** - Reference their budget, project type, location, timeline
+3. **Sound human** - Be natural, enthusiastic, helpful
+4. **Show expertise** - Mention relevant construction experience
+5. **Move to action** - Guide toward meeting/site visit
+6. **Be brief** - Max 3-4 sentences for WhatsApp
+7. **Add value** - Share insights, not generic statements
+
+YOUR EXPERTISE:
+- Commercial & residential construction
+- Restaurant renovations (15+ in Metro Manila)
+- Office fit-outs & remodeling
+- Budget: 500K - 50M peso projects
+- Timeline: 2 weeks to 6 months
+
+CONVERSATION SO FAR:
+${conversationText}
+
+RESPONSE STRATEGY:
+- **First message (vague inquiry)**: Ask about project type, scope, and budget
+- **Second message (they give details)**: Acknowledge specifics, show relevant experience, ask 1-2 clarifying questions
+- **Third message (urgency/full details)**: Recognize priority, offer immediate meeting with specific times
+
+DO NOT:
+- Ask for budget if they already gave it
+- Repeat "Let me check that for you"
+- Give vague answers
+- Ask same question twice
+- Sound robotic
+
+Current situation: Customer just sent "${
+      conversationHistory[conversationHistory.length - 1]?.content
+    }"
+
+Respond as a helpful construction expert who wants to close this deal:`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: "You are a helpful sales assistant. Be conversational, professional, and concise.",
+          content:
+            "You are an expert construction project manager. Be professional, contextual, and action-oriented. Keep responses concise for WhatsApp (3-4 sentences max).",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
-      max_tokens: 150,
+      temperature: 0.7,
+      max_tokens: 250,
     });
 
-    return response.choices[0].message.content || "Thanks for your message. How can I help you today?";
+    return (
+      response.choices[0].message.content ||
+      "Thanks for reaching out! A team member will respond shortly."
+    );
   } catch (error) {
     console.error("Error generating AI response:", error);
     return "Thanks for your message. A team member will respond shortly.";
@@ -148,7 +215,7 @@ export async function generateAudit(
 ): Promise<AuditResult> {
   try {
     let prompt = "";
-    
+
     switch (auditType) {
       case "seo":
         prompt = `
@@ -197,7 +264,7 @@ export async function generateAudit(
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
-    
+
     return {
       wins: result.wins || ["Improvement opportunity identified"],
       risks: result.risks || ["No major risks detected"],
@@ -207,7 +274,10 @@ export async function generateAudit(
     };
   } catch (error) {
     console.error("Error generating audit:", error);
-    throw new Error("Failed to generate audit: " + (error instanceof Error ? error.message : "Unknown error"));
+    throw new Error(
+      "Failed to generate audit: " +
+        (error instanceof Error ? error.message : "Unknown error")
+    );
   }
 }
 
@@ -234,7 +304,8 @@ export async function generateVSLScript(
       messages: [
         {
           role: "system",
-          content: "You are a VSL script expert. Create compelling, benefit-focused scripts that convert.",
+          content:
+            "You are a VSL script expert. Create compelling, benefit-focused scripts that convert.",
         },
         {
           role: "user",
@@ -246,6 +317,9 @@ export async function generateVSLScript(
     return response.choices[0].message.content || "Script generation failed";
   } catch (error) {
     console.error("Error generating VSL script:", error);
-    throw new Error("Failed to generate VSL script: " + (error instanceof Error ? error.message : "Unknown error"));
+    throw new Error(
+      "Failed to generate VSL script: " +
+        (error instanceof Error ? error.message : "Unknown error")
+    );
   }
 }
