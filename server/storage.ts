@@ -969,6 +969,10 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getAllClients() {
+    return await db.select().from(clients).where(eq(clients.isActive, true));
+  }
+
   async getAllUsersForAdmin(
     searchQuery?: string,
     statusFilter?: string
@@ -1100,6 +1104,11 @@ export class DatabaseStorage implements IStorage {
         meetingUrl: bookings.meetingUrl,
         notes: bookings.notes,
         reminderSent: bookings.reminderSent,
+        reminder24hSent: bookings.reminder24hSent,
+        reminder1hSent: bookings.reminder1hSent,
+        reminder24hSentAt: bookings.reminder24hSentAt,
+        reminder1hSentAt: bookings.reminder1hSentAt,
+       
         createdAt: bookings.createdAt,
         updatedAt: bookings.updatedAt,
       })

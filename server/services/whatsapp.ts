@@ -30,6 +30,11 @@ export class WhatsAppService {
 
   async sendMessage(message: WhatsAppMessage): Promise<boolean> {
     try {
+      console.log("📤 Sending WhatsApp message:", {
+        to: message.to,
+        type: message.type,
+        messageLength: message.text?.body?.length || 0,
+      });
       const response = await fetch(
         `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
         {
@@ -45,15 +50,21 @@ export class WhatsAppService {
         }
       );
 
+      const responseData = await response.json();
+
       if (!response.ok) {
-        const error = await response.text();
-        console.error("WhatsApp API error:", error);
+        console.error("❌ WhatsApp API error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: responseData,
+        });
         return false;
       }
 
+      console.log("✅ WhatsApp API success:", responseData);
       return true;
     } catch (error) {
-      console.error("Error sending WhatsApp message:", error);
+      console.error("❌ Error sending WhatsApp message:", error);
       return false;
     }
   }

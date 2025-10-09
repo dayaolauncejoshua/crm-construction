@@ -45,7 +45,9 @@ DTEND:${formatDate(booking.endTime)}
 DTSTAMP:${formatDate(new Date())}
 ORGANIZER;CN=${booking.organizerName}:MAILTO:${booking.organizerEmail}
 UID:${Date.now()}@aileadsystem.com
-ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=${booking.attendeeName}:MAILTO:${booking.attendeeEmail}
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=${
+      booking.attendeeName
+    }:MAILTO:${booking.attendeeEmail}
 CREATED:${formatDate(new Date())}
 DESCRIPTION:${booking.description}
 LAST-MODIFIED:${formatDate(new Date())}
@@ -86,6 +88,30 @@ END:VCALENDAR`;
       console.error("❌ Failed to send calendar invite:", error);
       return false;
     }
+  }
+
+  async sendEmail({
+    to,
+    toName,
+    subject,
+    htmlBody,
+    textBody,
+  }: {
+    to: string;
+    toName: string;
+    subject: string;
+    htmlBody: string;
+    textBody?: string;
+  }) {
+    const mailOptions = {
+      from: this.transporter.options.from || process.env.EMAIL_FROM,
+      to: `${toName} <${to}>`,
+      subject,
+      html: htmlBody,
+      text: textBody,
+    };
+
+    return await this.transporter.sendMail(mailOptions);
   }
 }
 

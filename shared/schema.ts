@@ -308,6 +308,11 @@ export const bookings = pgTable("bookings", {
   notes: text("notes"),
   reminderSent: boolean("reminder_sent").default(false),
 
+  reminder24hSent: boolean("reminder_24h_sent").default(false),
+  reminder1hSent: boolean("reminder_1h_sent").default(false),
+  reminder24hSentAt: timestamp("reminder_24h_sent_at"),
+  reminder1hSentAt: timestamp("reminder_1h_sent_at"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

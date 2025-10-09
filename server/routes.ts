@@ -14,6 +14,7 @@ import { whatsappService } from "./services/whatsapp";
 import { leadQualificationService } from "./services/leadQualification";
 import advancedRoutes from "./advanced-routes";
 import { emailService } from "./services/email";
+import { startReminderCron, setBroadcastFunction } from "./services/reminder-cron";
 
 // Helper function to check for booking conflicts
 function hasBookingConflict(
@@ -1497,6 +1498,27 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
+  // Test reminder endpoint (REMOVE IN PRODUCTION)
+  app.post("/api/bookings/:bookingId/test-reminder", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { timeframe } = req.body; // "24h" or "1h"
+
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Dynamically import the service
+      const { sendMeetingReminder } = await import("./services/reminder-service");
+      const result = await sendMeetingReminder(booking, timeframe || "24h", broadcastUpdate);
+
+      res.json({ success: true, result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Lead management routes
   app.get("/api/leads/:clientId", async (req, res) => {
     try {
@@ -1651,6 +1673,9 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
       res.status(500).json({ message: "Health check failed" });
     }
   });
+
+  setBroadcastFunction(broadcastUpdate);
+  startReminderCron();
 
   return httpServer;
 }

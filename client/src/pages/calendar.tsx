@@ -56,6 +56,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+
+
 export default function CalendarPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -77,6 +79,8 @@ export default function CalendarPage() {
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editMeetingType, setEditMeetingType] = useState("consultation");
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Fetch clients
   const { data: clients } = useQuery({
@@ -701,16 +705,129 @@ export default function CalendarPage() {
               <CardHeader className="border-b py-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Calendar View</CardTitle>
-                  <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={previousMonth}>
+                  <div className="flex items-center gap-3">
+                    {/* Navigation Arrows */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={previousMonth}
+                      className="h-8 w-8"
+                      title="Previous month"
+                    >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="text-xl font-semibold min-w-[140px] text-center">
-                      {monthNames[currentDate.getMonth()]}{" "}
-                      {currentDate.getFullYear()}
-                    </span>
-                    <Button variant="ghost" size="icon" onClick={nextMonth}>
+
+                    {/* Clickable Date with Popover */}
+                    <Popover
+                      open={showDatePicker}
+                      onOpenChange={setShowDatePicker}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="text-lg font-semibold hover:bg-slate-100 px-4"
+                        >
+                          {monthNames[currentDate.getMonth()]}{" "}
+                          {currentDate.getFullYear()}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-4" align="center">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium text-slate-600">
+                              Month
+                            </Label>
+                            <Select
+                              value={currentDate.getMonth().toString()}
+                              onValueChange={(value) => {
+                                const newDate = new Date(currentDate);
+                                newDate.setMonth(parseInt(value));
+                                setCurrentDate(newDate);
+                              }}
+                            >
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {monthNames.map((month, index) => (
+                                  <SelectItem
+                                    key={index}
+                                    value={index.toString()}
+                                  >
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium text-slate-600">
+                              Year
+                            </Label>
+                            <Select
+                              value={currentDate.getFullYear().toString()}
+                              onValueChange={(value) => {
+                                const newDate = new Date(currentDate);
+                                newDate.setFullYear(parseInt(value));
+                                setCurrentDate(newDate);
+                              }}
+                            >
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: 10 }, (_, i) => {
+                                  const year = new Date().getFullYear() - 2 + i;
+                                  return (
+                                    <SelectItem
+                                      key={year}
+                                      value={year.toString()}
+                                    >
+                                      {year}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => {
+                              setCurrentDate(new Date());
+                              setShowDatePicker(false);
+                            }}
+                          >
+                            Jump to Today
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={nextMonth}
+                      className="h-8 w-8"
+                      title="Next month"
+                    >
                       <ChevronRight className="h-4 w-4" />
+                    </Button>
+
+                    {/* Separator */}
+                    <div className="border-l border-slate-200 h-6 mx-1"></div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentDate(new Date())}
+                      className="h-8"
+                      title="Jump to current month"
+                    >
+                      Today
                     </Button>
                   </div>
                 </div>
@@ -854,7 +971,7 @@ export default function CalendarPage() {
                               <h4 className="font-semibold text-slate-900 text-sm mb-1">
                                 {booking.title}
                               </h4>
-                              <p className="text-xs text-slate-600">
+                              <p className="text-sm text-slate-600">
                                 {booking.attendeeName}
                               </p>
                             </div>
