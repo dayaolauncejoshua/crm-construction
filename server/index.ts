@@ -6,13 +6,32 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
+import testWebhookRouter from "./test-webhook";
 config();
 
+import dotenv from "dotenv";
+import { Pool } from "pg";
+dotenv.config();
+
+// In your main server file (app.ts or index.ts)
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 const app = express();
-app.use("/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.json());
+app.use("/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);
+
+// Add this ONLY in development
+if (process.env.NODE_ENV !== "production") {
+  app.use("/test", testWebhookRouter);
+  console.log("⚠️  Test endpoints enabled at /test/*");
+}
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
