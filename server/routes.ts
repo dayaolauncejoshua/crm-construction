@@ -15,6 +15,63 @@ import { leadQualificationService } from "./services/leadQualification";
 import advancedRoutes from "./advanced-routes";
 import { emailService } from "./services/email";
 
+// Helper function to check for booking conflicts
+function hasBookingConflict(
+  newStart: Date,
+  newEnd: Date,
+  existingBookings: any[],
+  excludeBookingId?: string
+): { hasConflict: boolean; conflictingBooking?: any } {
+  console.log("🔍 Checking for conflicts:");
+  console.log(
+    "  New booking:",
+    newStart.toISOString(),
+    "to",
+    newEnd.toISOString()
+  );
+  console.log(
+    "  Checking against",
+    existingBookings.length,
+    "existing bookings"
+  );
+
+  for (const booking of existingBookings) {
+    // Skip cancelled/completed bookings and the booking being rescheduled
+    if (booking.status !== "scheduled" || booking.id === excludeBookingId) {
+      console.log(
+        `  ⏭️  Skipping booking ${booking.id} (status: ${booking.status})`
+      );
+      continue;
+    }
+
+    const existingStart = new Date(booking.scheduledFor);
+    const existingEnd = new Date(
+      existingStart.getTime() + booking.duration * 60000
+    );
+
+    console.log(`  📋 Checking: ${booking.title}`);
+    console.log(
+      `     Existing: ${existingStart.toISOString()} to ${existingEnd.toISOString()}`
+    );
+
+    // Check if times overlap
+    const hasOverlap =
+      (newStart >= existingStart && newStart < existingEnd) || // New starts during existing
+      (newEnd > existingStart && newEnd <= existingEnd) || // New ends during existing
+      (newStart <= existingStart && newEnd >= existingEnd); // New encompasses existing
+
+    if (hasOverlap) {
+      console.log("  ❌ CONFLICT DETECTED!");
+      return { hasConflict: true, conflictingBooking: booking };
+    } else {
+      console.log("  ✅ No conflict");
+    }
+  }
+
+  console.log("✅ No conflicts found");
+  return { hasConflict: false };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
@@ -564,6 +621,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const scheduledDate = new Date(scheduledFor);
 
+      // Check for conflicts with existing bookings
+      const existingBookings = await storage.getBookings(clientId);
+      const scheduledEnd = new Date(scheduledDate.getTime() + duration * 60000);
+
+      const conflict = hasBookingConflict(
+        scheduledDate,
+        scheduledEnd,
+        existingBookings
+      );
+
+      if (conflict.hasConflict && conflict.conflictingBooking) {
+        const conflictStart = new Date(
+          conflict.conflictingBooking.scheduledFor
+        );
+        const conflictEnd = new Date(
+          conflictStart.getTime() + conflict.conflictingBooking.duration * 60000
+        );
+
+        return res.status(409).json({
+          error: "Booking conflict detected",
+          message: `There is already a meeting scheduled from ${conflictStart.toLocaleTimeString(
+            "en-US",
+            { hour: "2-digit", minute: "2-digit" }
+          )} to ${conflictEnd.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`,
+          conflictingBooking: {
+            id: conflict.conflictingBooking.id,
+            title: conflict.conflictingBooking.title,
+            attendeeName: conflict.conflictingBooking.attendeeName,
+            scheduledFor: conflict.conflictingBooking.scheduledFor,
+            duration: conflict.conflictingBooking.duration,
+          },
+        });
+      }
+
       // Create booking
       const booking = await storage.createBooking({
         leadId,
@@ -735,6 +829,659 @@ Check your email for the calendar invite. See you then!`;
     } catch (error) {
       console.error("❌ Error creating booking:", error);
       res.status(500).json({ message: "Failed to create booking" });
+    }
+  });
+
+  // Reschedule booking
+  app.patch("/api/bookings/:bookingId/reschedule", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { scheduledFor, duration, notes } = req.body;
+
+      console.log("📅 Rescheduling booking:", bookingId);
+
+      // Get existing booking
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Get lead details
+      const lead = await storage.getLead(existingBooking.leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      // Get client details
+      const client = await storage.getClient(existingBooking.clientId);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+
+      const newScheduledDate = new Date(scheduledFor);
+
+      // Check for conflicts with existing bookings
+      const existingBookings = await storage.getBookings(
+        existingBooking.clientId
+      );
+      const scheduledEnd = new Date(
+        newScheduledDate.getTime() +
+          (duration || existingBooking.duration) * 60000
+      );
+
+      const conflict = hasBookingConflict(
+        newScheduledDate,
+        scheduledEnd,
+        existingBookings,
+        bookingId // Exclude current booking from conflict check
+      );
+
+      if (conflict.hasConflict && conflict.conflictingBooking) {
+        const conflictStart = new Date(
+          conflict.conflictingBooking.scheduledFor
+        );
+        const conflictEnd = new Date(
+          conflictStart.getTime() + conflict.conflictingBooking.duration * 60000
+        );
+
+        return res.status(409).json({
+          error: "Booking conflict detected",
+          message: `There is already a meeting scheduled from ${conflictStart.toLocaleTimeString(
+            "en-US",
+            { hour: "2-digit", minute: "2-digit" }
+          )} to ${conflictEnd.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`,
+          conflictingBooking: {
+            id: conflict.conflictingBooking.id,
+            title: conflict.conflictingBooking.title,
+            attendeeName: conflict.conflictingBooking.attendeeName,
+            scheduledFor: conflict.conflictingBooking.scheduledFor,
+            duration: conflict.conflictingBooking.duration,
+          },
+        });
+      }
+
+      // Update booking
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        scheduledFor: newScheduledDate,
+        scheduledAt: newScheduledDate,
+        duration: duration || existingBooking.duration,
+        notes: notes !== undefined ? notes : existingBooking.notes,
+      });
+
+      console.log("✅ Booking rescheduled:", updatedBooking.id);
+
+      // Format date/time for notifications
+      const formattedDate = newScheduledDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const formattedTime = newScheduledDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // Send updated email notification
+      if (lead.email) {
+        const startTime = newScheduledDate;
+        const endTime = new Date(
+          startTime.getTime() + (duration || existingBooking.duration) * 60000
+        );
+
+        const icsContent = emailService.generateICS({
+          title: updatedBooking.title,
+          description: updatedBooking.description || "",
+          location: updatedBooking.location || "TBD",
+          startTime,
+          endTime,
+          organizerEmail: process.env.EMAIL_USER || "noreply@aileadsystem.com",
+          organizerName: client.name,
+          attendeeEmail: lead.email,
+          attendeeName: `${lead.firstName} ${lead.lastName}`,
+        });
+
+        const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #f59e0b;">⚠️ Meeting Rescheduled</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>Your meeting has been rescheduled to a new time.</p>
+          
+          <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+            <h3 style="margin-top: 0; color: #92400e;">📅 New Meeting Details</h3>
+            <p><strong>Date:</strong> ${formattedDate}</p>
+            <p><strong>Time:</strong> ${formattedTime}</p>
+            <p><strong>Duration:</strong> ${
+              duration || existingBooking.duration
+            } minutes</p>
+            <p><strong>Location:</strong> ${
+              updatedBooking.location || "TBD"
+            }</p>
+          </div>
+          
+          <p>The updated meeting has been added to your calendar.</p>
+          
+          <p style="margin-top: 30px;">Best regards,<br>${client.name}</p>
+        </div>
+      `;
+
+        await emailService.sendCalendarInvite({
+          to: lead.email,
+          toName: `${lead.firstName} ${lead.lastName}`,
+          subject: `Meeting Rescheduled - ${formattedDate}`,
+          htmlBody: emailBody,
+          icsContent,
+          icsFilename: "meeting-updated.ics",
+        });
+
+        console.log("✅ Reschedule email sent");
+      }
+
+      // Send WhatsApp notification
+      if (lead.phone) {
+        const whatsappMsg = `⚠️ Meeting Rescheduled
+
+Hi ${lead.firstName}! Your meeting has been moved to a new time:
+
+📅 ${formattedDate}
+🕐 ${formattedTime}
+⏱️ ${duration || existingBooking.duration} minutes
+📍 ${updatedBooking.location || "TBD"}
+
+Check your email for the updated calendar invite. See you then!`;
+
+        await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+        console.log("✅ Reschedule WhatsApp sent");
+      }
+
+      // Add message to conversation
+      try {
+        const conversations = await storage.getConversations(
+          existingBooking.clientId,
+          100
+        );
+        const conversation = conversations.find(
+          (c) => c.leadId === existingBooking.leadId
+        );
+
+        if (conversation) {
+          const messageContent =
+            `🔄 Meeting Rescheduled\n\n` +
+            `New Date: ${formattedDate}\n` +
+            `New Time: ${formattedTime}\n` +
+            `Duration: ${duration || existingBooking.duration} minutes\n` +
+            `Location: ${updatedBooking.location || "TBD"}\n` +
+            (notes ? `\nNotes: ${notes}` : "");
+
+          await storage.createMessage({
+            conversationId: conversation.id,
+            sender: "human",
+            content: messageContent,
+            channel: "whatsapp",
+            isStatusMessage: true,
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+          });
+
+          console.log("✅ Reschedule message added to conversation");
+
+          broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: messageContent,
+          });
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to add reschedule message:", error);
+      }
+
+      // Broadcast booking update
+      broadcastUpdate({
+        type: "booking_updated",
+        booking: updatedBooking,
+      });
+
+      res.json({ success: true, booking: updatedBooking });
+    } catch (error: any) {
+      console.error("❌ Error rescheduling booking:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Edit booking details (location, duration, notes, type)
+  app.patch("/api/bookings/:bookingId/edit", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { duration, location, notes, meetingType } = req.body;
+
+      console.log("✏️ Editing booking details:", bookingId);
+
+      // Get existing booking
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Get lead details
+      const lead = await storage.getLead(existingBooking.leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      // If duration changed, check for conflicts
+      if (duration && duration !== existingBooking.duration) {
+        const existingBookings = await storage.getBookings(
+          existingBooking.clientId
+        );
+        const scheduledStart = new Date(existingBooking.scheduledFor);
+        const newEnd = new Date(scheduledStart.getTime() + duration * 60000);
+
+        const conflict = hasBookingConflict(
+          scheduledStart,
+          newEnd,
+          existingBookings,
+          bookingId // Exclude current booking
+        );
+
+        if (conflict.hasConflict && conflict.conflictingBooking) {
+          const conflictStart = new Date(
+            conflict.conflictingBooking.scheduledFor
+          );
+          const conflictEnd = new Date(
+            conflictStart.getTime() +
+              conflict.conflictingBooking.duration * 60000
+          );
+
+          return res.status(409).json({
+            error: "Booking conflict detected",
+            message: `The new duration creates a conflict with a meeting from ${conflictStart.toLocaleTimeString(
+              "en-US",
+              { hour: "2-digit", minute: "2-digit" }
+            )} to ${conflictEnd.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`,
+            conflictingBooking: {
+              id: conflict.conflictingBooking.id,
+              title: conflict.conflictingBooking.title,
+              attendeeName: conflict.conflictingBooking.attendeeName,
+              scheduledFor: conflict.conflictingBooking.scheduledFor,
+              duration: conflict.conflictingBooking.duration,
+            },
+          });
+        }
+      }
+
+      // Update booking
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        duration: duration || existingBooking.duration,
+        location: location || existingBooking.location,
+        notes: notes !== undefined ? notes : existingBooking.notes,
+        meetingType: meetingType || existingBooking.meetingType,
+      });
+
+      console.log("✅ Booking details updated:", updatedBooking.id);
+
+      // Add message to conversation
+      try {
+        const conversations = await storage.getConversations(
+          existingBooking.clientId,
+          100
+        );
+        const conversation = conversations.find(
+          (c) => c.leadId === existingBooking.leadId
+        );
+
+        if (conversation) {
+          const scheduledDate = new Date(existingBooking.scheduledFor);
+          const formattedDate = scheduledDate.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          });
+          const formattedTime = scheduledDate.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          const changes = [];
+          if (duration && duration !== existingBooking.duration) {
+            changes.push(
+              `Duration: ${existingBooking.duration} min → ${duration} min`
+            );
+          }
+          if (location && location !== existingBooking.location) {
+            changes.push(`Location: ${existingBooking.location} → ${location}`);
+          }
+          if (meetingType && meetingType !== existingBooking.meetingType) {
+            changes.push(
+              `Type: ${existingBooking.meetingType} → ${meetingType}`
+            );
+          }
+
+          const messageContent =
+            `📝 Meeting Details Updated\n\n` +
+            `Meeting: ${existingBooking.title}\n` +
+            `Date: ${formattedDate} at ${formattedTime}\n\n` +
+            `Changes:\n${changes.join("\n")}`;
+
+          await storage.createMessage({
+            conversationId: conversation.id,
+            sender: "human",
+            content: messageContent,
+            channel: "whatsapp",
+            isStatusMessage: true,
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+          });
+
+          console.log("✅ Details update message added to conversation");
+
+          broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: messageContent,
+          });
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to add update message:", error);
+      }
+
+      // Broadcast booking update
+      broadcastUpdate({
+        type: "booking_updated",
+        booking: updatedBooking,
+      });
+
+      res.json({ success: true, booking: updatedBooking });
+    } catch (error: any) {
+      console.error("❌ Error updating booking details:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cancel booking
+  app.patch("/api/bookings/:bookingId/cancel", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { reason } = req.body;
+
+      console.log("❌ Cancelling booking:", bookingId);
+
+      // Get existing booking
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Get lead details
+      const lead = await storage.getLead(existingBooking.leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      // Get client details
+      const client = await storage.getClient(existingBooking.clientId);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+
+      // Update booking status to cancelled
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status: "cancelled",
+        notes: reason ? `Cancelled: ${reason}` : existingBooking.notes,
+      });
+
+      console.log("✅ Booking cancelled:", updatedBooking.id);
+
+      // Format date/time for notifications
+      const scheduledDate = new Date(existingBooking.scheduledFor);
+      const formattedDate = scheduledDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const formattedTime = scheduledDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // Send cancellation email
+      if (lead.email) {
+        const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #dc2626;">❌ Meeting Cancelled</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>We regret to inform you that your scheduled meeting has been cancelled.</p>
+          
+          <div style="background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="margin-top: 0; color: #7f1d1d;">📅 Cancelled Meeting Details</h3>
+            <p><strong>Meeting:</strong> ${existingBooking.title}</p>
+            <p><strong>Originally Scheduled:</strong> ${formattedDate} at ${formattedTime}</p>
+            <p><strong>Duration:</strong> ${
+              existingBooking.duration
+            } minutes</p>
+            <p><strong>Location:</strong> ${
+              existingBooking.location || "TBD"
+            }</p>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+          </div>
+          
+          <p>If you would like to reschedule, please contact us and we'll be happy to find a new time that works for you.</p>
+          
+          <p style="margin-top: 30px;">We apologize for any inconvenience.</p>
+          <p>Best regards,<br>${client.name}</p>
+        </div>
+      `;
+
+        await emailService.sendCalendarInvite({
+          to: lead.email,
+          toName: `${lead.firstName} ${lead.lastName}`,
+          subject: `Meeting Cancelled - ${existingBooking.title}`,
+          htmlBody: emailBody,
+          icsContent: "", // No calendar invite for cancellation
+          icsFilename: "",
+        });
+
+        console.log("✅ Cancellation email sent");
+      }
+
+      // Send WhatsApp notification
+      if (lead.phone) {
+        const whatsappMsg = `❌ Meeting Cancelled
+
+Hi ${lead.firstName}, your scheduled meeting has been cancelled.
+
+📅 ${formattedDate}
+🕐 ${formattedTime}
+📍 ${existingBooking.location || "TBD"}
+${reason ? `\n❓ Reason: ${reason}` : ""}
+
+If you'd like to reschedule, please let us know. We apologize for any inconvenience.`;
+
+        await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+        console.log("✅ Cancellation WhatsApp sent");
+      }
+
+      // Add message to conversation
+      try {
+        const conversations = await storage.getConversations(
+          existingBooking.clientId,
+          100
+        );
+        const conversation = conversations.find(
+          (c) => c.leadId === existingBooking.leadId
+        );
+
+        if (conversation) {
+          const messageContent =
+            `❌ Meeting Cancelled\n\n` +
+            `Meeting: ${existingBooking.title}\n` +
+            `Was scheduled for: ${formattedDate} at ${formattedTime}\n` +
+            `Duration: ${existingBooking.duration} minutes\n` +
+            `Location: ${existingBooking.location || "TBD"}\n` +
+            (reason ? `\nReason: ${reason}` : "");
+
+          await storage.createMessage({
+            conversationId: conversation.id,
+            sender: "human",
+            content: messageContent,
+            channel: "whatsapp",
+            isStatusMessage: true,
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+          });
+
+          console.log("✅ Cancellation message added to conversation");
+
+          broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: messageContent,
+          });
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to add cancellation message:", error);
+      }
+
+      // Broadcast booking update
+      broadcastUpdate({
+        type: "booking_updated",
+        booking: updatedBooking,
+      });
+
+      res.json({ success: true, booking: updatedBooking });
+    } catch (error: any) {
+      console.error("❌ Error cancelling booking:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update booking status (mark as completed/no-show)
+  app.patch("/api/bookings/:bookingId/status", async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const { status, notes } = req.body;
+
+      console.log("📊 Updating booking status:", bookingId, "to", status);
+
+      // Validate status
+      const validStatuses = ["scheduled", "completed", "no-show", "cancelled"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      // Get existing booking
+      const existingBooking = await storage.getBooking(bookingId);
+      if (!existingBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      // Get lead details
+      const lead = await storage.getLead(existingBooking.leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      // Update booking status
+      const updatedBooking = await storage.updateBooking(bookingId, {
+        status,
+        notes: notes || existingBooking.notes,
+      });
+
+      console.log("✅ Booking status updated:", updatedBooking.id, status);
+
+      // Add message to conversation
+      try {
+        const conversations = await storage.getConversations(
+          existingBooking.clientId,
+          100
+        );
+        const conversation = conversations.find(
+          (c) => c.leadId === existingBooking.leadId
+        );
+
+        if (conversation) {
+          const scheduledDate = new Date(existingBooking.scheduledFor);
+          const formattedDate = scheduledDate.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          });
+          const formattedTime = scheduledDate.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          let messageContent = "";
+          let statusEmoji = "";
+
+          switch (status) {
+            case "completed":
+              statusEmoji = "✅";
+              messageContent =
+                `✅ Meeting Completed\n\n` +
+                `Meeting: ${existingBooking.title}\n` +
+                `Date: ${formattedDate} at ${formattedTime}\n` +
+                `Duration: ${existingBooking.duration} minutes\n` +
+                `Status: Successfully completed`;
+              break;
+            case "no-show":
+              statusEmoji = "❌";
+              messageContent =
+                `❌ No-Show Recorded\n\n` +
+                `Meeting: ${existingBooking.title}\n` +
+                `Date: ${formattedDate} at ${formattedTime}\n` +
+                `Status: Lead did not attend`;
+              break;
+            case "scheduled":
+              statusEmoji = "📅";
+              messageContent =
+                `📅 Meeting Status Updated\n\n` +
+                `Meeting: ${existingBooking.title}\n` +
+                `Date: ${formattedDate} at ${formattedTime}\n` +
+                `Status: Rescheduled/Reactivated`;
+              break;
+          }
+
+          if (messageContent) {
+            await storage.createMessage({
+              conversationId: conversation.id,
+              sender: "human",
+              content: messageContent,
+              channel: "whatsapp",
+              isStatusMessage: true,
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+            });
+
+            console.log("✅ Status update message added to conversation");
+
+            broadcastUpdate({
+              type: "new_message",
+              conversationId: conversation.id,
+              message: messageContent,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to add status message:", error);
+      }
+
+      // Broadcast booking update
+      broadcastUpdate({
+        type: "booking_updated",
+        booking: updatedBooking,
+      });
+
+      res.json({ success: true, booking: updatedBooking });
+    } catch (error: any) {
+      console.error("❌ Error updating booking status:", error);
+      res.status(500).json({ error: error.message });
     }
   });
 

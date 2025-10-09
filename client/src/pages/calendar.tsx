@@ -1,14 +1,42 @@
+// client/src/pages/calendar.tsx
+
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { queryClient } from "@/lib/queryClient";
 import { useEffect } from "react";
+import { format } from "date-fns";
+
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -24,13 +52,31 @@ import {
   Mail,
   User,
   FileText,
+  Edit3,
+  RefreshCw,
 } from "lucide-react";
 
 export default function CalendarPage() {
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>();
+  const [rescheduleTime, setRescheduleTime] = useState("10:00");
+  const [rescheduleDuration, setRescheduleDuration] = useState("60");
+  const [rescheduleNotes, setRescheduleNotes] = useState("");
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [conflictError, setConflictError] = useState<any>(null);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editDuration, setEditDuration] = useState("60");
+  const [editLocation, setEditLocation] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editMeetingType, setEditMeetingType] = useState("consultation");
 
   // Fetch clients
   const { data: clients } = useQuery({
@@ -52,6 +98,247 @@ export default function CalendarPage() {
       return response.json();
     },
     enabled: !!selectedClientId,
+  });
+
+  // Reschedule mutation
+  const rescheduleMutation = useMutation({
+    mutationFn: async (data: {
+      bookingId: string;
+      scheduledFor: string;
+      duration: number;
+      notes?: string;
+    }) => {
+      const response = await fetch(
+        `/api/bookings/${data.bookingId}/reschedule`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            scheduledFor: data.scheduledFor,
+            duration: data.duration,
+            notes: data.notes,
+          }),
+        }
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        const error: any = new Error(
+          responseData.message || "Failed to reschedule booking"
+        );
+        error.status = response.status;
+        error.code = responseData.error;
+        error.conflictingBooking = responseData.conflictingBooking;
+        error.fullData = responseData;
+        throw error;
+      }
+
+      return responseData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+      setShowRescheduleModal(false);
+      setShowBookingModal(false);
+      setConflictError(null);
+      toast({
+        title: "Meeting Rescheduled!",
+        description:
+          "Updated calendar invite sent to lead via email and WhatsApp.",
+      });
+    },
+    onError: (error: any) => {
+      console.log("❌ Reschedule error:", error);
+      console.log("Error status:", error.status);
+      console.log("Error code:", error.code);
+
+      if (error.status === 409 || error.code === "Booking conflict detected") {
+        setConflictError(
+          error.fullData || {
+            error: "Booking conflict detected",
+            message: error.message,
+            conflictingBooking: error.conflictingBooking,
+          }
+        );
+
+        toast({
+          title: "⚠️ Schedule Conflict",
+          description:
+            error.message ||
+            "There is already a meeting scheduled at this time. Please choose a different time slot.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to reschedule booking",
+          variant: "destructive",
+        });
+      }
+    },
+  });
+
+  // Cancel Booking mutation
+  const cancelMutation = useMutation({
+    mutationFn: async (data: { bookingId: string; reason?: string }) => {
+      const response = await fetch(`/api/bookings/${data.bookingId}/cancel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          reason: data.reason,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to cancel booking");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+      setShowCancelModal(false);
+      setShowBookingModal(false);
+      toast({
+        title: "Meeting Cancelled",
+        description:
+          "Cancellation notifications sent to lead via email and WhatsApp.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async (data: {
+      bookingId: string;
+      status: string;
+      notes?: string;
+    }) => {
+      const response = await fetch(`/api/bookings/${data.bookingId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          status: data.status,
+          notes: data.notes,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update booking status");
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+
+      const statusMessages: Record<string, string> = {
+        completed: "Meeting marked as completed",
+        "no-show": "Meeting marked as no-show",
+        scheduled: "Meeting status updated",
+      };
+
+      toast({
+        title: "Status Updated",
+        description:
+          statusMessages[variables.status] ||
+          "Booking status updated successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Edit booking mutation
+  const editBookingMutation = useMutation({
+    mutationFn: async (data: {
+      bookingId: string;
+      duration: number;
+      location: string;
+      notes?: string;
+      meetingType: string;
+    }) => {
+      const response = await fetch(`/api/bookings/${data.bookingId}/edit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          duration: data.duration,
+          location: data.location,
+          notes: data.notes,
+          meetingType: data.meetingType,
+        }),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        const error: any = new Error(
+          responseData.message || "Failed to update booking"
+        );
+        error.status = response.status;
+        error.code = responseData.error;
+        error.conflictingBooking = responseData.conflictingBooking;
+        error.fullData = responseData;
+        throw error;
+      }
+
+      return responseData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+      setShowEditModal(false);
+      setShowBookingModal(false);
+      setConflictError(null);
+      toast({
+        title: "Meeting Updated!",
+        description: "Booking details have been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      console.log("❌ Edit booking error:", error);
+
+      if (error.status === 409 || error.code === "Booking conflict detected") {
+        setConflictError(
+          error.fullData || {
+            error: "Booking conflict detected",
+            message: error.message,
+            conflictingBooking: error.conflictingBooking,
+          }
+        );
+
+        toast({
+          title: "⚠️ Schedule Conflict",
+          description:
+            error.message ||
+            "The new duration conflicts with another meeting. Please choose a different duration.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to update booking",
+          variant: "destructive",
+        });
+      }
+    },
   });
 
   // WebSocket for real-time updates
@@ -84,7 +371,9 @@ export default function CalendarPage() {
       bookingDate.getFullYear() === now.getFullYear()
     );
   });
-  const completedBookings = bookings.filter((b: any) => b.status === "completed");
+  const completedBookings = bookings.filter(
+    (b: any) => b.status === "completed"
+  );
   const totalBookings = bookings.length;
   const showRate =
     totalBookings > 0
@@ -101,24 +390,24 @@ export default function CalendarPage() {
     const startingDayOfWeek = firstDay.getDay();
 
     const days = [];
-    
+
     // Previous month's days
     for (let i = 0; i < startingDayOfWeek; i++) {
       const prevDate = new Date(year, month, -startingDayOfWeek + i + 1);
       days.push({ date: prevDate, isCurrentMonth: false });
     }
-    
+
     // Current month's days
     for (let i = 1; i <= daysInMonth; i++) {
       days.push({ date: new Date(year, month, i), isCurrentMonth: true });
     }
-    
+
     // Next month's days to fill the grid
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
     }
-    
+
     return days;
   };
 
@@ -140,17 +429,122 @@ export default function CalendarPage() {
     setShowBookingModal(true);
   };
 
+  // Handle reschedule
+  const handleReschedule = () => {
+    if (!rescheduleDate || !selectedBooking) {
+      toast({
+        title: "Error",
+        description: "Please select a new date and time",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const [hours, minutes] = rescheduleTime.split(":");
+    const scheduledFor = new Date(rescheduleDate);
+    scheduledFor.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    rescheduleMutation.mutate({
+      bookingId: selectedBooking.id,
+      scheduledFor: scheduledFor.toISOString(),
+      duration: parseInt(rescheduleDuration),
+      notes: rescheduleNotes || undefined,
+    });
+  };
+
+  // Open reschedule modal
+  const openRescheduleModal = () => {
+    if (selectedBooking) {
+      const currentDate = new Date(selectedBooking.scheduledFor);
+      setRescheduleDate(currentDate);
+      setRescheduleTime(
+        currentDate.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      );
+      setRescheduleDuration(selectedBooking.duration.toString());
+      setRescheduleNotes(selectedBooking.notes || "");
+      setShowRescheduleModal(true);
+    }
+  };
+
+  const openCancelModal = () => {
+    setCancelReason("");
+    setShowCancelModal(true);
+  };
+
+  // Handle cancel
+  const handleCancel = () => {
+    if (!selectedBooking) return;
+
+    cancelMutation.mutate({
+      bookingId: selectedBooking.id,
+      reason: cancelReason || undefined,
+    });
+  };
+
+  // Handle status update
+  const handleStatusUpdate = (status: string) => {
+    if (!selectedBooking) return;
+
+    updateStatusMutation.mutate({
+      bookingId: selectedBooking.id,
+      status,
+    });
+  };
+
+  // Open edit modal
+  const openEditModal = () => {
+    if (!selectedBooking) return;
+
+    setEditDuration(selectedBooking.duration.toString());
+    setEditLocation(selectedBooking.location || "");
+    setEditNotes(selectedBooking.notes || "");
+    setEditMeetingType(selectedBooking.meetingType || "consultation");
+    setConflictError(null);
+    setShowEditModal(true);
+  };
+
+  // Handle edit submission
+  const handleEditBooking = () => {
+    if (!selectedBooking) return;
+
+    editBookingMutation.mutate({
+      bookingId: selectedBooking.id,
+      duration: parseInt(editDuration),
+      location: editLocation,
+      notes: editNotes,
+      meetingType: editMeetingType,
+    });
+  };
+
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   const previousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    setCurrentDate(
+      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+    );
   };
 
   const nextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    setCurrentDate(
+      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -166,16 +560,27 @@ export default function CalendarPage() {
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { bg: string; text: string; icon: any }> = {
       scheduled: { bg: "bg-blue-50", text: "text-blue-700", icon: Clock },
-      completed: { bg: "bg-green-50", text: "text-green-700", icon: CheckCircle },
+      completed: {
+        bg: "bg-green-50",
+        text: "text-green-700",
+        icon: CheckCircle,
+      },
       cancelled: { bg: "bg-red-50", text: "text-red-700", icon: XCircle },
-      "no-show": { bg: "bg-yellow-50", text: "text-yellow-700", icon: AlertCircle },
+      "no-show": {
+        bg: "bg-yellow-50",
+        text: "text-yellow-700",
+        icon: AlertCircle,
+      },
     };
 
     const variant = variants[status] || variants.scheduled;
     const Icon = variant.icon;
 
     return (
-      <Badge variant="outline" className={`${variant.bg} ${variant.text} border-0`}>
+      <Badge
+        variant="outline"
+        className={`${variant.bg} ${variant.text} border-0`}
+      >
         <Icon className="w-3 h-3 mr-1" />
         {status.charAt(0).toUpperCase() + status.slice(1).replace("-", " ")}
       </Badge>
@@ -229,7 +634,9 @@ export default function CalendarPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Bookings
+              </CardTitle>
               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -240,7 +647,9 @@ export default function CalendarPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Meetings</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Today's Meetings
+              </CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -258,8 +667,12 @@ export default function CalendarPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{upcomingBookings.length}</div>
-              <p className="text-xs text-muted-foreground">Scheduled meetings</p>
+              <div className="text-2xl font-bold">
+                {upcomingBookings.length}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Scheduled meetings
+              </p>
             </CardContent>
           </Card>
 
@@ -293,7 +706,8 @@ export default function CalendarPage() {
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <span className="text-xl font-semibold min-w-[140px] text-center">
-                      {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                      {monthNames[currentDate.getMonth()]}{" "}
+                      {currentDate.getFullYear()}
                     </span>
                     <Button variant="ghost" size="icon" onClick={nextMonth}>
                       <ChevronRight className="h-4 w-4" />
@@ -306,14 +720,16 @@ export default function CalendarPage() {
                 <div className="w-full">
                   {/* Day Headers */}
                   <div className="grid grid-cols-7 border-b bg-slate-50">
-                    {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
-                      <div
-                        key={day}
-                        className="text-center text-sm font-semibold text-slate-600 py-2 border-r last:border-r-0"
-                      >
-                        {day}
-                      </div>
-                    ))}
+                    {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map(
+                      (day) => (
+                        <div
+                          key={day}
+                          className="text-center text-sm font-semibold text-slate-600 py-2 border-r last:border-r-0"
+                        >
+                          {day}
+                        </div>
+                      )
+                    )}
                   </div>
 
                   {/* Calendar Days */}
@@ -352,7 +768,9 @@ export default function CalendarPage() {
                                 )} text-white truncate cursor-pointer hover:opacity-80 hover:scale-105 transition-all`}
                                 title="Click to view details"
                               >
-                                {new Date(booking.scheduledFor).toLocaleTimeString("en-US", {
+                                {new Date(
+                                  booking.scheduledFor
+                                ).toLocaleTimeString("en-US", {
                                   hour: "numeric",
                                   minute: "2-digit",
                                 })}{" "}
@@ -360,7 +778,7 @@ export default function CalendarPage() {
                               </div>
                             ))}
                             {dayBookings.length > 2 && (
-                              <div 
+                              <div
                                 className="text-[9px] text-slate-500 px-1 cursor-pointer hover:text-slate-700"
                                 onClick={() => handleEventClick(dayBookings[2])}
                                 title="Click to view more"
@@ -436,7 +854,9 @@ export default function CalendarPage() {
                               <h4 className="font-semibold text-slate-900 text-sm mb-1">
                                 {booking.title}
                               </h4>
-                              <p className="text-xs text-slate-600">{booking.attendeeName}</p>
+                              <p className="text-xs text-slate-600">
+                                {booking.attendeeName}
+                              </p>
                             </div>
                             {getStatusBadge(booking.status)}
                           </div>
@@ -444,14 +864,18 @@ export default function CalendarPage() {
                           <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
                             <div className="flex items-center">
                               <CalendarIcon className="w-3 h-3 mr-1" />
-                              {new Date(booking.scheduledFor).toLocaleDateString("en-US", {
+                              {new Date(
+                                booking.scheduledFor
+                              ).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
                               })}
                             </div>
                             <div className="flex items-center">
                               <Clock className="w-3 h-3 mr-1" />
-                              {new Date(booking.scheduledFor).toLocaleTimeString("en-US", {
+                              {new Date(
+                                booking.scheduledFor
+                              ).toLocaleTimeString("en-US", {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
@@ -483,7 +907,9 @@ export default function CalendarPage() {
             <div className="space-y-4">
               {/* Status Badge */}
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">{selectedBooking.title}</h3>
+                <h3 className="font-semibold text-lg">
+                  {selectedBooking.title}
+                </h3>
                 {getStatusBadge(selectedBooking.status)}
               </div>
 
@@ -492,21 +918,27 @@ export default function CalendarPage() {
                 <div className="flex items-center text-sm">
                   <CalendarIcon className="w-4 h-4 mr-2 text-slate-600" />
                   <span className="font-medium">
-                    {new Date(selectedBooking.scheduledFor).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+                    {new Date(selectedBooking.scheduledFor).toLocaleDateString(
+                      "en-US",
+                      {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      }
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Clock className="w-4 h-4 mr-2 text-slate-600" />
                   <span>
-                    {new Date(selectedBooking.scheduledFor).toLocaleTimeString("en-US", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}{" "}
+                    {new Date(selectedBooking.scheduledFor).toLocaleTimeString(
+                      "en-US",
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )}{" "}
                     ({selectedBooking.duration} minutes)
                   </span>
                 </div>
@@ -518,7 +950,9 @@ export default function CalendarPage() {
 
               {/* Attendee Info */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-slate-700">Attendee Information</h4>
+                <h4 className="font-semibold text-sm text-slate-700">
+                  Attendee Information
+                </h4>
                 <div className="space-y-2">
                   <div className="flex items-center text-sm">
                     <User className="w-4 h-4 mr-2 text-slate-600" />
@@ -527,7 +961,7 @@ export default function CalendarPage() {
                   {selectedBooking.attendeeEmail && (
                     <div className="flex items-center text-sm">
                       <Mail className="w-4 h-4 mr-2 text-slate-600" />
-                      <a 
+                      <a
                         href={`mailto:${selectedBooking.attendeeEmail}`}
                         className="text-blue-600 hover:underline"
                       >
@@ -538,7 +972,7 @@ export default function CalendarPage() {
                   {selectedBooking.attendeePhone && (
                     <div className="flex items-center text-sm">
                       <Phone className="w-4 h-4 mr-2 text-slate-600" />
-                      <a 
+                      <a
                         href={`tel:${selectedBooking.attendeePhone}`}
                         className="text-blue-600 hover:underline"
                       >
@@ -557,22 +991,552 @@ export default function CalendarPage() {
                     Notes
                   </h4>
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm text-amber-900">{selectedBooking.notes}</p>
+                    <p className="text-sm text-amber-900">
+                      {selectedBooking.notes}
+                    </p>
                   </div>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" className="flex-1">
-                  Reschedule
-                </Button>
-                <Button variant="outline" className="flex-1 text-red-600 hover:bg-red-50">
-                  Cancel Meeting
-                </Button>
+              <div className="space-y-2 pt-4">
+                {/* Primary Actions for Scheduled Meetings */}
+                {selectedBooking.status === "scheduled" && (
+                  <>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={openEditModal}
+                      >
+                        <Edit3 className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={openRescheduleModal}
+                      >
+                        Reschedule
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-red-600 hover:bg-red-50"
+                        onClick={openCancelModal}
+                      >
+                        Cancel Meeting
+                      </Button>
+                    </div>
+
+                    {/* Status Update Buttons */}
+                    <div className="flex gap-2 pt-2 border-t">
+                      <Button
+                        variant="default"
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => handleStatusUpdate("completed")}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Mark Completed
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 text-yellow-600 hover:bg-yellow-50"
+                        onClick={() => handleStatusUpdate("no-show")}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        <AlertCircle className="w-4 h-4 mr-2" />
+                        Mark No-Show
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {/* Read-only status for Cancelled Meetings */}
+                {selectedBooking.status === "cancelled" && (
+                  <>
+                    <div className="flex-1 text-center py-3 text-sm text-slate-600 bg-red-50 border border-red-200 rounded-lg">
+                      <XCircle className="w-4 h-4 inline mr-2 text-red-500" />
+                      This meeting was cancelled
+                    </div>
+                    <Button
+                      variant="default"
+                      className="w-full"
+                      onClick={() => {
+                        setLocation(
+                          `/conversations?leadId=${selectedBooking.leadId}`
+                        );
+                      }}
+                    >
+                      Book New Meeting
+                    </Button>
+                  </>
+                )}
+
+                {/* Read-only status for Completed Meetings */}
+                {selectedBooking.status === "completed" && (
+                  <>
+                    <div className="flex-1 text-center py-3 text-sm text-slate-600 bg-green-50 border border-green-200 rounded-lg">
+                      <CheckCircle className="w-4 h-4 inline mr-2 text-green-500" />
+                      This meeting was completed
+                    </div>
+                    <Button
+                      variant="default"
+                      className="w-full"
+                      onClick={() => {
+                        setLocation(
+                          `/conversations?leadId=${selectedBooking.leadId}`
+                        );
+                      }}
+                    >
+                      Book New Meeting
+                    </Button>
+                  </>
+                )}
+
+                {/* Actions for No-Show Meetings */}
+                {selectedBooking.status === "no-show" && (
+                  <>
+                    <div className="flex-1 text-center py-3 text-sm text-slate-600 bg-yellow-50 border border-yellow-200 rounded-lg mb-2">
+                      <AlertCircle className="w-4 h-4 inline mr-2 text-yellow-500" />
+                      This meeting was marked as no-show
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={openRescheduleModal}
+                      >
+                        Reschedule
+                      </Button>
+                      <Button
+                        variant="default"
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        onClick={() => handleStatusUpdate("completed")}
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Mark Completed
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Modal */}
+      <Dialog open={showRescheduleModal} onOpenChange={setShowRescheduleModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reschedule Meeting</DialogTitle>
+          </DialogHeader>
+
+          {/* CONFLICT WARNING HERE */}
+          {conflictError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-red-900 text-sm mb-1">
+                    Time Slot Conflict
+                  </h4>
+                  <p className="text-sm text-red-700 mb-2">
+                    {conflictError.message}
+                  </p>
+                  <div className="text-xs text-red-600 bg-red-100 rounded p-2">
+                    <strong>Conflicting Meeting:</strong>
+                    <br />
+                    {conflictError.conflictingBooking?.title}
+                    <br />
+                    with {conflictError.conflictingBooking?.attendeeName}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setConflictError(null)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4 py-4">
+            {selectedBooking && (
+              <>
+                <div className="text-sm text-slate-600 mb-4">
+                  Current:{" "}
+                  {new Date(selectedBooking.scheduledFor).toLocaleDateString()}{" "}
+                  at{" "}
+                  {new Date(selectedBooking.scheduledFor).toLocaleTimeString(
+                    [],
+                    {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
+                  )}
+                </div>
+
+                {/* New Date */}
+                <div className="space-y-2">
+                  <Label>New Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {rescheduleDate ? (
+                          format(rescheduleDate, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={rescheduleDate}
+                        onSelect={setRescheduleDate}
+                        disabled={(date: Date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* New Time */}
+                <div className="space-y-2">
+                  <Label>New Time</Label>
+                  <Input
+                    type="time"
+                    value={rescheduleTime}
+                    onChange={(e) => setRescheduleTime(e.target.value)}
+                  />
+                </div>
+
+                {/* Duration */}
+                <div className="space-y-2">
+                  <Label>Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    min="15"
+                    step="15"
+                    value={rescheduleDuration}
+                    onChange={(e) => setRescheduleDuration(e.target.value)}
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <Label>Notes (Optional)</Label>
+                  <Textarea
+                    value={rescheduleNotes}
+                    onChange={(e) => setRescheduleNotes(e.target.value)}
+                    placeholder="Any additional notes..."
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowRescheduleModal(false)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReschedule}
+              disabled={!rescheduleDate || rescheduleMutation.isPending}
+              className="flex-1"
+            >
+              {rescheduleMutation.isPending
+                ? "Rescheduling..."
+                : "Confirm Reschedule"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Booking Details Modal */}
+      <Dialog
+        open={showEditModal}
+        onOpenChange={(open) => {
+          setShowEditModal(open);
+          if (!open) setConflictError(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Meeting Details</DialogTitle>
+            <DialogDescription>
+              Update the details for your meeting with{" "}
+              {selectedBooking?.attendeeName}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Conflict Warning */}
+          {conflictError && (
+            <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-red-900 mb-1">
+                    Duration Conflict
+                  </h3>
+                  <p className="text-sm text-red-700 mb-2">
+                    {conflictError.message}
+                  </p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-red-800 font-medium hover:text-red-900">
+                      View conflicting meeting
+                    </summary>
+                    <div className="mt-2 p-2 bg-white rounded border border-red-200">
+                      <p className="font-semibold text-red-900">
+                        {conflictError.conflictingBooking?.title}
+                      </p>
+                      <p className="text-red-700 mt-1">
+                        {conflictError.conflictingBooking?.attendeeName}
+                      </p>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Current Time Slot Info */}
+          {selectedBooking && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+              <p className="text-xs font-semibold text-blue-900 mb-1">
+                📅 Scheduled Time
+              </p>
+              <p className="text-sm text-blue-800">
+                {new Date(selectedBooking.scheduledFor).toLocaleString(
+                  "en-US",
+                  {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                )}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                To change the date or time, use the Reschedule button
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-4 py-4">
+            {/* Meeting Type */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-meeting-type">Meeting Type</Label>
+              <Select
+                value={editMeetingType}
+                onValueChange={setEditMeetingType}
+              >
+                <SelectTrigger id="edit-meeting-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consultation">Consultation</SelectItem>
+                  <SelectItem value="site-visit">Site Visit</SelectItem>
+                  <SelectItem value="follow-up">Follow-up</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Duration */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-duration">Duration (minutes)</Label>
+              <Select
+                value={editDuration}
+                onValueChange={(val) => {
+                  setEditDuration(val);
+                  setConflictError(null);
+                }}
+              >
+                <SelectTrigger id="edit-duration">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="90">1.5 hours</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                  <SelectItem value="180">3 hours</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Show new end time */}
+              {selectedBooking && (
+                <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  New end time:{" "}
+                  <strong className="text-slate-900">
+                    {(() => {
+                      const start = new Date(selectedBooking.scheduledFor);
+                      const end = new Date(
+                        start.getTime() + parseInt(editDuration) * 60000
+                      );
+                      return end.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    })()}
+                  </strong>
+                </p>
+              )}
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-location">Location</Label>
+              <Input
+                id="edit-location"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="Office, Site, Virtual, etc."
+              />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Any additional details..."
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowEditModal(false);
+                setConflictError(null);
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleEditBooking}
+              disabled={editBookingMutation.isPending}
+              className="flex-1"
+            >
+              {editBookingMutation.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Modal - MOVED HERE */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="w-5 h-5" />
+              Cancel Meeting
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {selectedBooking && (
+              <>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <h4 className="font-semibold text-sm text-red-900 mb-2">
+                    You are about to cancel:
+                  </h4>
+                  <p className="text-sm text-red-800">
+                    <strong>{selectedBooking.title}</strong>
+                  </p>
+                  <p className="text-sm text-red-700 mt-1">
+                    {new Date(selectedBooking.scheduledFor).toLocaleDateString(
+                      "en-US",
+                      {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      }
+                    )}{" "}
+                    at{" "}
+                    {new Date(selectedBooking.scheduledFor).toLocaleTimeString(
+                      "en-US",
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )}
+                  </p>
+                  <p className="text-xs text-red-600 mt-2">
+                    The lead will be notified via email and WhatsApp.
+                  </p>
+                </div>
+
+                {/* Cancellation Reason */}
+                <div className="space-y-2">
+                  <Label>Reason for Cancellation (Optional)</Label>
+                  <Textarea
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="E.g., Schedule conflict, Lead requested cancellation..."
+                    rows={3}
+                  />
+                  <p className="text-xs text-slate-500">
+                    This reason will be shared with the lead.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCancelModal(false)}
+              className="flex-1"
+            >
+              Keep Meeting
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={cancelMutation.isPending}
+              className="flex-1"
+            >
+              {cancelMutation.isPending
+                ? "Cancelling..."
+                : "Confirm Cancellation"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

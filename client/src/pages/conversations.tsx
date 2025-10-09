@@ -1,4 +1,5 @@
 // client/src/pages/conversations.tsx
+
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ import {
   Phone,
   Star,
   AlertTriangle,
+  AlertCircle,
   CheckCircle,
   UserCheck,
   RefreshCw,
@@ -39,6 +41,7 @@ import {
   Edit3,
   History,
   Target,
+  XCircle,
 } from "lucide-react";
 import { space } from "postcss/lib/list";
 import {
@@ -51,7 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";  
+import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -72,6 +75,11 @@ export default function Conversations() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // Get leadId from URL query parameter
+  const leadIdFromCalendar = new URLSearchParams(window.location.search).get(
+    "leadId"
+  );
+
   const [showLeadDetails, setShowLeadDetails] = useState(false);
   const [showManualControls, setShowManualControls] = useState(false);
   const [manualScore, setManualScore] = useState(0);
@@ -85,6 +93,7 @@ export default function Conversations() {
   const [bookingType, setBookingType] = useState("consultation");
   const [bookingLocation, setBookingLocation] = useState("Office");
   const [bookingNotes, setBookingNotes] = useState("");
+  const [conflictError, setConflictError] = useState<any>(null);
 
   const { data: availableTags } = useQuery<any[]>({
     queryKey: ["/api/lead-tags", selectedClientId],
@@ -176,6 +185,16 @@ export default function Conversations() {
       // Reverse to show oldest first (top) to newest (bottom)
       return data.reverse();
     },
+  });
+
+  // Fetch bookings for booking prevention
+  const { data: allBookings = [] } = useQuery({
+    queryKey: ["/api/bookings", selectedClientId],
+    queryFn: async () => {
+      const response = await fetch(`/api/bookings/${selectedClientId}`);
+      return response.json();
+    },
+    enabled: !!selectedClientId,
   });
 
   // Mark as read mutation
@@ -328,27 +347,67 @@ export default function Conversations() {
         body: JSON.stringify(bookingData),
       });
 
-      if (!response.ok) throw new Error("Failed to create booking");
-      return response.json();
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Throw the full error data including status code
+        const error: any = new Error(
+          data.message || "Failed to create booking"
+        );
+        error.status = response.status;
+        error.code = data.error;
+        error.conflictingBooking = data.conflictingBooking;
+        error.fullData = data;
+        throw error;
+      }
+
+      return data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+
       toast({
         title: "Meeting Scheduled!",
         description: "Calendar invite sent to lead via email and WhatsApp.",
       });
+
       setShowBookingModal(false);
-      // Reset form
+      setConflictError(null);
+
       setBookingDate(undefined);
       setBookingTime("10:00");
       setBookingDuration("60");
       setBookingNotes("");
     },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      console.log("❌ Booking error:", error);
+
+      if (error.status === 409 || error.code === "Booking conflict detected") {
+        setConflictError(
+          error.fullData || {
+            error: "Booking conflict detected",
+            message: error.message,
+            conflictingBooking: error.conflictingBooking,
+          }
+        );
+
+        // Only show toast if modal is not open
+        // Since modal is open, we don't show toast to avoid overlap
+        // The in-modal alert is sufficient
+      } else {
+        // For non-conflict errors, show toast
+        toast({
+          title: "Error",
+          description: error.message || "Failed to create booking",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -415,6 +474,22 @@ export default function Conversations() {
       }
     }
   }, [conversations]); // Run when conversations load
+
+  // Auto-select conversation when coming from calendar
+  useEffect(() => {
+    if (leadIdFromCalendar && conversations.length > 0) {
+      const targetConversation = conversations.find(
+        (c: any) => c.leadId === leadIdFromCalendar
+      );
+      if (targetConversation) {
+        setSelectedConversation(targetConversation);
+        markAsReadMutation.mutate(targetConversation.id);
+
+        // Clear URL parameter after selecting
+        window.history.replaceState({}, "", "/conversations");
+      }
+    }
+  }, [leadIdFromCalendar, conversations]);
 
   const filteredConversations = conversations.filter((conv: any) => {
     // Search filter
@@ -1061,14 +1136,34 @@ export default function Conversations() {
                   </Button>
 
                   {/* 🆕 ADD THIS BOOK MEETING BUTTON */}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowBookingModal(true)}
-                    title="Book Meeting"
-                  >
-                    <CalendarIcon className="w-4 h-4" />
-                  </Button>
+                  {/* Check for existing booking */}
+                  {(() => {
+                    const hasActiveBooking = allBookings.some(
+                      (booking: any) =>
+                        booking.leadId === selectedConversation?.lead?.id &&
+                        booking.status === "scheduled"
+                    );
+
+                    return (
+                      <>
+                        {hasActiveBooking && (
+                          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md">
+                            <AlertCircle className="w-3 h-3" />
+                            Active meeting scheduled
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setShowBookingModal(true)}
+                          title="Book Meeting"
+                          disabled={hasActiveBooking}
+                        >
+                          <CalendarIcon className="w-4 h-4" />
+                        </Button>
+                      </>
+                    );
+                  })()}
 
                   <Input
                     placeholder="Type your message..."
@@ -1618,8 +1713,14 @@ export default function Conversations() {
         )}
       </div>
       {/* Book Meeting Modal */}
-      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={showBookingModal}
+        onOpenChange={(open) => {
+          setShowBookingModal(open);
+          if (!open) setConflictError(null); // Clear error when closing
+        }}
+      >
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Schedule Meeting</DialogTitle>
             <DialogDescription>
@@ -1628,12 +1729,53 @@ export default function Conversations() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          {/* 🎨 COMPACT CONFLICT ALERT */}
+          {conflictError && (
+            <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-red-900 mb-1">
+                    Time Slot Conflict
+                  </h3>
+                  <p className="text-sm text-red-700 mb-2">
+                    {conflictError.message}
+                  </p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-red-800 font-medium hover:text-red-900">
+                      View conflicting meeting
+                    </summary>
+                    <div className="mt-2 p-2 bg-white rounded border border-red-200">
+                      <p className="font-semibold text-red-900">
+                        {conflictError.conflictingBooking?.title}
+                      </p>
+                      <p className="text-red-700 mt-1">
+                        {conflictError.conflictingBooking?.attendeeName}
+                      </p>
+                      <p className="text-red-600 text-xs mt-1">
+                        {new Date(
+                          conflictError.conflictingBooking?.scheduledFor
+                        ).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        ({conflictError.conflictingBooking?.duration} min)
+                      </p>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
             {/* Meeting Type */}
             <div className="space-y-2">
-              <Label>Meeting Type</Label>
+              <Label htmlFor="meeting-type">Meeting Type</Label>
               <Select value={bookingType} onValueChange={setBookingType}>
-                <SelectTrigger>
+                <SelectTrigger id="meeting-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1646,12 +1788,15 @@ export default function Conversations() {
 
             {/* Date Picker */}
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label htmlFor="meeting-date">Date</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
+                    id="meeting-date"
                     variant="outline"
-                    className="w-full justify-start text-left font-normal"
+                    className={`w-full justify-start text-left font-normal ${
+                      !bookingDate && "text-muted-foreground"
+                    }`}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {bookingDate ? (
@@ -1665,7 +1810,10 @@ export default function Conversations() {
                   <Calendar
                     mode="single"
                     selected={bookingDate}
-                    onSelect={setBookingDate}
+                    onSelect={(date) => {
+                      setBookingDate(date);
+                      setConflictError(null);
+                    }}
                     disabled={(date: Date) =>
                       date < new Date() || date < new Date("1900-01-01")
                     }
@@ -1673,41 +1821,134 @@ export default function Conversations() {
                   />
                 </PopoverContent>
               </Popover>
+
+              {/* Show existing bookings for selected date */}
+              {bookingDate &&
+                allBookings.length > 0 &&
+                (() => {
+                  const dayBookings = allBookings.filter((b: any) => {
+                    const bDate = new Date(b.scheduledFor);
+                    return (
+                      b.status === "scheduled" &&
+                      bDate.getDate() === bookingDate.getDate() &&
+                      bDate.getMonth() === bookingDate.getMonth() &&
+                      bDate.getFullYear() === bookingDate.getFullYear()
+                    );
+                  });
+
+                  if (dayBookings.length === 0) return null;
+
+                  return (
+                    <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                      <p className="font-semibold text-blue-900 mb-2 flex items-center gap-1">
+                        <CalendarIcon className="w-3 h-3" />
+                        {dayBookings.length} meeting
+                        {dayBookings.length > 1 ? "s" : ""} on{" "}
+                        {format(bookingDate, "MMM d")}
+                      </p>
+                      <div className="space-y-1">
+                        {dayBookings.map((b: any) => {
+                          const start = new Date(b.scheduledFor);
+                          const end = new Date(
+                            start.getTime() + b.duration * 60000
+                          );
+                          return (
+                            <div
+                              key={b.id}
+                              className="flex items-center gap-2 text-blue-700"
+                            >
+                              <Clock className="w-3 h-3" />
+                              <span className="font-mono">
+                                {start.toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}{" "}
+                                -{" "}
+                                {end.toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <span className="text-blue-600">
+                                ({b.attendeeName})
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
             </div>
 
-            {/* Time */}
-            <div className="space-y-2">
-              <Label>Time</Label>
-              <Input
-                type="time"
-                value={bookingTime}
-                onChange={(e) => setBookingTime(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              {/* Time */}
+              <div className="space-y-2">
+                <Label htmlFor="meeting-time">Time</Label>
+                <Input
+                  id="meeting-time"
+                  type="time"
+                  value={bookingTime}
+                  onChange={(e) => {
+                    setBookingTime(e.target.value);
+                    setConflictError(null);
+                  }}
+                />
+              </div>
+
+              {/* Duration */}
+              <div className="space-y-2">
+                <Label htmlFor="meeting-duration">Duration</Label>
+                <Select
+                  value={bookingDuration}
+                  onValueChange={(val) => {
+                    setBookingDuration(val);
+                    setConflictError(null);
+                  }}
+                >
+                  <SelectTrigger id="meeting-duration">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30">30 min</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="90">1.5 hours</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="180">3 hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Duration */}
-            <div className="space-y-2">
-              <Label>Duration (minutes)</Label>
-              <Select
-                value={bookingDuration}
-                onValueChange={setBookingDuration}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="90">1.5 hours</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Show calculated end time */}
+            {bookingDate && bookingTime && (
+              <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200">
+                <Clock className="w-3 h-3" />
+                <span>
+                  Ends at{" "}
+                  <strong className="text-slate-900">
+                    {(() => {
+                      const [hours, minutes] = bookingTime.split(":");
+                      const start = new Date(bookingDate);
+                      start.setHours(parseInt(hours), parseInt(minutes));
+                      const end = new Date(
+                        start.getTime() + parseInt(bookingDuration) * 60000
+                      );
+                      return end.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    })()}
+                  </strong>
+                </span>
+              </div>
+            )}
 
             {/* Location */}
             <div className="space-y-2">
-              <Label>Location</Label>
+              <Label htmlFor="meeting-location">Location</Label>
               <Input
+                id="meeting-location"
                 value={bookingLocation}
                 onChange={(e) => setBookingLocation(e.target.value)}
                 placeholder="Office, Site, Virtual, etc."
@@ -1716,32 +1957,47 @@ export default function Conversations() {
 
             {/* Notes */}
             <div className="space-y-2">
-              <Label>Notes (Optional)</Label>
+              <Label htmlFor="meeting-notes">Notes (Optional)</Label>
               <Textarea
+                id="meeting-notes"
                 value={bookingNotes}
                 onChange={(e) => setBookingNotes(e.target.value)}
                 placeholder="Any additional details..."
                 rows={3}
+                className="resize-none"
               />
             </div>
           </div>
 
-          <div className="flex space-x-2">
+          <div className="flex gap-3 pt-4">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setShowBookingModal(false)}
+              onClick={() => {
+                setShowBookingModal(false);
+                setConflictError(null);
+              }}
               className="flex-1"
             >
               Cancel
             </Button>
             <Button
+              type="button"
               onClick={handleBookMeeting}
               disabled={!bookingDate || bookMeetingMutation.isPending}
               className="flex-1"
             >
-              {bookMeetingMutation.isPending
-                ? "Scheduling..."
-                : "Schedule Meeting"}
+              {bookMeetingMutation.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  Schedule Meeting
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
