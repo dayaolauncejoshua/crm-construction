@@ -20,7 +20,7 @@ import {
 } from "./services/reminder-cron";
 import bcrypt from "bcrypt";
 import { requireAuth, requireSuperAdmin } from "./middleware/auth";
-
+import vslRouter from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
 function checkOwnership(
   userRole: string,
@@ -95,6 +95,8 @@ function hasBookingConflict(
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  app.use(vslRouter);
 
   let wss: WebSocketServer | null = null;
   function broadcastUpdate(data: any) {

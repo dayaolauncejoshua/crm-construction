@@ -27,11 +27,11 @@ app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);
 
-// Add this ONLY in development
-if (process.env.NODE_ENV !== "production") {
-  app.use("/test", testWebhookRouter);
-  console.log("⚠️  Test endpoints enabled at /test/*");
-}
+// // Add this ONLY in development
+// if (process.env.NODE_ENV !== "production") {
+//   app.use("/test", testWebhookRouter);
+//   console.log("⚠️  Test endpoints enabled at /test/*");
+// }
 
 // Session middleware
 app.use(
