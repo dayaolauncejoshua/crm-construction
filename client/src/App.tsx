@@ -1,10 +1,12 @@
 // client/src/App.tsx
+
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ClientProvider, useClient } from "@/contexts/ClientContext"; // ← ADD THIS
 import { useLocation } from "wouter";
 import Navigation from "@/components/navigation";
 import Dashboard from "@/pages/dashboard";
@@ -30,27 +32,57 @@ import { useEffect } from "react";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const { selectedClientId, setSelectedClientId } = useClient(); // ← ADD THIS
   const [location, setLocation] = useLocation();
 
-  // Fetch clients to get the first client ID
+  // Fetch clients based on role
   const { data: clients } = useQuery({
-    queryKey: ["/api/clients", user?.id],
+    queryKey: ["/api/clients", user?.id, user?.role],
     queryFn: async () => {
+      if (!user?.id) return [];
+
+      // Super admin gets all clients for viewing
+      if (user?.role === "super_admin") {
+        const response = await fetch("/api/super-admin/clients");
+        if (!response.ok) return [];
+        return response.json();
+      }
+
+      // Regular users get only their clients
       const response = await fetch(`/api/clients?userId=${user?.id}`);
+      if (!response.ok) return [];
       return response.json();
     },
     enabled: !!user?.id && isAuthenticated,
   });
 
-  const selectedClientId = clients?.[0]?.id;
+  // ← ADD THIS: Auto-select first client if none selected
+  useEffect(() => {
+    if (clients && clients.length > 0 && !selectedClientId) {
+      setSelectedClientId(clients[0].id);
+    }
+  }, [clients, selectedClientId, setSelectedClientId]);
 
-  // Fetch dashboard data for unread count
+  // ← CHANGE THIS: Use selectedClientId instead of clients?.[0]?.id
   const { data: dashboardData } = useQuery<{
     conversations: any[];
     kpis: any;
   }>({
-    queryKey: [`/api/dashboard/${selectedClientId}`],
-    enabled: !!selectedClientId && isAuthenticated,
+    queryKey: [`/api/dashboard/${selectedClientId}`, user?.role],
+    queryFn: async () => {
+      if (!selectedClientId) return null;
+
+      // Super admin gets platform-wide dashboard
+      if (user?.role === "super_admin") {
+        const response = await fetch("/api/super-admin/dashboard");
+        return response.json();
+      }
+
+      // Regular users get their client dashboard
+      const response = await fetch(`/api/dashboard/${selectedClientId}`);
+      return response.json();
+    },
+    enabled: user?.role === "super_admin" || !!selectedClientId,
     staleTime: 30 * 1000,
   });
 
@@ -62,9 +94,9 @@ function ProtectedRouter() {
 
   // Calculate new leads count (status = "new")
   const newLeadsCount =
-  dashboardData?.conversations?.filter((conv: any) => 
-    conv.lead?.status === "new" && !conv.lead?.viewedAt
-  ).length || 0;
+    dashboardData?.conversations?.filter(
+      (conv: any) => conv.lead?.status === "new" && !conv.lead?.viewedAt
+    ).length || 0;
 
   const { data: wsData } = useWebSocket();
 
@@ -135,6 +167,11 @@ function ProtectedRouter() {
           newLeadsCount={newLeadsCount}
           user={user}
           onSignOut={handleSignOut}
+          
+         
+          clients={clients || []}
+          selectedClientId={selectedClientId || ""}
+          onClientChange={setSelectedClientId}
         />
       )}
 
@@ -172,10 +209,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <ProtectedRouter />
-        </TooltipProvider>
+        <ClientProvider> {/* ← ADD THIS */}
+          <TooltipProvider>
+            <Toaster />
+            <ProtectedRouter />
+          </TooltipProvider>
+        </ClientProvider> {/* ← ADD THIS */}
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -14,6 +14,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Slider } from "@/components/ui/slider";
+import { useClient } from "@/contexts/ClientContext";
 import {
   Select,
   SelectContent,
@@ -65,11 +66,13 @@ import {
 
 export default function Conversations() {
   const { user } = useAuth();
+  const { selectedClientId } = useClient();
+
   console.log("=== USER DEBUG ===");
   console.log("User object:", user);
   console.log("User ID:", user?.id);
   console.log("User email:", user?.email);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,37 +127,6 @@ export default function Conversations() {
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
-
-  // Fetch clients
-  const {
-    data: clients,
-    isLoading: isLoadingClients,
-    error: clientsError,
-  } = useQuery({
-    queryKey: ["/api/clients", user?.id],
-    queryFn: async () => {
-      console.log("Fetching clients...");
-      const response = await fetch(`/api/clients?userId=${user?.id}`);
-      const data = await response.json();
-      console.log("Clients response:", data);
-      return data;
-    },
-    enabled: !!user?.id, // Only run if user ID is available
-  });
-
-  useEffect(() => {
-    if (clientsError) {
-      console.error("Error loading clients:", clientsError);
-    }
-  }, [clientsError]);
-
-  // Then add useEffect to set it from clients:
-  useEffect(() => {
-    if (clients && clients.length > 0 && !selectedClientId) {
-      console.log("Setting client ID to:", clients[0].id);
-      setSelectedClientId(clients[0].id);
-    }
-  }, [clients, selectedClientId]);
 
   // Fetch conversations
   const {

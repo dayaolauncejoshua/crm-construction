@@ -7,6 +7,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
 import testWebhookRouter from "./test-webhook";
+import { loadUser } from "./middleware/auth";
 
 import dotenv from "dotenv";
 import pg from "pg";
@@ -14,8 +15,6 @@ const { Pool } = pg;
 config();
 
 dotenv.config();
-
-// In your main server file (app.ts or index.ts)
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -25,7 +24,6 @@ const app = express();
 
 app.use(express.json());
 app.use("/webhook", express.raw({ type: "application/json" }));
-
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);
 
@@ -34,6 +32,8 @@ if (process.env.NODE_ENV !== "production") {
   app.use("/test", testWebhookRouter);
   console.log("⚠️  Test endpoints enabled at /test/*");
 }
+
+// Session middleware
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
@@ -47,8 +47,13 @@ app.use(
   })
 );
 
+// ✅ IMPORTANT: Load user from session (must be after session, before routes)
+app.use(loadUser);
+
+// Auth routes (login, signup, logout)
 app.use(authRouter);
 
+// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -90,19 +95,13 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Setup Vite in development
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const PORT = parseInt(process.env.PORT || "5000", 10);
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);

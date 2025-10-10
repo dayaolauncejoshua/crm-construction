@@ -19,6 +19,22 @@ import {
   setBroadcastFunction,
 } from "./services/reminder-cron";
 import bcrypt from "bcrypt";
+import { requireAuth, requireSuperAdmin } from "./middleware/auth";
+
+// Helper function to check if user owns the resource
+function checkOwnership(
+  userRole: string,
+  resourceUserId: string,
+  requestUserId: string
+): boolean {
+  // Super admin can view anything (read-only for support)
+  if (userRole === "super_admin") {
+    return true;
+  }
+
+  // Regular users can only access their own data
+  return resourceUserId === requestUserId;
+}
 
 // Helper function to check for booking conflicts
 function hasBookingConflict(
@@ -208,7 +224,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await leadQualificationService.queueIncomingMessage(
           incomingMessage.from,
           incomingMessage.message,
-          incomingMessage.timestamp
+          incomingMessage.timestamp,
+          incomingMessage.phoneNumberId
         );
       }
 
@@ -242,17 +259,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Client management
-  app.get("/api/clients", async (req, res) => {
+  // ============= CLIENT ROUTES WITH AUTH =============
+
+  // Get clients - users see their own, super admin sees all
+  app.get("/api/clients", requireAuth, async (req, res) => {
     try {
       const userId = req.query.userId as string;
+      const requestUser = req.user!; // Guaranteed by requireAuth
+
       console.log("=== CLIENTS API DEBUG ===");
+      console.log("Authenticated user:", requestUser.email, requestUser.role);
       console.log("Requested userId:", userId);
 
-      const clients = await storage.getClients(userId);
-      console.log("Found clients:", clients.length);
-      clients.forEach((c) => console.log(`  - ${c.name} (id: ${c.id})`));
+      // Super admin can see all clients (for support)
+      if (requestUser.role === "super_admin") {
+        const allClients = await storage.getAllClients();
+        console.log("Super admin: returning all clients:", allClients.length);
+        return res.json(allClients);
+      }
 
+      // Regular users can only see THEIR OWN clients
+      if (!userId || userId !== requestUser.id) {
+        console.log("❌ Access denied: user can only view their own clients");
+        return res.status(403).json({
+          message: "Access denied: You can only view your own clients",
+        });
+      }
+
+      const clients = await storage.getClients(userId);
+      console.log("✅ Found clients:", clients.length);
       res.json(clients);
     } catch (error) {
       console.error("Error fetching clients:", error);
@@ -260,9 +295,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/clients", async (req, res) => {
+  // Create client - only authenticated users (not super admin)
+  app.post("/api/clients", requireAuth, async (req, res) => {
     try {
-      const clientData = insertClientSchema.parse(req.body);
+      const requestUser = req.user!; // Guaranteed by requireAuth
+
+      // Super admin CANNOT create clients
+      if (requestUser.role === "super_admin") {
+        return res.status(403).json({
+          message:
+            "Super admins cannot create clients. Users manage their own clients.",
+        });
+      }
+
+      // Always use authenticated user's ID
+      const clientData = {
+        ...req.body,
+        userId: requestUser.id, // Force to authenticated user
+      };
+
+      console.log("✅ Creating client for user:", requestUser.email);
       const client = await storage.createClient(clientData);
       res.json(client);
     } catch (error) {
@@ -274,9 +326,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard data
-  app.get("/api/dashboard/:clientId", async (req, res) => {
+
+  app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
     try {
       const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Verify user owns this client (unless super admin)
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
 
       const [kpis, conversations, hotLeads, recentActivity] = await Promise.all(
         [
@@ -287,7 +349,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ]
       );
 
-      // Merge hot leads into conversations to ensure they're visible
       const conversationMap = new Map(conversations.map((c) => [c.id, c]));
       hotLeads.forEach((hl) => {
         if (!conversationMap.has(hl.id)) {
@@ -308,9 +369,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Conversations
-  app.get("/api/conversations/:clientId", async (req, res) => {
+  app.get("/api/conversations/:clientId", requireAuth, async (req, res) => {
     try {
       const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
       const conversations = await storage.getActiveConversations(clientId);
       res.json(conversations);
     } catch (error) {
@@ -318,7 +389,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch conversations" });
     }
   });
-
   // Get messages in a conversation
   app.get("/api/conversations/:conversationId/messages", async (req, res) => {
     try {
@@ -1491,9 +1561,19 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
   });
 
   // Get bookings for client
-  app.get("/api/bookings/:clientId", async (req, res) => {
+  app.get("/api/bookings/:clientId", requireAuth, async (req, res) => {
     try {
       const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
       const bookings = await storage.getBookings(clientId);
       res.json(bookings);
     } catch (error) {
@@ -1530,10 +1610,20 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
   });
 
   // Lead management routes
-  app.get("/api/leads/:clientId", async (req, res) => {
+  app.get("/api/leads/:clientId", requireAuth, async (req, res) => {
     try {
       const { clientId } = req.params;
-      const leads = await storage.getLeads(clientId, 100); // Get up to 100 leads
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const leads = await storage.getLeads(clientId, 100);
       res.json(leads);
     } catch (error) {
       console.error("Error fetching leads:", error);
@@ -1618,8 +1708,8 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  // Super admin routes
-  app.get("/api/super-admin/dashboard", async (req, res) => {
+  // Super admin dashboard
+  app.get("/api/super-admin/dashboard", requireSuperAdmin, async (req, res) => {
     try {
       const dashboard = await storage.getSuperAdminDashboard();
       res.json(dashboard);
@@ -1629,7 +1719,20 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  app.get("/api/super-admin/users", async (req, res) => {
+  // Super admin: View all clients (read-only)
+  // Super admin: View all clients (read-only)
+  app.get("/api/super-admin/clients", requireSuperAdmin, async (req, res) => {
+    try {
+      const allClients = await storage.getAllClientsWithUsers();
+      res.json(allClients);
+    } catch (error) {
+      console.error("Error fetching all clients:", error);
+      res.status(500).json({ message: "Failed to fetch clients" });
+    }
+  });
+
+  // Super admin: Get all users
+  app.get("/api/super-admin/users", requireSuperAdmin, async (req, res) => {
     try {
       const { search, status } = req.query;
       const users = await storage.getAllUsersForAdmin(
@@ -1644,7 +1747,8 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
   });
 
   // Create user (super admin only)
-  app.post("/api/super-admin/users", async (req, res) => {
+  // Super admin: Create user
+  app.post("/api/super-admin/users", requireSuperAdmin, async (req, res) => {
     try {
       const { email, firstName, lastName, role, subscriptionType, password } =
         req.body;
@@ -1659,9 +1763,9 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
           .json({ message: "User with this email already exists" });
       }
 
-      // Hash password (use provided password or generate temporary one)
+      // Hash password
       const tempPassword = password || "Welcome123!";
-      const passwordHash = await bcrypt.hash(tempPassword, 10); // ← Using bcrypt
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
 
       // Create user
       const user = await storage.createUser({
@@ -1675,7 +1779,6 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
       });
 
       console.log("✅ User created:", user.id);
-      console.log("🔐 Temporary password:", tempPassword);
 
       res.json({
         ...user,

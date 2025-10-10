@@ -45,6 +45,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -59,6 +64,9 @@ import {
   MoreVertical,
   Edit,
   Trash2,
+  Copy,
+  Key,
+  AlertCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -71,14 +79,18 @@ const createUserSchema = z.object({
   email: z.string().email("Please enter a valid email"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["user", "admin", "super_admin"]),
+  role: z.enum(["user", "super_admin"]),
   subscriptionType: z.enum(["trial", "pro", "enterprise"]).default("trial"),
+  password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal("")),
 });
 
 type CreateUserData = z.infer<typeof createUserSchema>;
 
 export default function SuperAdminUsers() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [createdUserEmail, setCreatedUserEmail] = useState("");
   const { toast } = useToast();
 
   // Fetch all users
@@ -100,8 +112,18 @@ export default function SuperAdminUsers() {
       lastName: "",
       role: "user",
       subscriptionType: "trial",
+      password: "",
     },
   });
+
+  // Copy password to clipboard
+  const copyPassword = () => {
+    navigator.clipboard.writeText(generatedPassword);
+    toast({
+      title: "Copied!",
+      description: "Password copied to clipboard",
+    });
+  };
 
   // Create user mutation
   const createUserMutation = useMutation({
@@ -109,14 +131,22 @@ export default function SuperAdminUsers() {
       const response = await apiRequest("POST", "/api/super-admin/users", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
       setShowCreateDialog(false);
       form.reset();
-      toast({
-        title: "Success!",
-        description: "User created successfully.",
-      });
+      
+      // Show password dialog with generated password
+      if (data.temporaryPassword) {
+        setGeneratedPassword(data.temporaryPassword);
+        setCreatedUserEmail(data.email);
+        setShowPasswordDialog(true);
+      } else {
+        toast({
+          title: "Success!",
+          description: "User created successfully.",
+        });
+      }
     },
     onError: (error) => {
       toast({
@@ -228,6 +258,27 @@ export default function SuperAdminUsers() {
 
                   <FormField
                     control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            placeholder="Leave blank for auto-generated password"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          If left blank, password will be: <strong>Welcome123!</strong>
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="role"
                     render={({ field }) => (
                       <FormItem>
@@ -244,9 +295,6 @@ export default function SuperAdminUsers() {
                           <SelectContent>
                             <SelectItem value="user">
                               User - Can create clients and manage leads
-                            </SelectItem>
-                            <SelectItem value="admin">
-                              Admin - User + analytics access
                             </SelectItem>
                             <SelectItem value="super_admin">
                               Super Admin - Full platform access
@@ -315,6 +363,82 @@ export default function SuperAdminUsers() {
           </Dialog>
         </div>
       </header>
+
+      {/* Password Display Dialog */}
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Key className="w-5 h-5 text-green-600" />
+              <span>User Created Successfully!</span>
+            </DialogTitle>
+            <DialogDescription>
+              Save this password and share it with the user
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Important!</AlertTitle>
+            <AlertDescription>
+              This password will only be shown once. Make sure to save it before closing this dialog.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">
+                User Email
+              </label>
+              <div className="mt-1 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <p className="font-mono text-sm">{createdUserEmail}</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700">
+                Temporary Password
+              </label>
+              <div className="mt-1 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                <p className="font-mono text-lg font-bold text-green-900">
+                  {generatedPassword}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={copyPassword}
+                  className="text-green-700 hover:text-green-900 hover:bg-green-100"
+                >
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">Next Steps:</h4>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                <li>Copy the password above</li>
+                <li>Share the credentials with the user securely</li>
+                <li>Ask them to change their password after first login</li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                setShowPasswordDialog(false);
+                setGeneratedPassword("");
+                setCreatedUserEmail("");
+              }}
+              className="bg-primary text-white hover:bg-primary/90"
+            >
+              I've Saved the Password
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats Cards */}
       <div className="p-6">
@@ -436,8 +560,6 @@ export default function SuperAdminUsers() {
                           variant={
                             user.role === "super_admin"
                               ? "default"
-                              : user.role === "admin"
-                              ? "secondary"
                               : "outline"
                           }
                         >
@@ -473,7 +595,7 @@ export default function SuperAdminUsers() {
                       <TableCell>
                         <div className="flex items-center text-slate-600">
                           <Building2 className="w-4 h-4 mr-1" />
-                          {user._count?.clients || 0}
+                          {user.clientCount || 0}
                         </div>
                       </TableCell>
                       <TableCell className="text-slate-600">
@@ -490,6 +612,10 @@ export default function SuperAdminUsers() {
                             <DropdownMenuItem>
                               <Edit className="w-4 h-4 mr-2" />
                               Edit User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Key className="w-4 h-4 mr-2" />
+                              Reset Password
                             </DropdownMenuItem>
                             <DropdownMenuItem className="text-red-600">
                               <Trash2 className="w-4 h-4 mr-2" />

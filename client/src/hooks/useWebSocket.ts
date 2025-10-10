@@ -1,3 +1,5 @@
+// client/src/hooks/useWebSocket.ts
+
 import { useState, useEffect, useRef } from "react";
 
 export function useWebSocket() {

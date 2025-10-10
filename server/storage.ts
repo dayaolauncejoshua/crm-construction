@@ -139,6 +139,55 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Get all clients with user info (for super admin)
+  async getAllClientsWithUsers(): Promise<any[]> {
+    return await db
+      .select({
+        id: clients.id,
+        name: clients.name,
+        industry: clients.industry,
+        website: clients.website,
+        phone: clients.phone,
+        email: clients.email,
+        whatsappNumber: clients.whatsappNumber,
+        isActive: clients.isActive,
+        createdAt: clients.createdAt,
+        user: {
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          role: users.role,
+        },
+      })
+      .from(clients)
+      .leftJoin(users, eq(clients.userId, users.id))
+      .where(eq(clients.isActive, true))
+      .orderBy(desc(clients.createdAt));
+  }
+
+  // Get all users with their client counts (for super admin)
+  async getAllUsersWithStats(): Promise<any[]> {
+    return await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+        subscriptionType: users.subscriptionType,
+        isTrialActive: users.isTrialActive,
+        trialEndsAt: users.trialEndsAt,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        clientCount: count(clients.id),
+      })
+      .from(users)
+      .leftJoin(clients, eq(users.id, clients.userId))
+      .groupBy(users.id)
+      .orderBy(desc(users.createdAt));
+  }
+
   // Client operations
   async getClients(userId: string): Promise<Client[]> {
     return await db

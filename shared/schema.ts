@@ -37,7 +37,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  role: varchar("role").default("user"), // user, admin, super_admin
+  role: varchar("role").default("user"), // user, super_admin
   subscriptionType: varchar("subscription_type").default("trial"), // trial, pro, enterprise
   trialEndsAt: timestamp("trial_ends_at"),
   isTrialActive: boolean("is_trial_active").default(false),

@@ -76,25 +76,29 @@ export class LeadQualificationService {
   async queueIncomingMessage(
     from: string,
     message: string,
-    timestamp: number
+    timestamp: number,
+    phoneNumberId?: string
   ): Promise<void> {
     await messageQueue.enqueueMessage(
       from,
       message,
       timestamp,
-      this.handleIncomingMessage.bind(this)
+      this.handleIncomingMessage.bind(this),
+      phoneNumberId
     );
   }
 
   private async handleIncomingMessage(
     from: string,
     message: string,
-    timestamp: number
+    timestamp: number,
+    phoneNumberId?: string
   ): Promise<void> {
     try {
       console.log("=== INCOMING MESSAGE ===");
       console.log("From:", from);
       console.log("Message:", message);
+      console.log("Phone Number ID:", phoneNumberId);
 
       // Step 1: Find or create lead
       let lead = await storage.getLeadByPhone(from);
@@ -108,7 +112,7 @@ export class LeadQualificationService {
         for (const user of allUsers) {
           const userClients = await storage.getClients(user.id);
           const matchingClient = userClients.find(
-            (c) => c.isActive && c.whatsappNumber === from
+            (c) => c.isActive && c.whatsappNumber === phoneNumberId
           );
           if (matchingClient) {
             targetClient = matchingClient;
@@ -117,14 +121,16 @@ export class LeadQualificationService {
         }
 
         if (!targetClient) {
-          for (const user of allUsers) {
-            const userClients = await storage.getClients(user.id);
-            if (userClients.length > 0) {
-              targetClient = userClients[0];
-              break;
-            }
+        console.log("⚠️ No client matched phone number ID, using first active client");
+        for (const user of allUsers) {
+          const userClients = await storage.getClients(user.id);
+          if (userClients.length > 0) {
+            targetClient = userClients[0];
+            console.log("✅ Using first available client:", targetClient.name);
+            break;
           }
         }
+      }
 
         if (!targetClient) {
           console.error("No active clients found - cannot create lead");

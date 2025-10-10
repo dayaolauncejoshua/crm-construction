@@ -5,6 +5,7 @@ interface QueuedMessage {
   message: string;
   timestamp: number;
   retries: number;
+  phoneNumberId?: string; // ✅ ADD THIS
 }
 
 interface ProcessingLock {
@@ -32,11 +33,15 @@ export class MessageQueueService {
     from: string,
     message: string,
     timestamp: number,
-    processFunction: (from: string, message: string, timestamp: number) => Promise<void>
+    processFunction: (from: string, message: string, timestamp: number, phoneNumberId?: string) => Promise<void>, // ✅ ADD phoneNumberId param
+    phoneNumberId?: string // ✅ ADD THIS PARAMETER
   ): Promise<void> {
     const normalizedPhone = this.normalizePhone(from);
     
     console.log(`📨 Message received from ${normalizedPhone}`);
+    if (phoneNumberId) {
+      console.log(`📞 Received on WhatsApp Business number ID: ${phoneNumberId}`);
+    }
 
     // Get or create lock for this phone number
     if (!this.locks.has(normalizedPhone)) {
@@ -54,6 +59,7 @@ export class MessageQueueService {
       message,
       timestamp,
       retries: 0,
+      phoneNumberId, // ✅ ADD THIS
     };
 
     // If currently processing messages from this number, queue it
@@ -75,7 +81,7 @@ export class MessageQueueService {
   private async processMessage(
     normalizedPhone: string,
     queuedMessage: QueuedMessage,
-    processFunction: (from: string, message: string, timestamp: number) => Promise<void>
+    processFunction: (from: string, message: string, timestamp: number, phoneNumberId?: string) => Promise<void> // ✅ ADD phoneNumberId param
   ): Promise<void> {
     const lock = this.locks.get(normalizedPhone)!;
 
@@ -86,7 +92,8 @@ export class MessageQueueService {
       await processFunction(
         queuedMessage.from,
         queuedMessage.message,
-        queuedMessage.timestamp
+        queuedMessage.timestamp,
+        queuedMessage.phoneNumberId // ✅ ADD THIS
       );
 
       this.metrics.totalProcessed++;
@@ -173,7 +180,9 @@ export class MessageQueueService {
     const now = Date.now();
     const oneHourAgo = now - (60 * 60 * 1000);
 
-    for (const [phone, lock] of this.locks.entries()) {
+    const entries = Array.from(this.locks.entries());
+
+    for (const [phone, lock] of entries) {
       // Remove if not locked and queue is empty
       if (!lock.isLocked && lock.queue.length === 0) {
         this.locks.delete(phone);
