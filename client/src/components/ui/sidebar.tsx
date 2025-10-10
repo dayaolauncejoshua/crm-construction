@@ -15,6 +15,7 @@ import {
   Zap,
   Palette,
   BookOpen,
+  
 } from "lucide-react";
 
 interface SidebarProps {

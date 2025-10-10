@@ -973,6 +973,22 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(clients).where(eq(clients.isActive, true));
   }
 
+  // Get user by email
+  async getUserByEmail(email: string) {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    return user;
+  }
+
+  // Create user
+  async createUser(data: any) {
+    const [user] = await db.insert(users).values(data).returning();
+    return user;
+  }
+
   async getAllUsersForAdmin(
     searchQuery?: string,
     statusFilter?: string
@@ -1108,7 +1124,7 @@ export class DatabaseStorage implements IStorage {
         reminder1hSent: bookings.reminder1hSent,
         reminder24hSentAt: bookings.reminder24hSentAt,
         reminder1hSentAt: bookings.reminder1hSentAt,
-       
+
         createdAt: bookings.createdAt,
         updatedAt: bookings.updatedAt,
       })

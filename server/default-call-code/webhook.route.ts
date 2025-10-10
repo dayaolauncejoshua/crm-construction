@@ -1,4 +1,4 @@
-@ -0,0 +1,66 @@
+
 import { Router, Request, Response } from "express";
 import OpenAI from "openai";
 import { phoneService } from "../phone/phone.phone";

@@ -14,7 +14,11 @@ import { whatsappService } from "./services/whatsapp";
 import { leadQualificationService } from "./services/leadQualification";
 import advancedRoutes from "./advanced-routes";
 import { emailService } from "./services/email";
-import { startReminderCron, setBroadcastFunction } from "./services/reminder-cron";
+import {
+  startReminderCron,
+  setBroadcastFunction,
+} from "./services/reminder-cron";
+import bcrypt from "bcrypt";
 
 // Helper function to check for booking conflicts
 function hasBookingConflict(
@@ -1510,8 +1514,14 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
       }
 
       // Dynamically import the service
-      const { sendMeetingReminder } = await import("./services/reminder-service");
-      const result = await sendMeetingReminder(booking, timeframe || "24h", broadcastUpdate);
+      const { sendMeetingReminder } = await import(
+        "./services/reminder-service"
+      );
+      const result = await sendMeetingReminder(
+        booking,
+        timeframe || "24h",
+        broadcastUpdate
+      );
 
       res.json({ success: true, result });
     } catch (error: any) {
@@ -1630,6 +1640,50 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Create user (super admin only)
+  app.post("/api/super-admin/users", async (req, res) => {
+    try {
+      const { email, firstName, lastName, role, subscriptionType, password } =
+        req.body;
+
+      console.log("👤 Creating new user:", email);
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ message: "User with this email already exists" });
+      }
+
+      // Hash password (use provided password or generate temporary one)
+      const tempPassword = password || "Welcome123!";
+      const passwordHash = await bcrypt.hash(tempPassword, 10); // ← Using bcrypt
+
+      // Create user
+      const user = await storage.createUser({
+        email,
+        firstName,
+        lastName,
+        role: role || "user",
+        subscriptionType: subscriptionType || "trial",
+        passwordHash,
+        isActive: true,
+      });
+
+      console.log("✅ User created:", user.id);
+      console.log("🔐 Temporary password:", tempPassword);
+
+      res.json({
+        ...user,
+        temporaryPassword: tempPassword,
+      });
+    } catch (error) {
+      console.error("❌ Error creating user:", error);
+      res.status(500).json({ message: "Failed to create user" });
     }
   });
 

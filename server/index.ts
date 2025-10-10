@@ -7,10 +7,12 @@ import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
 import testWebhookRouter from "./test-webhook";
-config();
 
 import dotenv from "dotenv";
-import { Pool } from "pg";
+import pg from "pg";
+const { Pool } = pg;
+config();
+
 dotenv.config();
 
 // In your main server file (app.ts or index.ts)

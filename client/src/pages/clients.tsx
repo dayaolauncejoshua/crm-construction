@@ -1,4 +1,4 @@
-// client/src/pages/calendar.tsx
+// client/src/pages/client.tsx
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";

@@ -1,7 +1,7 @@
 // server/setup-notion.ts
 
 import { Client } from "@notionhq/client";
-import { notion, NOTION_PAGE_ID, createDatabaseIfNotExists, findDatabaseByTitle } from "./notion";
+import { notion, NOTION_PAGE_ID, createDatabaseIfNotExists, findDatabaseByTitle } from "../notion";
 
 // Environment variables validation
 if (!process.env.NOTION_INTEGRATION_SECRET) {

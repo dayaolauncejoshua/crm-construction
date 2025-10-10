@@ -13,6 +13,7 @@ import Signup from "@/pages/signup";
 import Landing from "@/pages/landing";
 import TrialUnlock from "@/pages/trial-unlock";
 import SuperAdmin from "@/pages/super-admin";
+import SuperAdminUsers from "@/pages/super-admin-users";
 import Clients from "@/pages/clients";
 import Leads from "@/pages/leads";
 import Conversations from "@/pages/conversations";
@@ -145,6 +146,7 @@ function ProtectedRouter() {
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
             <Route path="/super-admin" component={SuperAdmin} />
+            <Route path="/super-admin/users" component={SuperAdminUsers} />
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/dashboard/:clientId" component={Dashboard} />

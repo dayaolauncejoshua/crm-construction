@@ -1,5 +1,3 @@
-// client/components/navigation.tsx
-
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +29,7 @@ interface NavigationProps {
   daysLeft?: number;
   unreadCount?: number;
   newLeadsCount?: number;
-  user?: any; 
+  user?: any;
   onSignOut?: () => void;
 }
 
@@ -100,14 +98,19 @@ export default function Navigation({
     { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
   ];
 
-  // Add super admin navigation if user is super admin
-  if (userRole === "super_admin") {
-    mainNavItems.push({
+  // Super Admin navigation items
+  const superAdminItems = [
+    {
       path: "/super-admin",
-      label: "Super Admin",
+      label: "Dashboard",
       icon: <Shield className="w-4 h-4" />,
-    });
-  }
+    },
+    {
+      path: "/super-admin/users",
+      label: "Users Management",
+      icon: <Users className="w-4 h-4" />,
+    },
+  ];
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
@@ -203,6 +206,34 @@ export default function Navigation({
                   )}
                 </Link>
               ))}
+
+              {/* Super Admin Section - Mobile */}
+              {userRole === "super_admin" && (
+                <>
+                  <div className="pt-4 pb-2 px-4">
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Super Admin
+                    </h3>
+                  </div>
+                  {superAdminItems.map((item) => (
+                    <Link
+                      key={item.path}
+                      href={item.path}
+                      onClick={closeMobileMenu}
+                      className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                        isActive(item.path)
+                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        {item.icon}
+                        <span className="font-medium">{item.label}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
@@ -231,16 +262,19 @@ export default function Navigation({
               <Avatar className="w-8 h-8">
                 <AvatarImage src="/placeholder-avatar.jpg" />
                 <AvatarFallback className="bg-blue-600 text-white text-sm">
-                  DA
+                  {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                  {user?.lastName?.[0] || ""}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-900 truncate">
-                  Demo Account
+                  {user?.firstName && user?.lastName
+                    ? `${user.firstName} ${user.lastName}`
+                    : user?.email || "User"}
                 </p>
-                <p className="text-xs text-slate-500">demo@example.com</p>
+                <p className="text-xs text-slate-500">{user?.email || ""}</p>
               </div>
-              <Button variant="ghost" size="sm" className="p-2">
+              <Button variant="ghost" size="sm" className="p-2" onClick={onSignOut}>
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
@@ -305,187 +339,94 @@ export default function Navigation({
                         {item.badge}
                       </Badge>
                     )}
-                    {item.path === "/super-admin" && (
-                      <Badge variant="destructive" className="ml-auto text-xs">
-                        Admin
-                      </Badge>
-                    )}
                   </Button>
                 </Link>
               </li>
             ))}
+
+            {/* Super Admin Section - Desktop */}
+            {userRole === "super_admin" && (
+              <>
+                <li className="pt-6 pb-2 px-3">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    Super Admin
+                  </h3>
+                </li>
+                {superAdminItems.map((item) => (
+                  <li key={item.path}>
+                    <Link href={item.path}>
+                      <Button
+                        variant={isActive(item.path) ? "default" : "ghost"}
+                        className={`w-full justify-start text-left ${
+                          isActive(item.path)
+                            ? "bg-primary text-primary-foreground"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        }`}
+                      >
+                        {item.icon}
+                        <span className="ml-3 flex-1">{item.label}</span>
+                        {item.path === "/super-admin" && (
+                          <Badge variant="destructive" className="ml-auto text-xs">
+                            Admin
+                          </Badge>
+                        )}
+                      </Button>
+                    </Link>
+                  </li>
+                ))}
+              </>
+            )}
           </ul>
         </div>
 
         {/* User Profile Section */}
         <div className="p-4 border-t border-slate-200">
-    {isTrialActive && (
-      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-        <div className="flex items-center space-x-2">
-          <Crown className="w-4 h-4 text-amber-600" />
-          <span className="text-sm font-medium text-amber-900">
-            Trial: {daysLeft} days left
-          </span>
-        </div>
-        <Link href="/trial-unlock">
-          <Button size="sm" className="w-full mt-2 bg-amber-600 hover:bg-amber-700">
-            Upgrade Now
-          </Button>
-        </Link>
-      </div>
-    )}
-    
-    <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
-      <Avatar className="w-8 h-8">
-        <AvatarImage src="/placeholder-avatar.jpg" />
-        <AvatarFallback className="bg-blue-600 text-white text-sm">
-          {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-          {user?.lastName?.[0] || ""}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-900 truncate">
-          {user?.firstName && user?.lastName 
-            ? `${user.firstName} ${user.lastName}`
-            : user?.email || "User"}
-        </p>
-        <p className="text-xs text-slate-500">{user?.email || ""}</p>
-      </div>
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        className="p-2"
-        onClick={onSignOut}
-      >
-        <LogOut className="w-4 h-4" />
-      </Button>
-    </div>
-  </div>
-  
-      </nav>
-
-      {/* Mobile Navigation */}
-      <div className="md:hidden">
-        {/* Mobile Header */}
-        <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-50">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <Rocket className="w-5 h-5 text-white" />
+          {isTrialActive && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Crown className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-900">
+                  Trial: {daysLeft} days left
+                </span>
+              </div>
+              <Link href="/trial-unlock">
+                <Button
+                  size="sm"
+                  className="w-full mt-2 bg-amber-600 hover:bg-amber-700"
+                >
+                  Upgrade Now
+                </Button>
+              </Link>
             </div>
-            <h1 className="text-lg font-bold text-slate-900">AI Lead System</h1>
+          )}
+
+          <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
+            <Avatar className="w-8 h-8">
+              <AvatarImage src="/placeholder-avatar.jpg" />
+              <AvatarFallback className="bg-blue-600 text-white text-sm">
+                {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                {user?.lastName?.[0] || ""}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {user?.firstName && user?.lastName
+                  ? `${user.firstName} ${user.lastName}`
+                  : user?.email || "User"}
+              </p>
+              <p className="text-xs text-slate-500">{user?.email || ""}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-2"
+              onClick={onSignOut}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
-          </Button>
-        </header>
-
-        {/* Mobile Menu Overlay */}
-        {isMobileMenuOpen && (
-          <>
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              onClick={closeMobileMenu}
-            />
-            <div className="fixed top-16 left-0 right-0 bg-white border-b border-slate-200 z-50 max-h-screen overflow-y-auto">
-              {/* Trial Status */}
-              {isTrialActive && (
-                <div className="p-4 mx-4 mt-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <Crown className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-900">
-                      Trial Active
-                    </span>
-                  </div>
-                  <p className="text-xs text-blue-700">
-                    {daysLeft} days remaining
-                  </p>
-                </div>
-              )}
-
-              {/* Navigation Items */}
-              <div className="p-4">
-                <ul className="space-y-2">
-                  {mainNavItems.map((item) => (
-                    <li key={item.path}>
-                      <Link href={item.path}>
-                        <Button
-                          variant={isActive(item.path) ? "default" : "ghost"}
-                          className="w-full justify-start"
-                          onClick={closeMobileMenu}
-                        >
-                          {item.icon}
-                          <span className="ml-3 flex-1 text-left">
-                            {item.label}
-                          </span>
-                          {item.badge && (
-                            <Badge
-                              variant="secondary"
-                              className="ml-auto text-xs"
-                            >
-                              {item.badge}
-                            </Badge>
-                          )}
-                          {item.path === "/super-admin" && (
-                            <Badge
-                              variant="destructive"
-                              className="ml-auto text-xs"
-                            >
-                              Admin
-                            </Badge>
-                          )}
-                        </Button>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* User Profile */}
-              <div className="p-4 border-t border-slate-200">
-                <div className="flex items-center space-x-3 mb-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-blue-100 text-blue-600 text-sm">
-                      DU
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      Demo User
-                    </p>
-                    <p className="text-xs text-slate-500">Admin</p>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full text-sm"
-                    onClick={closeMobileMenu}
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Settings
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full text-sm"
-                    onClick={closeMobileMenu}
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Sign Out
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      </nav>
     </>
   );
 }
