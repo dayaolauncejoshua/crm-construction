@@ -1,7 +1,9 @@
+// client/src/pages/leads.tsx
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClient } from "@/contexts/ClientContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +49,7 @@ import {
 
 export default function Leads() {
   const { user } = useAuth();
+   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -54,22 +57,10 @@ export default function Leads() {
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
-
-  // Fetch clients
-  const { data: clients } = useQuery({
-    queryKey: ["/api/clients", user?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=${user?.id}`);
-      return response.json();
-    },
-    enabled: !!user?.id,
-  });
-
-  // Use first client by default
-  const selectedClientId = clients?.[0]?.id;
+ 
 
   // Listen for WebSocket updates
-  useEffect(() => {
+  useEffect(() => { 
     if (!wsData) return;
 
     console.log("📡 Leads page WebSocket event:", wsData.type);
@@ -86,12 +77,12 @@ export default function Leads() {
 
       // Invalidate leads query to refresh
       queryClient.invalidateQueries({
-        queryKey: ["/api/leads", selectedClientId],
+        queryKey: ["/api/dashboard" , selectedClientId],
       });
 
       // Also invalidate dashboard for conversation data
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard", selectedClientId],
+        queryKey: [`/api/dashboard/${selectedClientId}`],
       });
     }
   }, [wsData, selectedClientId]);
@@ -108,7 +99,7 @@ export default function Leads() {
 
   // Fetch conversations to link leads
   const { data: dashboardData } = useQuery({
-    queryKey: ["/api/dashboard", selectedClientId],
+    queryKey: [`/api/dashboard/${selectedClientId}`],
     enabled: !!selectedClientId,
   });
 

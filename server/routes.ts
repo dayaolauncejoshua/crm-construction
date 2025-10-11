@@ -227,7 +227,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           incomingMessage.from,
           incomingMessage.message,
           incomingMessage.timestamp,
-          incomingMessage.phoneNumberId
         );
       }
 

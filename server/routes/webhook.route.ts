@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import OpenAI from "openai";
 import { phoneService } from "../phone/phone.phone";
-import vslRouter from "./vsl.route";
+import vslRouter from "./vsl.route2";
 const router = Router();
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY2,
