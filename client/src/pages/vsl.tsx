@@ -1,5 +1,14 @@
 // client/src/pages/vsl.tsx
-
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useLocation } from "wouter";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -70,6 +79,7 @@ export default function VSL() {
   const [selectedVSL, setSelectedVSL] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // Fetch clients
   const { data: clients } = useQuery({
@@ -155,11 +165,51 @@ export default function VSL() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading VSLs...</p>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Skeleton className="h-8 w-48 mb-2" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="w-12 h-12 rounded-lg" />
+                      <div>
+                        <Skeleton className="h-5 w-32 mb-2" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    </div>
+                    <Skeleton className="w-8 h-8" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Skeleton className="aspect-video w-full rounded-lg" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                  <Skeleton className="h-20 w-full rounded-lg" />
+                  <div className="flex space-x-2">
+                    <Skeleton className="h-9 flex-1" />
+                    <Skeleton className="h-9 flex-1" />
+                    <Skeleton className="h-9 flex-1" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -349,6 +399,22 @@ export default function VSL() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-6">
+        <Breadcrumb className="mb-6">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>VSL Generator</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         {vsls?.length === 0 ? (
           <div className="text-center py-12">
             <Video className="w-12 h-12 text-slate-400 mx-auto mb-4" />

@@ -10,6 +10,8 @@ import { useClient } from "@/contexts/ClientContext";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useLocation } from "wouter";
+import React from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   LineChart,
   Line,
@@ -86,41 +88,6 @@ export default function Dashboard() {
       | undefined;
   };
 
-  // Handle real-time updates
-  useEffect(() => {
-    if (wsData) {
-      console.log("WebSocket update:", wsData);
-      refetch();
-    }
-  }, [wsData, refetch]);
-
-  // Skeleton Loader
-  if (isLoading && selectedClientId) {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-slate-200 px-6 py-4">
-          <div className="h-8 bg-slate-200 rounded w-64 animate-pulse mb-2"></div>
-          <div className="h-4 bg-slate-200 rounded w-96 animate-pulse"></div>
-        </header>
-
-        <main className="flex-1 overflow-auto p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="p-6">
-                  <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
-                  <div className="h-8 bg-slate-200 rounded w-1/2 mb-2"></div>
-                  <div className="h-3 bg-slate-200 rounded w-1/4"></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <div className="h-96 bg-slate-100 rounded animate-pulse"></div>
-        </main>
-      </div>
-    );
-  }
-
   const kpis = dashboardData?.kpis || {
     totalLeads: 0,
     conversionRate: 0,
@@ -136,12 +103,72 @@ export default function Dashboard() {
   const hasData = kpis.totalLeads > 0 || conversations.length > 0;
 
   // Prepare chart data
-  const leadTrendData = [
-    { name: "Week 1", leads: 12, conversions: 3 },
-    { name: "Week 2", leads: 19, conversions: 5 },
-    { name: "Week 3", leads: 15, conversions: 4 },
-    { name: "Week 4", leads: 25, conversions: 8 },
-  ];
+  const leadTrendData = React.useMemo(() => {
+    if (!leads || leads.length === 0) {
+      return [
+        { name: "Week 1", leads: 0, conversions: 0 },
+        { name: "Week 2", leads: 0, conversions: 0 },
+        { name: "Week 3", leads: 0, conversions: 0 },
+        { name: "Week 4", leads: 0, conversions: 0 },
+      ];
+    }
+
+    // Get last 4 weeks of data
+    const now = new Date();
+    const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+
+    const weeklyData = [
+      {
+        name: "Week 1",
+        leads: 0,
+        conversions: 0,
+        start: new Date(fourWeeksAgo.getTime()),
+        end: new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+      },
+      {
+        name: "Week 2",
+        leads: 0,
+        conversions: 0,
+        start: new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+        end: new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
+      },
+      {
+        name: "Week 3",
+        leads: 0,
+        conversions: 0,
+        start: new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
+        end: new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
+      },
+      {
+        name: "Week 4",
+        leads: 0,
+        conversions: 0,
+        start: new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
+        end: now,
+      },
+    ];
+
+    // Count leads and conversions per week
+    leads.forEach((lead: any) => {
+      const createdAt = new Date(lead.createdAt);
+      const weekIndex = weeklyData.findIndex(
+        (w) => createdAt >= w.start && createdAt < w.end
+      );
+
+      if (weekIndex !== -1) {
+        weeklyData[weekIndex].leads++;
+        if (lead.status === "converted") {
+          weeklyData[weekIndex].conversions++;
+        }
+      }
+    });
+
+    return weeklyData.map(({ name, leads, conversions }) => ({
+      name,
+      leads,
+      conversions,
+    }));
+  }, [leads]);
 
   const temperatureData = [
     {
@@ -161,15 +188,78 @@ export default function Dashboard() {
     },
   ];
 
-  const responseTimeData = [
-    { time: "Mon", avgTime: 2.5 },
-    { time: "Tue", avgTime: 1.8 },
-    { time: "Wed", avgTime: 2.1 },
-    { time: "Thu", avgTime: 1.5 },
-    { time: "Fri", avgTime: 2.0 },
-    { time: "Sat", avgTime: 1.2 },
-    { time: "Sun", avgTime: 1.7 },
-  ];
+  // Response Time Data
+  const responseTimeData = React.useMemo(() => {
+    if (!conversations || conversations.length === 0) {
+      return [
+        { time: "Mon", avgTime: 0 },
+        { time: "Tue", avgTime: 0 },
+        { time: "Wed", avgTime: 0 },
+        { time: "Thu", avgTime: 0 },
+        { time: "Fri", avgTime: 0 },
+        { time: "Sat", avgTime: 0 },
+        { time: "Sun", avgTime: 0 },
+      ];
+    }
+
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const weekData = dayNames.map((day) => ({
+      time: day,
+      avgTime: 0,
+      count: 0,
+    }));
+
+    // Calculate average response time per day
+    conversations.forEach((conv: any) => {
+      if (conv.lead?.responseTimeSeconds) {
+        const createdAt = new Date(conv.createdAt);
+        const dayIndex = createdAt.getDay();
+        weekData[dayIndex].avgTime += conv.lead.responseTimeSeconds / 60; // Convert to minutes
+        weekData[dayIndex].count++;
+      }
+    });
+
+    // Calculate averages
+    return weekData.map((day) => ({
+      time: day.time,
+      avgTime: day.count > 0 ? Number((day.avgTime / day.count).toFixed(1)) : 0,
+    }));
+  }, [conversations]);
+
+    // Handle real-time updates
+  useEffect(() => {
+    if (wsData) {
+      console.log("WebSocket update:", wsData);
+      refetch();
+    }
+  }, [wsData, refetch]);
+
+  // Skeleton Loader
+  if (isLoading && selectedClientId) {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <header className="bg-white border-b border-slate-200 px-6 py-4">
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-4 w-96" />
+      </header>
+
+      <main className="flex-1 overflow-auto p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <Skeleton className="h-4 w-3/4 mb-4" />
+                <Skeleton className="h-8 w-1/2 mb-2" />
+                <Skeleton className="h-3 w-1/4" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Skeleton className="h-96 w-full rounded" />
+      </main>
+    </div>
+  );
+}
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
@@ -277,7 +367,7 @@ export default function Dashboard() {
             </Card>
           </div>
         ) : (
-          <div className="p-4 space-y-6">
+          <div className="p-4 flex flex-col h-full">
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <KPICard
@@ -319,11 +409,11 @@ export default function Dashboard() {
             </div>
 
             {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
               {/* Left Column - 2/3 width */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 flex flex-col h-full space-y-6">
                 {/* Lead Generation Trend */}
-                <Card>
+                <Card className="flex-none">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                       <span>Lead Generation Trend</span>
@@ -495,7 +585,7 @@ export default function Dashboard() {
               </div>
 
               {/* Right Column - 1/3 width */}
-              <div className="space-y-6">
+              <div className="flex flex-col h-full justify-between space-y-6">
                 {/* Needs Attention */}
                 <Card className="border-l-4 border-l-red-500">
                   <CardHeader>
@@ -504,7 +594,7 @@ export default function Dashboard() {
                       Needs Attention
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="max-h-[320px] overflow-y-auto scrollbar-hide">
                     {hotLeads.length > 0 ? (
                       <div className="space-y-3">
                         {hotLeads.slice(0, 5).map((lead: any) => (
@@ -562,55 +652,53 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Recent Activity */}
-                <Card>
+                <Card className="border-l-4 border-l-slate-200">
                   <CardHeader>
                     <CardTitle className="text-base">Recent Activity</CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="max-h-[125px] overflow-y-auto scrollbar-hide">
                     {recentActivity.length > 0 ? (
                       <div className="space-y-3">
-                        {recentActivity
-                          .slice(0, 6)
-                          .map((activity: any, index: number) => (
+                        {recentActivity.map((activity: any, index: number) => (
+                          <div
+                            key={index}
+                            className="flex items-start space-x-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0"
+                          >
                             <div
-                              key={index}
-                              className="flex items-start space-x-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0"
+                              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                activity.type === "booking"
+                                  ? "bg-green-100"
+                                  : activity.type === "vsl"
+                                  ? "bg-orange-100"
+                                  : "bg-blue-100"
+                              }`}
                             >
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                  activity.type === "booking"
-                                    ? "bg-green-100"
-                                    : activity.type === "vsl"
-                                    ? "bg-orange-100"
-                                    : "bg-blue-100"
-                                }`}
-                              >
-                                {activity.type === "booking" && (
-                                  <CheckCircle className="text-green-600 w-4 h-4" />
-                                )}
-                                {activity.type === "vsl" && (
-                                  <Video className="text-orange-600 w-4 h-4" />
-                                )}
-                                {activity.type === "lead" && (
-                                  <UserPlus className="text-blue-600 w-4 h-4" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-slate-900 font-medium truncate">
-                                  {activity.description}
-                                </p>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  {activity.leadName || activity.company} •{" "}
-                                  {new Date(
-                                    activity.createdAt
-                                  ).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
-                              </div>
+                              {activity.type === "booking" && (
+                                <CheckCircle className="text-green-600 w-4 h-4" />
+                              )}
+                              {activity.type === "vsl" && (
+                                <Video className="text-orange-600 w-4 h-4" />
+                              )}
+                              {activity.type === "lead" && (
+                                <UserPlus className="text-blue-600 w-4 h-4" />
+                              )}
                             </div>
-                          ))}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-slate-900 font-medium truncate">
+                                {activity.description}
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {activity.leadName || activity.company} •{" "}
+                                {new Date(
+                                  activity.createdAt
+                                ).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -624,7 +712,7 @@ export default function Dashboard() {
                 </Card>
 
                 {/* System Health */}
-                <Card>
+                <Card className="border-l-4 border-l-slate-200">
                   <CardHeader>
                     <CardTitle className="text-base">System Status</CardTitle>
                   </CardHeader>

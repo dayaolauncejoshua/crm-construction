@@ -11,6 +11,16 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { queryClient } from "@/lib/queryClient";
 import { useEffect } from "react";
 import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDebounce } from "@/hooks/useDebounce";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -49,18 +59,18 @@ import {
 
 export default function Leads() {
   const { user } = useAuth();
-   const { selectedClientId } = useClient();
+  const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearch = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
- 
 
   // Listen for WebSocket updates
-  useEffect(() => { 
+  useEffect(() => {
     if (!wsData) return;
 
     console.log("📡 Leads page WebSocket event:", wsData.type);
@@ -77,7 +87,7 @@ export default function Leads() {
 
       // Invalidate leads query to refresh
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard" , selectedClientId],
+        queryKey: ["/api/dashboard", selectedClientId],
       });
 
       // Also invalidate dashboard for conversation data
@@ -176,16 +186,16 @@ export default function Leads() {
     return parseFloat(lead.manualScore || lead.qualificationScore || "0");
   };
 
+  // Use debouncedSearch in filter instead of searchTerm:
   const filteredLeads = allLeads.filter((lead: any) => {
     const matchesSearch =
-      lead.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      lead.firstName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      lead.lastName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      lead.company?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      lead.email?.toLowerCase().includes(debouncedSearch.toLowerCase());
 
     const matchesStatus =
       statusFilter === "all" || lead.status === statusFilter;
-
     return matchesSearch && matchesStatus;
   });
 
@@ -210,11 +220,75 @@ export default function Leads() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading leads...</p>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header Skeleton */}
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <div className="flex items-center space-x-2 mt-3 sm:mt-0">
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
+        </header>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="flex space-x-4">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-40" />
+          </div>
         </div>
+
+        {/* Content Skeleton */}
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <Skeleton className="h-10 w-full mb-6" /> {/* Tabs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="w-10 h-10 rounded-full" />
+                      <div>
+                        <Skeleton className="h-5 w-32 mb-2" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="w-8 h-8" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Badges */}
+                  <div className="flex gap-2">
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-12" />
+                  </div>
+                  {/* Contact Info */}
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
+                  {/* Lead Info */}
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                  {/* Button */}
+                  <Skeleton className="h-10 w-full" />
+                  {/* Date */}
+                  <Skeleton className="h-3 w-32 mx-auto" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -284,6 +358,23 @@ export default function Leads() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* Breadcrumb Navigation */}
+        <Breadcrumb className="mb-4">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Lead Management</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -473,29 +564,18 @@ export default function Leads() {
                           <Separator />
 
                           {/* Actions */}
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openConversation(lead.id);
-                              }}
-                            >
-                              <MessageCircle className="w-4 h-4 mr-1" />
-                              Chat
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Calendar className="w-4 h-4 mr-1" />
-                              Book
-                            </Button>
-                          </div>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openConversation(lead.id);
+                            }}
+                          >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Open Conversation
+                          </Button>
 
                           {/* Created Date */}
                           <div className="text-xs text-slate-400 text-center">

@@ -31,39 +31,63 @@ export async function qualifyLead(
 ): Promise<LeadQualificationResult> {
   try {
     const conversationText = conversationHistory
-      .map((msg) => `${msg.sender}: ${msg.content}`)
+      .map((msg) => {
+        const sender = msg.sender === "lead" ? "Customer" : "Agent";
+        return `${sender}: ${msg.content}`;
+      })
       .join("\n");
+
+    const messageCount = conversationHistory.length;
+    const customerMessageCount = conversationHistory.filter(
+      (m) => m.sender === "lead"
+    ).length;
 
     const prompt = `You are a lead qualification expert for a construction company.
 
 Analyze this conversation and score from 0.0 to 1.0 based on:
 
-**HIGH SCORE (0.7-1.0) - Hot Lead (REQUIRES MULTIPLE SIGNALS):**
-Must have BUDGET (2M+) **PLUS at least TWO of these:**
-- ⏰ URGENCY: "ASAP", "urgent", "need to start in 2-6 weeks", "time-sensitive"
-- 👔 DECISION MAKER: "owner", "CEO", "CFO", "I'm authorized", "my company", "I decide"
-- 📅 MEETING REQUEST: "meet today/this week", "can we schedule", "site visit", "when can you come"
-- 🏆 COMPETITIVE: "comparing 3 contractors", "need proposal by Friday", "choosing next week"
-- 📋 DETAILED SCOPE: Full project plan, specific requirements, ready to start
+**CONVERSATION CONTEXT:**
+- Total messages: ${messageCount}
+- Customer messages: ${customerMessageCount}
+- Engagement quality matters: Quick detailed responses = higher score
+
+**HIGH SCORE (0.7-1.0) - Hot Lead:**
+Must have **BUDGET (2M+ PHP)** PLUS at least **TWO** of these:
+
+1. ⏰ **URGENCY:** "ASAP", "urgent", "need to start in 2-6 weeks", "time-sensitive", "choosing contractor this week"
+2. 👔 **DECISION MAKER:** "I'm the owner", "CEO", "I decide", "my company", "I'm authorized to sign"
+3. 📅 **MEETING CONFIRMED:** Either requested meeting OR accepted meeting invitation quickly
+4. 🏆 **COMPETITIVE:** "comparing 3 contractors", "need proposal by Friday", "getting quotes"
+5. 📋 **DETAILED SCOPE:** Full project plan, specific requirements, ready to move forward
 
 **MEDIUM SCORE (0.4-0.69) - Warm Lead:**
-- Budget mentioned (even large) but NO urgency
-- Budget + project details (type, location, size)
-- Engaged, asks relevant questions
-- Timeline mentioned but flexible ("in a few months", "planning stage")
-- Interested but shopping around casually
+- Budget mentioned (2M+) but no urgency
+- Budget + project details (type, location, size, timeline)
+- Engaged, provides detailed answers
+- Timeline flexible ("in a few months", "6-12 months", "planning stage")
+- Accepts meeting but not urgent about it
+- Shopping around casually
+
+**SCORING MODIFIERS:**
+- **+0.05-0.10:** Accepts meeting invitation quickly (within 1-2 messages)
+- **+0.05:** Provides all details in first/second response (shows readiness)
+- **-0.05:** Takes many messages to provide basic info (low engagement)
+- **-0.10:** Keeps asking "how much?" without providing project details
 
 **LOW SCORE (0.0-0.39) - Cold Lead:**
-- Only asks "price?", "how much?", "cost?"
+- Only asks "price?", "how much?", "cost?" without context
 - No budget mentioned
-- No project details
-- Just browsing
-- One-word responses
+- No project details after multiple prompts
+- Just browsing, tire-kicker behavior
+- One-word responses repeatedly
 
-SCORING EXAMPLES:
-- "5M budget, office renovation, 300 sqm, La Union" = 0.55 (WARM - has budget & details but no urgency)
-- "5M budget, URGENT, need in 4 weeks, I'm the CEO, meet this week?" = 0.85 (HOT - has budget + urgency + decision maker + meeting)
-- "How much?" = 0.15 (COLD)
+**EXAMPLES:**
+- "3M budget, commercial building, Pago La Union, 6-12 months timeline" = **0.55** (WARM - budget + details but no urgency)
+- "3M budget, commercial building, I'm ready to meet Thursday" = **0.65** (HIGHER WARM - accepted meeting quickly)
+- "5M budget, URGENT, need in 4 weeks, I'm the CEO, when can we meet?" = **0.85** (HOT - budget + urgency + decision maker + meeting)
+- "3M budget, NEED to start next month, comparing 3 contractors, I decide" = **0.80** (HOT - budget + urgency + decision maker + competitive)
+- "How much?" = **0.15** (COLD)
+- "2M budget but no rush, maybe start next year" = **0.45** (WARM but low - budget but very flexible timeline)
 
 Lead Data:
 - Name: ${leadData.firstName} ${leadData.lastName}
@@ -74,18 +98,24 @@ Lead Data:
 CONVERSATION:
 ${conversationText}
 
-CRITICAL: Set needsHumanAttention to true ONLY if score >= 0.7
+**CRITICAL RULES:**
+1. Budget + project details alone = 0.50-0.59 (Warm)
+2. Budget + details + meeting acceptance = 0.60-0.69 (Higher Warm)
+3. Budget + urgency + decision maker = 0.70-0.79 (Hot)
+4. Budget + urgency + decision maker + meeting + competitive = 0.80-1.0 (Very Hot)
+5. Set needsHumanAttention to true ONLY if score >= 0.7
+6. Consider message count - quick detailed responses show higher intent
 
 Respond with JSON only:
 {
-  "score": 0.55,
-  "intent": "medium",
-  "urgency": "later",
+  "score": 0.65,
+  "intent": "high",
+  "urgency": "moderate",
   "budget": "qualified",
-  "timeline": "weeks",
-  "needsHumanAttention": false,  // false because score < 0.7
-  "reasoning": "Has 3-5M budget and project details but no urgency or decision maker identified",
-  "nextAction": "Qualify urgency and decision-making authority"
+  "timeline": "months",
+  "needsHumanAttention": false,
+  "reasoning": "3M budget, full project details (commercial building, location, timeline), accepted meeting invitation quickly. No urgency signals or decision maker confirmation yet.",
+  "nextAction": "Confirm meeting details and qualify decision-making authority during site visit"
 }`;
 
     const response = await openai.chat.completions.create({
@@ -94,7 +124,7 @@ Respond with JSON only:
         {
           role: "system",
           content:
-            "You are a lead qualification expert. Always respond with valid JSON. Be aggressive in scoring - urgency and budget are most important.",
+            "You are a lead qualification expert. Always respond with valid JSON. Score based on multiple buying signals - budget alone is not enough for a hot lead. Meeting acceptance is a strong positive signal.",
         },
         {
           role: "user",
@@ -102,7 +132,7 @@ Respond with JSON only:
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3,
+      temperature: 0.4,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -115,7 +145,7 @@ Respond with JSON only:
       urgency: result.urgency || "unknown",
       budget: result.budget || "unknown",
       timeline: result.timeline || "unknown",
-      needsHumanAttention: finalScore >= 0.7, // Force based on score only
+      needsHumanAttention: finalScore >= 0.7,
       reasoning: result.reasoning || "Lead qualified based on conversation",
       nextAction: result.nextAction || "continue conversation",
     };
@@ -134,108 +164,91 @@ export async function generateAIResponse(
   clientData: any
 ): Promise<string> {
   try {
-    // Build full conversation context
+    // ✅ FIX: Better conversation mapping
     const conversationText = conversationHistory
-      .map(
-        (msg) => `${msg.sender === "lead" ? "Customer" : "You"}: ${msg.content}`
-      )
+      .map((msg) => {
+        const sender =
+          msg.sender === "lead"
+            ? "Customer"
+            : msg.sender === "ai"
+            ? "You (AI)"
+            : "You (Human Agent)";
+        return `${sender}: ${msg.content}`;
+      })
       .join("\n");
+
+    // ✅ Get the last AI message to avoid repetition
+    const lastAIMessage = conversationHistory
+      .filter((msg) => msg.sender === "ai")
+      .slice(-1)[0];
+
+    const lastAIMessageText = lastAIMessage
+      ? `\n\nYOUR LAST MESSAGE WAS: "${lastAIMessage.content}"\n⚠️ DO NOT repeat this information or ask the same questions!`
+      : "";
 
     const prompt = `You are a professional construction project manager for ${
       clientData?.name || "a construction company"
     }. You're chatting on WhatsApp with a potential client.
 
 CRITICAL RULES:
-1. **Read conversation carefully** - Never ask for information they already provided
-2. **Acknowledge specifics** - Reference their budget, project type, location, timeline by name
-3. **Sound human** - Natural, warm, professional business tone (friendly but not overly casual)
-4. **Show expertise** - Demonstrate construction knowledge and experience with similar projects
-5. **Move to action** - Guide toward site visit or meeting
-6. **Be brief** - Max 3-4 sentences for WhatsApp, use line breaks for readability
-7. **Add real value** - Share specific insights about their project type, not generic statements
+1. **Read the ENTIRE conversation** - See what YOU already said and what THEY responded
+2. **Never repeat yourself** - Don't ask questions you already asked
+3. **Acknowledge their answers** - If they answered your question, confirm and move forward
+4. **Be concise** - 2-3 sentences MAX for WhatsApp (use line breaks)
+5. **Professional tone** - Friendly but business-appropriate (minimal emojis for B2B)
+6. **Move forward** - Each message should progress the conversation toward a meeting
 
-YOUR EXPERTISE & EXPERIENCE:
-**Project Types:**
-- Commercial: Office fit-outs, retail spaces, restaurant renovations, shopping centers
-- Residential: Single-family homes, multi-family units, townhouses, apartment complexes
-- Hospitality: Hotels, resorts, bed & breakfasts, event venues
-- Industrial: Warehouses, factories, distribution centers, manufacturing facilities
-- Institutional: Schools, hospitals, government buildings
-
-**Services Offered:**
-- New construction (ground-up projects)
-- Renovations & remodeling
-- Fit-outs & interior buildouts
-- Structural repairs & upgrades
-- Design-build services
-- Project management & consultation
-
-**Project Scale:** Small renovations to large-scale commercial construction
-**Typical Timeline:** 2 weeks (minor work) to 18 months (major construction)
-**Experience:** 10+ years in commercial and residential construction
+YOUR EXPERTISE:
+- 10+ years in commercial & residential construction
+- Experience with projects from ₱2M to ₱50M+
+- Specialties: Commercial buildings, residential developments, fit-outs
+- Serving Central Luzon, Northern Luzon (La Union, Ilocos, Pangasinan)
 
 CONVERSATION SO FAR:
-${conversationText}
+${conversationText}${lastAIMessageText}
 
-RESPONSE STRATEGY BY STAGE:
+RESPONSE STRATEGY:
 
-**First Message (Vague inquiry like "How much?" or "Available?"):**
-- Acknowledge interest warmly
-- Ask about: project type, location, timeline, and rough budget range
-- Example: "Happy to help! To provide an accurate estimate, could you share: 1) What type of project? 2) Project location? 3) Your timeline and budget range?"
+**If they just said "Hello" or vague inquiry:**
+→ Warm greeting + Ask for: project type, location, budget, timeline
 
-**Second Message (They provide some details):**
-- Acknowledge EVERY specific detail they shared (repeat back their project type, location, budget if mentioned)
-- Share relevant experience: "We've completed similar [project type] projects in [their location/region]"
-- Ask 1-2 clarifying questions about scope or priorities
-- Add value: "Based on similar projects of this scale, typical timeline is X weeks/months"
+**If they provided details:**
+→ Acknowledge EVERY specific detail they shared (budget, location, timeline, type)
+→ Show relevant experience: "We've done similar projects in [location]"
+→ Offer site visit with specific days/times
 
-**Third Message (Shows urgency or provides full details):**
-- Recognize their timeline/priority
-- Reference their specific requirements
-- Offer specific next steps: "Let's schedule a site visit this week - I'm available [specific days/times]"
-- Provide confidence: "With your [budget] and [timeline], this is definitely achievable. We've completed [number]+ similar projects on time and within budget"
+**If they confirmed meeting:**
+→ Confirm the day/time they chose
+→ Ask for address or offer to send calendar invite
+→ ONE sentence about what you'll discuss
 
-**Hot Lead Signals (Respond with Urgency):**
-- Budget mentioned (significant amount)
-- Urgency keywords ("ASAP", "need to start soon", "choosing contractor this week")
-- Decision maker identified ("I'm the owner", "I decide", "my company")
-- Meeting request ("Can we meet?", "site visit", "when are you free?")
-→ **Action:** Offer immediate meeting with specific times/dates within 24-48 hours
+**If they're hesitant or shopping around:**
+→ Provide value: mention similar project timelines/outcomes
+→ Soft push toward meeting: "No commitment needed, just want to see the site and give you accurate numbers"
 
-**Warm Lead (Engaged but Not Urgent):**
-- Asking detailed questions about process
-- Comparing options
-- Mentioned timeline but flexible
-→ **Action:** Provide value, show expertise, gently push toward meeting
-
-**Cold Lead (Just Browsing):**
-- Only asked "how much?" without context
-- One-word responses
-- No budget or timeline mentioned
-→ **Action:** Ask qualifying questions warmly, but don't over-invest
-
-DO NOT:
-- Ask for budget/timeline/details if they already provided them
-- Repeat "Let me check that for you" without adding value
-- Give vague answers like "it depends" without ANY guidance
-- Ask the same question twice
-- Sound robotic, overly salesy, or use construction jargon
-- Ignore their location (always acknowledge where their project is)
-- Forget their timeline (if urgent, match their energy)
-- Provide exact pricing without seeing the site (give ranges only)
+HOT LEAD SIGNALS (score 0.7+):
+- Budget 3M+ mentioned
+- Urgency words ("ASAP", "need to start soon", "choosing this week")
+- Decision maker ("I own", "I decide", "my company")
+- Ready to meet ("when can we meet", "I'm free Thursday")
 
 TONE GUIDELINES:
-- Be confident but not arrogant
-- Be helpful but not desperate
-- Be professional but conversational
+- Professional but conversational
+- Confident but not pushy  
+- Use emojis sparingly (only for initial greetings in casual contexts)
+- For B2B/commercial projects (3M+ budget): minimal emojis, more professional
 - Show expertise through specific examples, not buzzwords
+
+CRITICAL: 
+- If they JUST answered your question, don't ask it again!
+- If they CONFIRMED a day/time, don't ask them to choose again!
+- Don't repeat information you already told them!
 
 Current situation: Customer just sent "${
       conversationHistory[conversationHistory.length - 1]?.content
     }"
 
-Respond as a trusted construction expert who builds relationships and delivers quality projects on time and on budget:`;
+Respond naturally and move the conversation forward:`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -243,15 +256,15 @@ Respond as a trusted construction expert who builds relationships and delivers q
         {
           role: "system",
           content:
-            "You are an experienced construction project manager. Be professional, warm, contextual, and action-oriented. Build trust through expertise and attentiveness. Keep responses concise for WhatsApp (3-4 sentences max, use line breaks for readability). Always acknowledge the customer's specific details.",
+            "You are an experienced construction project manager. Read the full conversation carefully. Never repeat yourself. Acknowledge what the customer says. Keep responses ultra-concise for WhatsApp (2-3 sentences). Move toward scheduling meetings.",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 300,
+      temperature: 0.5, // ✅ REDUCED from 0.7
+      max_tokens: 150, // ✅ REDUCED from 300
     });
 
     return (

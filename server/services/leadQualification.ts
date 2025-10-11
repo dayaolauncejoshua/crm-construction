@@ -76,25 +76,29 @@ export class LeadQualificationService {
   async queueIncomingMessage(
     from: string,
     message: string,
-    timestamp: number
+    timestamp: number,
+    phoneNumberId?: string
   ): Promise<void> {
     await messageQueue.enqueueMessage(
       from,
       message,
       timestamp,
-      this.handleIncomingMessage.bind(this)
+      this.handleIncomingMessage.bind(this),
+      phoneNumberId,
     );
   }
 
   private async handleIncomingMessage(
     from: string,
     message: string,
-    timestamp: number
+    timestamp: number,
+    phoneNumberId?: string
   ): Promise<void> {
     try {
       console.log("=== INCOMING MESSAGE ===");
       console.log("From:", from);
       console.log("Message:", message);
+      console.log("Phone Number ID:", phoneNumberId);
 
       // Step 1: Find or create lead
       let lead = await storage.getLeadByPhone(from);
@@ -105,21 +109,23 @@ export class LeadQualificationService {
         const allUsers = await storage.getAllUsersForAdmin();
         let targetClient = null;
 
-        console.log("🔍 Looking for client with WhatsApp number configured...");
+        // Match by Phone Number ID
+        if (phoneNumberId){
+          console.log(`🔍 Looking for client with Phone number ID: ${phoneNumberId}`);
 
-        // Loop through regular users to and their clients
+          // Loop through regular users to and their clients
         for (const user of allUsers) {
           if (user.role === "super_admin") continue;
 
           const userClients = await storage.getClients(user.id);
 
-          // Find client that owns this WhatsApp number
+          // Find active client with matching WhatsApp Phone Number ID
           const matchedClient = userClients.find(
             (c) =>
-              c.isActive && c.whatsappNumber && c.whatsappNumber.trim() !== ""
+              c.isActive && c.whatsappPhoneNumberId === phoneNumberId
           );
 
-          if (matchedClient) {
+           if (matchedClient) {
             targetClient = matchedClient;
             console.log(
               `✅ Found client with WhatsApp number: ${matchedClient.name} (${matchedClient.whatsappNumber})`
@@ -127,7 +133,8 @@ export class LeadQualificationService {
             break;
           }
         }
-
+        }
+         
         // Fallback: use first active client
         if (!targetClient) {
           console.log(
@@ -138,11 +145,13 @@ export class LeadQualificationService {
             if (user.role === "super_admin") continue;
 
             const userClients = await storage.getClients(user.id);
-            const firstActive = userClients.find((c) => c.isActive);
+            const firstWithWhatsApp = userClients.find(
+              (c) => c.isActive && (c.whatsappPhoneNumberId || c.whatsappNumber)
+            );
 
-            if (firstActive) {
-              targetClient = firstActive;
-              console.log(`✅ Using fallback client: ${firstActive.name}`);
+            if (firstWithWhatsApp) {
+              targetClient = firstWithWhatsApp;
+              console.log(`✅ Using fallback client: ${firstWithWhatsApp.name}`);
               break;
             }
           }
@@ -157,8 +166,8 @@ export class LeadQualificationService {
 
         lead = await storage.createLead({
           clientId: targetClient.id,
-          firstName: "WhatsApp",
-          lastName: "Lead",
+          firstName: from,
+          lastName: "",
           email: `whatsapp_${from.replace(/\+/g, "")}@temp.com`,
           phone: from,
           company: "Unknown",

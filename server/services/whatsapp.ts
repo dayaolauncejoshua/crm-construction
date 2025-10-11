@@ -128,6 +128,7 @@ export class WhatsAppService {
     from: string;
     message: string;
     timestamp: number;
+    phoneNumberId: string;
    
   } | null {
     try {
@@ -142,7 +143,7 @@ export class WhatsAppService {
         from: messages.from,
         message: messages.text?.body || "",
         timestamp: parseInt(messages.timestamp),
-       
+        phoneNumberId: value.metadata.phone_number_id,
       };
     } catch (error) {
       console.error("Error parsing WhatsApp webhook:", error);

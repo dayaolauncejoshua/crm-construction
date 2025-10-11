@@ -122,6 +122,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // ========================= LEADS ROUTE ======================================
+
   // Landing page lead capture
   app.post("/api/leads", async (req, res) => {
     try {
@@ -133,9 +135,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const auditResults = await generateAudit(auditType, auditInputs);
 
+      const firstName =
+        req.body.firstName ||
+        auditInputs.contactName?.split(" ")[0] ||
+        "Unknown";
+      const lastName =
+        req.body.lastName ||
+        auditInputs.contactName?.split(" ").slice(1).join(" ") ||
+        "";
+
       // Create lead with audit results
       const lead = await storage.createLead({
         ...leadData,
+        firstName,
+        lastName,
         auditResults: {
           type: auditType,
           ...auditResults,
@@ -217,6 +230,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Lead management routes
+  app.get("/api/leads/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const leads = await storage.getLeads(clientId, 100);
+      res.json(leads);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      res.status(500).json({ message: "Failed to fetch leads" });
+    }
+  });
+
+  // Mark lead as viewed
+  app.post("/api/leads/:leadId/view", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+
+      // Update lead with viewedAt timestamp
+      const lead = await storage.updateLead(leadId, {
+        viewedAt: new Date(),
+      });
+
+      res.json({ success: true, lead });
+    } catch (error) {
+      console.error("Error marking lead as viewed:", error);
+      res.status(500).json({ message: "Failed to mark lead as viewed" });
+    }
+  });
+
+  app.patch("/api/leads/:leadId", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+      const updateData = req.body;
+
+      const lead = await storage.updateLead(leadId, {
+        ...updateData,
+        updatedAt: new Date(),
+      });
+
+      res.json(lead);
+    } catch (error) {
+      console.error("Error updating lead:", error);
+      res.status(500).json({ message: "Failed to update lead" });
+    }
+  });
+
+  app.delete("/api/leads/:leadId", async (req, res) => {
+    try {
+      const { leadId } = req.params;
+      await storage.deleteLead(leadId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting lead:", error);
+      res.status(500).json({ message: "Failed to delete lead" });
+    }
+  });
+
+  // ============================ WHATSAPP WEBHOOK ROUTES  ==================================
+
   // WhatsApp webhook
   app.post("/api/webhooks/whatsapp", async (req, res) => {
     try {
@@ -227,6 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           incomingMessage.from,
           incomingMessage.message,
           incomingMessage.timestamp,
+          incomingMessage.phoneNumberId
         );
       }
 
@@ -260,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ============= CLIENT ROUTES WITH AUTH =============
+  // ======================= CLIENT ROUTES WITH AUTH ========================
 
   // Get clients - users see their own, super admin sees all
   app.get("/api/clients", requireAuth, async (req, res) => {
@@ -326,8 +409,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Dashboard data
+  // Update client
+  app.patch("/api/clients/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
 
+      // Get existing client to verify ownership
+      const existingClient = await storage.getClient(clientId);
+      if (!existingClient) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+
+      // Verify ownership (super admin can view but NOT edit)
+      if (requestUser.role === "super_admin") {
+        return res.status(403).json({
+          message:
+            "Super admins cannot edit clients. This is read-only access.",
+        });
+      }
+
+      if (existingClient.userId !== requestUser.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Update client
+      const updatedClient = await storage.updateClient(clientId, req.body);
+
+      console.log("✅ Client updated:", updatedClient.name);
+
+      res.json(updatedClient);
+    } catch (error) {
+      console.error("Error updating client:", error);
+      res.status(500).json({ message: "Failed to update client" });
+    }
+  });
+
+  // ============================ DASHBOARD ROUTES  ==============================
+
+  // Dashboard data
   app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
     try {
       const { clientId } = req.params;
@@ -368,6 +488,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // =========================== CONVERSATION ROUTES  =====================================
 
   // Conversations
   app.get("/api/conversations/:clientId", requireAuth, async (req, res) => {
@@ -522,6 +644,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ==================== QUICKREPLIES/TEMPLATES ROUTES  ==========================
+
   // Quick Reply Templates Routes
   app.get("/api/quick-replies/:clientId", async (req, res) => {
     try {
@@ -577,6 +701,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ======================== VIDEO SALES LETTER ROUTES  =====================================
+
   // VSL Management
   app.get("/api/vsls/:clientId", async (req, res) => {
     try {
@@ -625,6 +751,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create VSL" });
     }
   });
+
+  // ======================= BOOKINGS ROUTES  ==============================================
 
   // Bookings
   app.post("/api/bookings", async (req, res) => {
@@ -1610,72 +1738,7 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  // Lead management routes
-  app.get("/api/leads/:clientId", requireAuth, async (req, res) => {
-    try {
-      const { clientId } = req.params;
-      const requestUser = req.user!;
-
-      // Verify ownership
-      if (requestUser.role !== "super_admin") {
-        const client = await storage.getClient(clientId);
-        if (!client || client.userId !== requestUser.id) {
-          return res.status(403).json({ message: "Access denied" });
-        }
-      }
-
-      const leads = await storage.getLeads(clientId, 100);
-      res.json(leads);
-    } catch (error) {
-      console.error("Error fetching leads:", error);
-      res.status(500).json({ message: "Failed to fetch leads" });
-    }
-  });
-
-  // Mark lead as viewed
-  app.post("/api/leads/:leadId/view", async (req, res) => {
-    try {
-      const { leadId } = req.params;
-
-      // Update lead with viewedAt timestamp
-      const lead = await storage.updateLead(leadId, {
-        viewedAt: new Date(),
-      });
-
-      res.json({ success: true, lead });
-    } catch (error) {
-      console.error("Error marking lead as viewed:", error);
-      res.status(500).json({ message: "Failed to mark lead as viewed" });
-    }
-  });
-
-  app.patch("/api/leads/:leadId", async (req, res) => {
-    try {
-      const { leadId } = req.params;
-      const updateData = req.body;
-
-      const lead = await storage.updateLead(leadId, {
-        ...updateData,
-        updatedAt: new Date(),
-      });
-
-      res.json(lead);
-    } catch (error) {
-      console.error("Error updating lead:", error);
-      res.status(500).json({ message: "Failed to update lead" });
-    }
-  });
-
-  app.delete("/api/leads/:leadId", async (req, res) => {
-    try {
-      const { leadId } = req.params;
-      await storage.deleteLead(leadId);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting lead:", error);
-      res.status(500).json({ message: "Failed to delete lead" });
-    }
-  });
+  // =========================== USER MANAGEMENT ROUTES  ====================================
 
   // User trial management
   app.get("/api/user/trial-status", async (req, res) => {
@@ -1708,6 +1771,8 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
       res.status(500).json({ message: "Failed to activate trial" });
     }
   });
+
+  // ============================== SUPER ADMIN ROUTES  ===============================
 
   // Super admin dashboard
   app.get("/api/super-admin/dashboard", requireSuperAdmin, async (req, res) => {
@@ -1811,8 +1876,12 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
+  // ================================= ADVANCED ROUTES  ===============================
+
   // Mount advanced routes
   app.use("/api", advancedRoutes);
+
+  // ========================= SYSTEM HEALTH ROUTES  =============================
 
   // System health endpoint
   app.get("/api/health", async (req, res) => {

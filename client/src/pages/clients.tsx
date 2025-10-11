@@ -7,6 +7,17 @@ import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useClient } from "@/contexts/ClientContext";
+import { useLocation } from "wouter";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 import {
   Select,
   SelectContent,
@@ -46,6 +57,8 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 const createClientSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   industry: z.string().min(1, "Industry is required"),
@@ -69,6 +82,19 @@ export default function Clients() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { setSelectedClientId } = useClient();
+  const [, setLocation] = useLocation();
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
+  // Setup form state
+  const [setupName, setSetupName] = useState("");
+  const [setupIndustry, setSetupIndustry] = useState("");
+  const [setupWebsite, setSetupWebsite] = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
+  const [setupPhone, setSetupPhone] = useState("");
+  const [setupWhatsappNumber, setSetupWhatsappNumber] = useState("");
+  const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] =
+    useState("");
 
   // Fetch clients based on user role
   // Fetch clients based on user role
@@ -151,23 +177,63 @@ export default function Clients() {
       return response.json();
     },
     onSuccess: () => {
-  // Invalidate with the full query key to ensure refetch
-  queryClient.invalidateQueries({ 
-    queryKey: ["/api/clients", user?.id, user?.role] 
+      // Invalidate with the full query key to ensure refetch
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", user?.id, user?.role],
+      });
+
+      // Also invalidate App.tsx client query
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients"],
+      });
+
+      setShowCreateDialog(false);
+      form.reset();
+      toast({
+        title: "Success!",
+        description: "Client created successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
-  
-  // Also invalidate App.tsx client query
-  queryClient.invalidateQueries({ 
-    queryKey: ["/api/clients"] 
-  });
-  
-  setShowCreateDialog(false);
-  form.reset();
-  toast({
-    title: "Success!",
-    description: "Client created successfully.",
-  });
-},
+
+  // Update client mutation
+  const updateClientMutation = useMutation({
+    mutationFn: async (data: {
+      id: string;
+      updates: Partial<CreateClientData>;
+    }) => {
+      const response = await apiRequest(
+        "PATCH",
+        `/api/clients/${data.id}`,
+        data.updates
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update client");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", user?.id, user?.role],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients"],
+      });
+      setShowSetupDialog(false);
+      setSelectedClient(null);
+      toast({
+        title: "Success!",
+        description: "Client settings updated successfully.",
+      });
+    },
     onError: (error: Error) => {
       toast({
         title: "Error",
@@ -181,20 +247,115 @@ export default function Clients() {
     createClientMutation.mutate(data);
   };
 
-  // Show loading state
+  const handleSaveSetup = () => {
+    if (!selectedClient) return;
+
+    updateClientMutation.mutate({
+      id: selectedClient.id,
+      updates: {
+        name: setupName,
+        industry: setupIndustry,
+        website: setupWebsite || "",
+        email: setupEmail || "",
+        phone: setupPhone || "",
+        whatsappNumber: setupWhatsappNumber || "",
+        // Note: whatsappPhoneNumberId needs to be added to the schema type
+      },
+    });
+  };
+
+  // Replace loading spinner:
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading clients...</p>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Skeleton className="h-8 w-64 mb-2" />
+              <Skeleton className="h-4 w-96" />
+            </div>
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Skeleton className="w-12 h-12 rounded-lg" />
+                      <div>
+                        <Skeleton className="h-5 w-32 mb-2" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    </div>
+                    <Skeleton className="w-8 h-8" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                  <Skeleton className="h-px w-full" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                  <Skeleton className="h-px w-full" />
+                  <div className="flex space-x-2">
+                    <Skeleton className="h-9 flex-1" />
+                    <Skeleton className="h-9 flex-1" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
 
   // Super admin cannot create clients
   const canCreateClient = user?.role !== "super_admin";
+
+  // ✅ ADD THIS: Fetch real stats for each client
+  const { data: clientStats } = useQuery({
+    queryKey: ["/api/clients/stats", user?.id],
+    queryFn: async () => {
+      if (!clients) return {};
+
+      // Fetch stats for all clients
+      const statsPromises = clients.map(async (client: any) => {
+        const response = await fetch(`/api/dashboard/${client.id}`, {
+          credentials: "include",
+        });
+        if (!response.ok) return { id: client.id, leads: 0, active: 0, hot: 0 };
+
+        const data = await response.json();
+        return {
+          id: client.id,
+          leads: data.kpis?.totalLeads || 0,
+          active:
+            data.conversations?.filter(
+              (c: any) => c.isAiHandled || !c.humanTakeoverAt
+            ).length || 0,
+          hot: data.hotLeads?.length || 0,
+        };
+      });
+
+      const stats = await Promise.all(statsPromises);
+      return stats.reduce((acc: any, stat: any) => {
+        acc[stat.id] = stat;
+        return acc;
+      }, {});
+    },
+    enabled: !!clients && clients.length > 0,
+  });
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -387,6 +548,23 @@ export default function Clients() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-6">
+        {/* Breadcrumb Navigation */}
+        <Breadcrumb className="mb-6">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Client Management</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         {!clients || clients.length === 0 ? (
           <div className="text-center py-12">
             <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
@@ -470,19 +648,19 @@ export default function Clients() {
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
                       <div className="text-lg font-semibold text-slate-900">
-                        0
+                        {clientStats?.[client.id]?.leads || 0}
                       </div>
                       <div className="text-xs text-slate-500">Leads</div>
                     </div>
                     <div>
                       <div className="text-lg font-semibold text-slate-900">
-                        0
+                        {clientStats?.[client.id]?.active || 0}
                       </div>
                       <div className="text-xs text-slate-500">Active</div>
                     </div>
                     <div>
                       <div className="text-lg font-semibold text-slate-900">
-                        0
+                        {clientStats?.[client.id]?.hot || 0}
                       </div>
                       <div className="text-xs text-slate-500">Hot</div>
                     </div>
@@ -492,12 +670,39 @@ export default function Clients() {
 
                   {/* Actions */}
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        // Set this client as active
+                        setSelectedClientId(client.id);
+
+                        setLocation("/dashboard");
+                      }}
+                    >
                       <Eye className="w-4 h-4 mr-1" />
                       View
                     </Button>
                     {canCreateClient && (
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedClient(client);
+                          setSetupName(client.name || "");
+                          setSetupIndustry(client.industry || "");
+                          setSetupWebsite(client.website || "");
+                          setSetupEmail(client.email || "");
+                          setSetupPhone(client.phone || "");
+                          setSetupWhatsappNumber(client.whatsappNumber || "");
+                          setSetupWhatsappPhoneNumberId(
+                            client.whatsappPhoneNumberId || ""
+                          );
+                          setShowSetupDialog(true);
+                        }}
+                      >
                         <Settings className="w-4 h-4 mr-1" />
                         Setup
                       </Button>
@@ -506,6 +711,239 @@ export default function Clients() {
                 </CardContent>
               </Card>
             ))}
+
+            {/* Setup Dialog */}
+            <Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
+              <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Configure {selectedClient?.name}</DialogTitle>
+                </DialogHeader>
+
+                <Tabs defaultValue="details" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="details">Details</TabsTrigger>
+                    <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+                    <TabsTrigger value="ai">AI Settings</TabsTrigger>
+                  </TabsList>
+
+                  {/* Details Tab */}
+                  <TabsContent value="details" className="space-y-4 mt-4">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium">
+                          Company Name
+                        </label>
+                        <Input
+                          value={setupName}
+                          onChange={(e) => setSetupName(e.target.value)}
+                          placeholder="Enter company name"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Industry</label>
+                        <Select
+                          value={setupIndustry}
+                          onValueChange={setSetupIndustry}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select industry" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="construction">
+                              Construction
+                            </SelectItem>
+                            <SelectItem value="agency">
+                              Marketing Agency
+                            </SelectItem>
+                            <SelectItem value="medspa">Medical Spa</SelectItem>
+                            <SelectItem value="realestate">
+                              Real Estate
+                            </SelectItem>
+                            <SelectItem value="automotive">
+                              Automotive
+                            </SelectItem>
+                            <SelectItem value="finance">Finance</SelectItem>
+                            <SelectItem value="healthcare">
+                              Healthcare
+                            </SelectItem>
+                            <SelectItem value="legal">Legal</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Website</label>
+                        <Input
+                          value={setupWebsite}
+                          onChange={(e) => setSetupWebsite(e.target.value)}
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Email</label>
+                        <Input
+                          value={setupEmail}
+                          onChange={(e) => setSetupEmail(e.target.value)}
+                          placeholder="contact@company.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Phone</label>
+                        <Input
+                          value={setupPhone}
+                          onChange={(e) => setSetupPhone(e.target.value)}
+                          placeholder="+1 (555) 123-4567"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* WhatsApp Tab */}
+                  <TabsContent value="whatsapp" className="space-y-4 mt-4">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium">
+                          WhatsApp Business Number
+                        </label>
+                        <Input
+                          value={setupWhatsappNumber}
+                          onChange={(e) =>
+                            setSetupWhatsappNumber(e.target.value)
+                          }
+                          placeholder="+1 (555) 123-4567"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Your verified WhatsApp Business number
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">
+                          WhatsApp Phone Number ID
+                        </label>
+                        <Input
+                          value={setupWhatsappPhoneNumberId}
+                          onChange={(e) =>
+                            setSetupWhatsappPhoneNumberId(e.target.value)
+                          }
+                          placeholder="808896282312368"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          From Meta Business Suite → WhatsApp → API Setup
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-900">
+                          💡 <strong>How to find your Phone Number ID:</strong>
+                        </p>
+                        <ol className="text-xs text-blue-800 mt-2 ml-4 list-decimal space-y-1">
+                          <li>Go to Meta Business Suite</li>
+                          <li>Select your WhatsApp Business Account</li>
+                          <li>Go to API Setup</li>
+                          <li>Copy the Phone Number ID</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* AI Settings Tab */}
+                  <TabsContent value="ai" className="space-y-4 mt-4">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium">
+                          AI Response Tone
+                        </label>
+                        <Select defaultValue="professional">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="professional">
+                              Professional
+                            </SelectItem>
+                            <SelectItem value="casual">
+                              Casual & Friendly
+                            </SelectItem>
+                            <SelectItem value="formal">Formal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">
+                          Auto-Response Delay
+                        </label>
+                        <Select defaultValue="instant">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="instant">
+                              Instant (0s)
+                            </SelectItem>
+                            <SelectItem value="natural">
+                              Natural (5-10s)
+                            </SelectItem>
+                            <SelectItem value="slow">Slow (15-30s)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Simulate human response timing
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">
+                          Qualification Threshold
+                        </label>
+                        <Select defaultValue="0.7">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0.5">
+                              Low (0.5) - More human takeovers
+                            </SelectItem>
+                            <SelectItem value="0.7">
+                              Medium (0.7) - Balanced
+                            </SelectItem>
+                            <SelectItem value="0.85">
+                              High (0.85) - Fewer takeovers
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-slate-500 mt-1">
+                          When should AI escalate to human?
+                        </p>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                {/* Footer Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowSetupDialog(false);
+                      setSelectedClient(null);
+                    }}
+                    disabled={updateClientMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveSetup}
+                    disabled={updateClientMutation.isPending}
+                  >
+                    {updateClientMutation.isPending
+                      ? "Saving..."
+                      : "Save Changes"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </main>

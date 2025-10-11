@@ -29,6 +29,7 @@ import SOPs from "@/pages/sops";
 import NotFound from "@/pages/not-found";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();

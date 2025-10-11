@@ -8,6 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useClient } from "@/contexts/ClientContext";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +45,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { queryClient } from "@/lib/queryClient";
 import { useEffect } from "react";
 import { format } from "date-fns";
-
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -55,8 +64,6 @@ import {
   Edit3,
   RefreshCw,
 } from "lucide-react";
-
-
 
 export default function CalendarPage() {
   const [, setLocation] = useLocation();
@@ -82,27 +89,50 @@ export default function CalendarPage() {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Fetch clients
-  const { data: clients } = useQuery({
-    queryKey: ["/api/clients", user?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=${user?.id}`);
-      return response.json();
-    },
-    enabled: !!user?.id,
-  });
+  const { selectedClientId } = useClient();
 
-  const selectedClientId = clients?.[0]?.id;
-
-  // Fetch bookings
-  const { data: bookings = [], isLoading } = useQuery({
+  // Fetch bookings - context provides the correct client
+  const {
+    data: bookings = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["/api/bookings", selectedClientId],
     queryFn: async () => {
-      const response = await fetch(`/api/bookings/${selectedClientId}`);
+      if (!selectedClientId) return [];
+
+      const response = await fetch(`/api/bookings/${selectedClientId}`, {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch bookings");
+      }
+
       return response.json();
     },
     enabled: !!selectedClientId,
   });
+
+  // Log when bookings change
+  useEffect(() => {
+    console.log("📊 Bookings state updated:", bookings.length, "bookings");
+    if (bookings.length > 0) {
+      console.log("First booking:", bookings[0]);
+    }
+  }, [bookings]);
+
+  // Log errors
+  useEffect(() => {
+    if (error) {
+      console.error("❌ Query error:", error);
+    }
+  }, [error]);
+
+  // Log loading state
+  useEffect(() => {
+    console.log("⏳ Loading state:", isLoading);
+  }, [isLoading]);
 
   // Reschedule mutation
   const rescheduleMutation = useMutation({
@@ -600,13 +630,45 @@ export default function CalendarPage() {
     );
   };
 
+  // Replace loading spinner:
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading calendar...</p>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </header>
+
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          {/* KPI Cards Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-4 rounded" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16 mb-2" />
+                  <Skeleton className="h-3 w-32" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Tabs Skeleton */}
+          <Skeleton className="h-10 w-full mb-4" />
+
+          {/* Calendar Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-[600px] w-full" />
+            </CardContent>
+          </Card>
+        </main>
       </div>
     );
   }
@@ -634,6 +696,23 @@ export default function CalendarPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* Breadcrumb Navigation */}
+        <Breadcrumb className="mb-4">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Calendar & Bookings</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>

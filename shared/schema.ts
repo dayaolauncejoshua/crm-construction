@@ -113,6 +113,7 @@ export const clients = pgTable("clients", {
   settings: jsonb("settings").default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  whatsappPhoneNumberId: text("whatsapp_phone_number_id"), // New field for WhatsApp Business API
 });
 
 // Leads table
@@ -149,6 +150,8 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   viewedAt: timestamp("viewed_at"),
+  callID: varchar("call_id"),
+
 });
 
 // Lead activity log table

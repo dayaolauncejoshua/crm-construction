@@ -16,6 +16,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Slider } from "@/components/ui/slider";
 import { useClient } from "@/contexts/ClientContext";
 import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -766,6 +774,24 @@ export default function Conversations() {
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
           {/* Header */}
           <div className="p-3 border-b border-slate-200 flex-shrink-0">
+            <Breadcrumb className="mb-3">
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink
+                    onClick={() => (window.location.href = "/dashboard")}
+                    className="cursor-pointer"
+                  >
+                    Dashboard
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage>
+                    Conversations
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-lg font-semibold text-slate-900">
                 Conversations

@@ -4,6 +4,8 @@
 @tailwind components;
 @tailwind utilities;
 
+
+
 :root {
   --background: hsl(0, 0%, 100%);
   --foreground: hsl(222.2, 84%, 4.9%);
@@ -35,7 +37,7 @@
   --chart-3: hsl(43, 96%, 56%);
   --chart-4: hsl(147, 78%, 42%);
   --chart-5: hsl(341, 75%, 51%);
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: 0.5rem;
@@ -76,14 +78,19 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
-  
+
   /* Ensure touch targets are large enough on mobile */
-  button, input, select, textarea {
+  button,
+  input,
+  select,
+  textarea {
     min-height: 44px;
   }
-  
+
   @media (max-width: 768px) {
-    input, select, textarea {
+    input,
+    select,
+    textarea {
       font-size: 16px; /* Prevents zoom on iOS */
     }
   }
@@ -95,55 +102,55 @@
   .mobile-menu-open {
     overflow: hidden;
   }
-  
+
   /* Mobile table responsiveness */
   .table-responsive {
     overflow-x: auto;
     white-space: nowrap;
   }
-  
+
   /* Mobile form adjustments */
   .form-mobile {
     @apply p-4;
   }
-  
+
   /* Mobile card layouts */
   .card-mobile {
     @apply m-2 p-4;
   }
-  
+
   /* Mobile tab adjustments */
   .tabs-mobile {
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  
+
   .tabs-mobile::-webkit-scrollbar {
     display: none;
   }
-  
+
   /* Ensure proper touch targets on mobile */
   @media (max-width: 768px) {
     .touch-target {
       min-height: 44px;
       min-width: 44px;
     }
-    
+
     /* Improve button spacing on mobile */
     .button-group > * {
       @apply mb-2 mr-0;
     }
-    
+
     .button-group {
       @apply flex-col space-x-0 space-y-2;
     }
-    
+
     /* Better mobile padding */
     .mobile-padding {
       @apply px-4 py-3;
     }
-    
+
     /* Stack elements vertically on mobile */
     .mobile-stack {
       @apply flex-col space-x-0 space-y-3;
@@ -198,4 +205,14 @@
 
 .border-success\/20 {
   border-color: hsl(159, 92%, 37%, 0.2);
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
 }
