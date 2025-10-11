@@ -6,6 +6,67 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY2,
 });
 
+// export async function generateVSLScript(
+//   niche: string,
+//   data: {
+//     targetAudience: string;
+//     painPoints: string;
+//     solution: string;
+//     proofElements: string;
+//   }
+// ): Promise<string> {
+//   const prompt = `Create a compelling Video Sales Letter (VSL) script for a ${niche} business.
+
+// TARGET AUDIENCE: ${data.targetAudience}
+// PAIN POINTS: ${data.painPoints}
+// SOLUTION: ${data.solution}
+// PROOF: ${data.proofElements}
+
+// Create a 2-3 minute VSL script that follows this structure:
+
+// 1. HOOK (15 seconds): Start with a powerful question or statement that grabs attention
+// 2. PROBLEM AGITATION (30 seconds): Amplify the pain points and consequences
+// 3. SOLUTION INTRODUCTION (45 seconds): Present the solution and its unique benefits
+// 4. PROOF & CREDIBILITY (30 seconds): Share results, testimonials, or case studies
+// 5. CALL TO ACTION (20 seconds): Clear next step with urgency
+
+// Requirements:
+// - Conversational, engaging tone
+// - Use "you" and "your" to connect with audience
+// - Include specific numbers and results
+// - Create urgency without being pushy
+// - End with a clear, compelling call to action
+
+// Write the complete script now:`;
+
+//   try {
+//     const completion = await openai.chat.completions.create({
+//       model: "gpt-4",
+//       messages: [
+//         {
+//           role: "system",
+//           content:
+//             "You are an expert copywriter specializing in video sales letters that convert. Write persuasive, benefit-driven scripts.",
+//         },
+//         {
+//           role: "user",
+//           content: prompt,
+//         },
+//       ],
+//       temperature: 0.8,
+//       max_tokens: 2000,
+//     });
+
+//     const script = completion.choices[0]?.message?.content || "";
+
+//     console.log("✅ VSL script generated:", script.substring(0, 100) + "...");
+
+//     return script;
+//   } catch (error) {
+//     console.error("❌ Error generating VSL script:", error);
+//     throw new Error("Failed to generate VSL script");
+//   }
+// }
 export interface LeadQualificationResult {
   score: number;
   intent: string;
@@ -351,43 +412,105 @@ export async function generateAudit(
 
 export async function generateVSLScript(
   niche: string,
-  clientData: any
+  data: {
+    targetAudience: string;
+    painPoints: string;
+    solution: string;
+    proofElements: string;
+  }
 ): Promise<string> {
-  try {
-    const prompt = `
-    Create a 180-second Video Sales Letter script for ${clientData.name}, a ${niche} business.
-    
-    Structure:
-    - Hook (0-15s): Attention-grabbing opener about their pain point
-    - Problem (15-45s): Agitate the problem with statistics
-    - Solution (45-90s): Introduce AI lead system with <2 minute response time
-    - Proof (90-150s): Case study with specific numbers
-    - CTA (150-180s): Clear call to action for free audit
-    
-    Make it compelling and specific to ${niche} industry challenges.
-    `;
+  const prompt = `Create a compelling Video Sales Letter (VSL) script for a ${niche} business.
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+TARGET AUDIENCE: ${data.targetAudience}
+PAIN POINTS: ${data.painPoints}
+SOLUTION: ${data.solution}
+PROOF: ${data.proofElements}
+
+Create a 2-3 minute VSL script that follows this structure:
+
+1. HOOK (15 seconds): Start with a powerful question or statement that grabs attention
+2. PROBLEM AGITATION (30 seconds): Amplify the pain points and consequences
+3. SOLUTION INTRODUCTION (45 seconds): Present the solution and its unique benefits
+4. PROOF & CREDIBILITY (30 seconds): Share results, testimonials, or case studies
+5. CALL TO ACTION (20 seconds): Clear next step with urgency
+
+Requirements:
+- Conversational, engaging tone
+- Use "you" and "your" to connect with audience
+- Include specific numbers and results
+- Create urgency without being pushy
+- End with a clear, compelling call to action
+
+Write the complete script now:`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
       messages: [
         {
           role: "system",
           content:
-            "You are a VSL script expert. Create compelling, benefit-focused scripts that convert.",
+            "You are an expert copywriter specializing in video sales letters that convert. Write persuasive, benefit-driven scripts.",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
+      temperature: 0.8,
+      max_tokens: 2000,
     });
 
-    return response.choices[0].message.content || "Script generation failed";
+    const script = completion.choices[0]?.message?.content || "";
+
+    console.log("✅ VSL script generated:", script.substring(0, 100) + "...");
+
+    return script;
   } catch (error) {
-    console.error("Error generating VSL script:", error);
-    throw new Error(
-      "Failed to generate VSL script: " +
-        (error instanceof Error ? error.message : "Unknown error")
-    );
+    console.error("❌ Error generating VSL script:", error);
+    throw new Error("Failed to generate VSL script");
   }
 }
+
+// export async function generateVSLScript(
+//   niche: string,
+//   clientData: any
+// ): Promise<string> {
+//   try {
+//     const prompt = `
+//     Create a 180-second Video Sales Letter script for ${clientData.name}, a ${niche} business.
+
+//     Structure:
+//     - Hook (0-15s): Attention-grabbing opener about their pain point
+//     - Problem (15-45s): Agitate the problem with statistics
+//     - Solution (45-90s): Introduce AI lead system with <2 minute response time
+//     - Proof (90-150s): Case study with specific numbers
+//     - CTA (150-180s): Clear call to action for free audit
+
+//     Make it compelling and specific to ${niche} industry challenges.
+//     `;
+
+//     const response = await openai.chat.completions.create({
+//       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+//       messages: [
+//         {
+//           role: "system",
+//           content:
+//             "You are a VSL script expert. Create compelling, benefit-focused scripts that convert.",
+//         },
+//         {
+//           role: "user",
+//           content: prompt,
+//         },
+//       ],
+//     });
+
+//     return response.choices[0].message.content || "Script generation failed";
+//   } catch (error) {
+//     console.error("Error generating VSL script:", error);
+//     throw new Error(
+//       "Failed to generate VSL script: " +
+//         (error instanceof Error ? error.message : "Unknown error")
+//     );
+//   }
+// }

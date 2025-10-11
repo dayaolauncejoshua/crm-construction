@@ -8,7 +8,7 @@ import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
 import testWebhookRouter from "./test-webhook";
 import { loadUser } from "./middleware/auth";
-
+import path from "path";
 import dotenv from "dotenv";
 import pg from "pg";
 const { Pool } = pg;
@@ -23,6 +23,9 @@ export const pool = new Pool({
 const app = express();
 
 app.use(express.json());
+// Serve static files (videos, thumbnails)
+// ADD THESE LINES
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);

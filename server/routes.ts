@@ -4,6 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
+import vslRouter from "./routes/vsl.route";
 import {
   insertLeadSchema,
   insertClientSchema,
@@ -20,7 +21,7 @@ import {
 } from "./services/reminder-cron";
 import bcrypt from "bcrypt";
 import { requireAuth, requireSuperAdmin } from "./middleware/auth";
-import vslRouter from "./routes/vsl.route2";
+// import vslRouter from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
 function checkOwnership(
   userRole: string,
@@ -1904,5 +1905,7 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
   setBroadcastFunction(broadcastUpdate);
   startReminderCron();
 
+  // After your other routes
+  app.use(vslRouter);
   return httpServer;
 }

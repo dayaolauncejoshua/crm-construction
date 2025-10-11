@@ -1345,6 +1345,39 @@ export class DatabaseStorage implements IStorage {
       })
       .slice(0, 10);
   }
+
+  // VSL operations
+
+  async getVSL(vslId: string): Promise<VSL | undefined> {
+    const [vsl] = await db
+      .select()
+      .from(vsls)
+      .where(eq(vsls.id, vslId))
+      .limit(1);
+    return vsl;
+  }
+
+  async updateVSL(vslId: string, data: Partial<InsertVSL>): Promise<VSL> {
+    const [vsl] = await db
+      .update(vsls)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(vsls.id, vslId))
+      .returning();
+    return vsl;
+  }
+
+  async deleteVSL(vslId: string): Promise<void> {
+    await db.delete(vsls).where(eq(vsls.id, vslId));
+  }
+
+  async incrementVSLViews(vslId: string): Promise<void> {
+    await db
+      .update(vsls)
+      .set({
+        viewCount: sql`${vsls.viewCount} + 1`,
+      })
+      .where(eq(vsls.id, vslId));
+  }
 }
 
 export const storage = new DatabaseStorage();
