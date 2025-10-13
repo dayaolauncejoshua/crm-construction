@@ -74,6 +74,7 @@ const createClientSchema = z.object({
     .optional()
     .or(z.literal("")),
   whatsappNumber: z.string().optional(),
+  whatsappPhoneNumberId: z.string().optional(),
 });
 
 type CreateClientData = z.infer<typeof createClientSchema>;
@@ -163,6 +164,7 @@ export default function Clients() {
       phone: "",
       email: "",
       whatsappNumber: "",
+      whatsappPhoneNumberId: "",
     },
   });
 
@@ -515,6 +517,26 @@ export default function Clients() {
                           <FormControl>
                             <Input placeholder="+1 (555) 123-4567" {...field} />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="whatsappPhoneNumberId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            WhatsApp Phone Number ID 
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="808896282312368" {...field} />
+                          </FormControl>
+                          <p className="text-xs text-slate-500 mt-1">
+                            From Meta Business Suite → WhatsApp → API Setup.
+                            Leave blank to use global setting.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}
