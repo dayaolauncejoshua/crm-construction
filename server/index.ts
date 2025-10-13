@@ -11,6 +11,7 @@ import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
 
+
 const { Pool } = pg;
 config();
 
@@ -20,6 +21,8 @@ export const pool = new Pool({
 });
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 // Basic middleware
 app.use(express.json());
@@ -42,11 +45,14 @@ app.use(
     resave: false,
     saveUninitialized: false,
     rolling: true, // Reset expiry on each request
+    name: "sessionId",
+    proxy: true,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      sameSite: "lax",
+      path: "/",
     },
   })
 );

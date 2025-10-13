@@ -69,21 +69,25 @@ router.post("/api/auth/signup", async (req, res) => {
       // Don't fail signup if email fails
     }
 
-    // Create session (use type assertion)
-    (req.session as any).userId = newUser.id;
+    // ✅ CRITICAL: Save session before responding
+    req.session.save((err) => {
+      if (err) {
+        console.error("❌ Session save error:", err);
+        return res.status(500).json({ error: "Failed to create session" });
+      }
 
-    console.log("✅ User created:", newUser.email);
+      console.log("✅ User created and session saved:", newUser.email);
 
-    res.json({
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        role: newUser.role,
-        emailVerified: newUser.emailVerified, // ✅ ADD THIS - Include verification status
-      },
-      
+      res.json({
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          role: newUser.role,
+          emailVerified: newUser.emailVerified,
+        },
+      });
     });
   } catch (error: any) {
     console.error("Signup error:", error);
@@ -95,9 +99,7 @@ router.post("/api/auth/signup", async (req, res) => {
 router.post("/api/auth/login", async (req, res) => {
   try {
     console.log("=== LOGIN BACKEND DEBUG ===");
-    console.log("Request body:", req.body);
-    console.log("Email:", req.body?.email);
-    console.log("Password:", req.body?.password ? "***" : "missing");
+    console.log("Request body:", { email: req.body?.email, password: "***" });
 
     const { email, password } = req.body;
 
@@ -154,17 +156,27 @@ router.post("/api/auth/login", async (req, res) => {
     // Create session (use type assertion)
     (req.session as any).userId = user.id;
 
-    console.log("✅ Session created, userId:", user.id);
+    req.session.save((err) => {
+      if (err) {
+        console.error("❌ Session save error:", err);
+        return res.status(500).json({ error: "Failed to create session" });
+      }
 
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        emailVerified: user.emailVerified, // ✅ ADD THIS - Include verification status
-      },
+      console.log("✅ Session saved successfully!");
+      console.log("📋 Session ID:", req.sessionID);
+      console.log("📋 User ID in session:", (req.session as any).userId);
+      console.log("🍪 Cookie will be set with name: sessionId");
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          emailVerified: user.emailVerified,
+        },
+      });
     });
   } catch (error: any) {
     console.error("❌ Login error:", error);
