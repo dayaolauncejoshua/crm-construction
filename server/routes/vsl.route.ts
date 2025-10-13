@@ -10,6 +10,8 @@ const router = Router();
 router.get("/api/vsls/:clientId", async (req, res) => {
   try {
     const { clientId } = req.params;
+
+    console.log(clientId, "My id");
     const vsls = await storage.getVSLs(clientId);
     res.json(vsls);
   } catch (error) {

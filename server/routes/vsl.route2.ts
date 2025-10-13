@@ -18,6 +18,7 @@ router.get("/api/vsls/:clientId", async (req: Request, res: Response) => {
   try {
     const { clientId } = req.params;
 
+    console.log(clientId, "My id");
     const vslList = await db
       .select()
       .from(vsls)
