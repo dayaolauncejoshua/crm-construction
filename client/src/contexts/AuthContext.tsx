@@ -16,6 +16,7 @@ interface User {
   firstName: string | null;
   lastName: string | null;
   role: string;
+  emailVerified?: boolean;
   isTrialActive?: boolean;
   trialEndsAt?: Date | null;
 }
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   // Fetch current user
-  const { data, isLoading } = useQuery<{ user: User }>({
+  const { data, isLoading, refetch } = useQuery<{ user: User }>({
     queryKey: ["/api/auth/me"],
     retry: false,
   });
@@ -50,6 +51,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
     }
   }, [data]);
+
+  // ✅ Listen for cross-tab auth changes
+  useEffect(() => {
+    // Listen for storage events (from other tabs)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "auth_updated") {
+        console.log("🔄 Auth state changed in another tab, refetching...");
+        refetch();
+      }
+    };
+
+    // Listen for window focus (when user returns to this tab)
+    const handleWindowFocus = () => {
+      console.log("👁️ Window focused, checking auth state...");
+      refetch();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [refetch]);
 
   // Login
   const loginMutation = useMutation({

@@ -1,3 +1,5 @@
+// server/auth.ts
+
 import { Router } from "express";
 import { db } from "./db";
 import { users } from "@shared/schema";
@@ -20,8 +22,8 @@ router.post("/api/auth/signup", async (req, res) => {
     }
 
     if (password.length < 8) {
-      return res.status(400).json({ 
-        error: "Password must be at least 8 characters" 
+      return res.status(400).json({
+        error: "Password must be at least 8 characters",
       });
     }
 
@@ -47,12 +49,29 @@ router.post("/api/auth/signup", async (req, res) => {
         firstName: firstName || null,
         lastName: lastName || null,
         role: "user",
+        emailVerified: false, // ✅ ADD THIS - Not verified yet
       })
       .returning();
 
+    // ✅ SEND VERIFICATION EMAIL
+    try {
+      const { sendVerificationEmail } = await import(
+        "./services/email-verification"
+      );
+      await sendVerificationEmail(
+        newUser.email!,
+        newUser.id,
+        newUser.firstName || "User"
+      );
+      console.log(`✅ Verification email sent to: ${newUser.email}`);
+    } catch (emailError) {
+      console.error("⚠️ Failed to send verification email:", emailError);
+      // Don't fail signup if email fails
+    }
+
     // Create session (use type assertion)
     (req.session as any).userId = newUser.id;
-    
+
     console.log("✅ User created:", newUser.email);
 
     res.json({
@@ -62,7 +81,9 @@ router.post("/api/auth/signup", async (req, res) => {
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         role: newUser.role,
+        emailVerified: newUser.emailVerified, // ✅ ADD THIS - Include verification status
       },
+      
     });
   } catch (error: any) {
     console.error("Signup error:", error);
@@ -108,6 +129,19 @@ router.post("/api/auth/login", async (req, res) => {
 
     console.log("✅ Password valid");
 
+    // ✅ OPTIONAL: Check email verification
+    // Uncomment these lines if you want to REQUIRE verification before login:
+    /*
+    if (!user.emailVerified) {
+      console.log("⚠️ Email not verified");
+      return res.status(403).json({ 
+        error: "Please verify your email before logging in",
+        emailNotVerified: true,
+        email: user.email,
+      });
+    }
+    */
+
     // Update login stats
     await db
       .update(users)
@@ -129,6 +163,7 @@ router.post("/api/auth/login", async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        emailVerified: user.emailVerified, // ✅ ADD THIS - Include verification status
       },
     });
   } catch (error: any) {
@@ -152,15 +187,12 @@ router.post("/api/auth/logout", (req, res) => {
 router.get("/api/auth/me", async (req, res) => {
   try {
     const userId = (req.session as any).userId;
-    
+
     if (!userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -173,6 +205,7 @@ router.get("/api/auth/me", async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        emailVerified: user.emailVerified, // ✅ ADD THIS
         isTrialActive: user.isTrialActive,
         trialEndsAt: user.trialEndsAt,
       },

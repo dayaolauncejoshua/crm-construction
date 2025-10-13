@@ -1,3 +1,5 @@
+// server/middleware/auth.ts
+
 import { Request, Response, NextFunction } from "express";
 import { db } from "../db";
 import { users } from "@shared/schema";

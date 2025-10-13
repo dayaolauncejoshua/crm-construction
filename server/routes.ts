@@ -1877,6 +1877,220 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
+  // ==================== EMAIL VERIFICATION ROUTES ====================
+
+  // Resend verification email
+  app.post("/api/auth/resend-verification", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      console.log("📧 Resending verification email to:", email);
+
+      // Get user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if user exists or not (security)
+        return res.json({
+          success: true,
+          message: "If an account exists, verification email has been sent",
+        });
+      }
+
+      // Check if already verified
+      if (user.emailVerified) {
+        return res.status(400).json({
+          message: "Email is already verified",
+        });
+      }
+
+      // Send verification email
+      const { sendVerificationEmail } = await import(
+        "./services/email-verification"
+      );
+      await sendVerificationEmail(user.email!, user.id, user.firstName!);
+
+      res.json({
+        success: true,
+        message: "Verification email sent successfully",
+      });
+    } catch (error) {
+      console.error("Error resending verification:", error);
+      res.status(500).json({ message: "Failed to send verification email" });
+    }
+  });
+
+  // Verify email with token
+  app.get("/api/auth/verify/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      console.log("🔍 Verifying email token");
+
+      // Verify and decode token
+      const { verifyToken } = await import("./services/email-verification");
+      const decoded = verifyToken(token);
+
+      if (decoded.type !== "email_verification") {
+        return res.status(400).json({ message: "Invalid token type" });
+      }
+
+      // Get user
+      const user = await storage.getUserById(decoded.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check if already verified
+      if (user.emailVerified) {
+        return res.json({
+          success: true,
+          message: "Email already verified",
+          alreadyVerified: true,
+        });
+      }
+
+      // Verify email
+      await storage.verifyUserEmail(user.id);
+
+      console.log(`✅ Email verified for user: ${user.email}`);
+
+      res.json({
+        success: true,
+        message: "Email verified successfully! You can now log in.",
+      });
+    } catch (error: any) {
+      console.error("Email verification error:", error);
+
+      if (error.message === "Invalid or expired token") {
+        return res.status(400).json({
+          message: "Verification link is invalid or has expired",
+          expired: true,
+        });
+      }
+
+      res.status(500).json({ message: "Email verification failed" });
+    }
+  });
+
+  // ==================== PASSWORD RESET ROUTES ====================
+
+  // Request password reset
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      console.log("🔐 Password reset requested for:", email);
+
+      // Get user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if user exists or not (security)
+        return res.json({
+          success: true,
+          message: "If an account exists, password reset email has been sent",
+        });
+      }
+
+      // Generate reset token
+      const { generatePasswordResetToken, sendPasswordResetEmail } =
+        await import("./services/email-verification");
+      const token = generatePasswordResetToken(user.id, user.email!);
+
+      // Save token to database with 1 hour expiry
+      const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await storage.updatePasswordResetToken(user.id, token, expiry);
+
+      // Send reset email
+      await sendPasswordResetEmail(user.email!, user.id, user.firstName!);
+
+      console.log(`✅ Password reset email sent to: ${email}`);
+
+      res.json({
+        success: true,
+        message: "Password reset email sent successfully",
+      });
+    } catch (error) {
+      console.error("Password reset request error:", error);
+      res.status(500).json({ message: "Failed to process password reset" });
+    }
+  });
+
+  // Reset password with token
+  app.post("/api/auth/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ message: "Password is required" });
+      }
+
+      if (password.length < 8) {
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 8 characters" });
+      }
+
+      console.log("🔐 Resetting password with token");
+
+      // Verify token
+      const { verifyToken } = await import("./services/email-verification");
+      const decoded = verifyToken(token);
+
+      if (decoded.type !== "password_reset") {
+        return res.status(400).json({ message: "Invalid token type" });
+      }
+
+      // Get user by reset token (double-check it's in database)
+      const user = await storage.getUserByResetToken(token);
+      if (!user) {
+        return res.status(400).json({
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      // Check token expiry
+      if (user.passwordResetExpiry && user.passwordResetExpiry < new Date()) {
+        return res.status(400).json({
+          message: "Reset token has expired. Please request a new one.",
+          expired: true,
+        });
+      }
+
+      // Hash new password
+      const newPasswordHash = await bcrypt.hash(password, 10);
+
+      // Update password
+      await storage.resetUserPassword(user.id, newPasswordHash);
+
+      console.log(`✅ Password reset successful for user: ${user.email}`);
+
+      res.json({
+        success: true,
+        message: "Password reset successfully! You can now log in.",
+      });
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+
+      if (error.message === "Invalid or expired token") {
+        return res.status(400).json({
+          message: "Reset link is invalid or has expired",
+          expired: true,
+        });
+      }
+
+      res.status(500).json({ message: "Password reset failed" });
+    }
+  });
+
   // ================================= ADVANCED ROUTES  ===============================
 
   // Mount advanced routes

@@ -1038,6 +1038,75 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // ==================== EMAIL VERIFICATION METHODS ====================
+
+  async verifyUserEmail(userId: string): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        emailVerified: true,
+        verificationToken: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log(`✅ User ${userId} email verified`);
+  }
+
+  async updatePasswordResetToken(
+    userId: string,
+    token: string,
+    expiry: Date
+  ): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        passwordResetToken: token,
+        passwordResetExpiry: expiry,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log(`✅ Password reset token set for user ${userId}`);
+  }
+
+  async resetUserPassword(
+    userId: string,
+    newPasswordHash: string
+  ): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        passwordHash: newPasswordHash,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log(`✅ Password reset for user ${userId}`);
+  }
+
+  async getUserById(userId: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return user;
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.passwordResetToken, token))
+      .limit(1);
+
+    return user;
+  }
+
   async getAllUsersForAdmin(
     searchQuery?: string,
     statusFilter?: string

@@ -30,6 +30,11 @@ import NotFound from "@/pages/not-found";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import VerificationBanner from "@/components/VerificationBanner";
+import VerifyEmail from "@/pages/VerifyEmail";
+import VerifyToken from "@/pages/VerifyToken";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -141,24 +146,39 @@ function ProtectedRouter() {
   }
 
   // ✅ NEW: Landing page is the default for unauthenticated users
-  const publicPages = ["/", "/login", "/signup", "/landing"];
+  const publicPages = [
+    "/",
+    "/login",
+    "/signup",
+    "/landing",
+    "/verify-email",
+    "/forgot-password",
+  ];
+
+  const isPublicRoute = (path: string) => {
+    return (
+      publicPages.includes(path) ||
+      path.startsWith("/verify/") ||
+      path.startsWith("/reset-password/")
+    );
+  };
 
   // Redirect to landing if not authenticated and trying to access protected page
-  if (!isAuthenticated && !publicPages.includes(location)) {
+  if (!isAuthenticated && !isPublicRoute(location)) {
     setLocation("/");
     return null;
   }
 
   // ✅ NEW: Redirect authenticated users away from landing page
-  if (isAuthenticated && location === "/") {
-    setLocation("/dashboard");
-    return null;
-  }
+  if (isAuthenticated && location === "/" && !location.startsWith("/verify")) {
+  setLocation("/dashboard");
+  return null;
+}
 
   // Redirect to login if not authenticated and not on public page
-  if (!isAuthenticated && !publicPages.includes(location)) {
-    return <Login />;
-  }
+  if (!isAuthenticated && !isPublicRoute(location)) {
+  return <Login />;
+}
 
   const handleSignOut = async () => {
     try {
@@ -197,15 +217,12 @@ function ProtectedRouter() {
             <Route path="/landing" component={Landing} />{" "}
             {/* Keep /landing as alias */}
             <Route path="/trial-unlock" component={TrialUnlock} />
-
             {/* ✅ PROTECTED ROUTES - Auth required */}
             <Route path="/super-admin" component={SuperAdmin} />
             <Route path="/super-admin/users" component={SuperAdminUsers} />
             <Route path="/dashboard" component={Dashboard} />{" "}
             {/* ✅ Dashboard now requires /dashboard */}
             <Route path="/dashboard/:clientId" component={Dashboard} />
-
-            
             <Route path="/clients" component={Clients} />
             <Route path="/leads" component={Leads} />
             <Route path="/conversations" component={Conversations} />
@@ -216,6 +233,10 @@ function ProtectedRouter() {
             <Route path="/follow-ups" component={FollowUps} />
             <Route path="/white-label" component={WhiteLabel} />
             <Route path="/sops" component={SOPs} />
+            <Route path="/verify-email" component={VerifyEmail} />
+            <Route path="/verify/:token" component={VerifyToken} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password/:token" component={ResetPassword} />
             <Route component={NotFound} />
           </Switch>
         </div>

@@ -38,6 +38,13 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role").default("user"), // user, super_admin
+
+  // ✅ ADD THESE NEW FIELDS:
+  emailVerified: boolean("email_verified").default(false).notNull(),
+  verificationToken: text("verification_token"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
+
   subscriptionType: varchar("subscription_type").default("trial"), // trial, pro, enterprise
   trialEndsAt: timestamp("trial_ends_at"),
   isTrialActive: boolean("is_trial_active").default(false),
