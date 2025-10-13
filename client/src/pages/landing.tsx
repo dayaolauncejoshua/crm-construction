@@ -125,8 +125,8 @@ function HeroSection() {
             {/* Subheadline */}
             <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
               AI-powered lead qualification system that responds in under 2
-              minutes, qualifies prospects 24/7, and books meetings
-              automatically via WhatsApp.
+              minutes, qualifies prospects 24/7, and book meetings with one
+              click and close more deals.
             </p>
 
             {/* CTA Buttons */}

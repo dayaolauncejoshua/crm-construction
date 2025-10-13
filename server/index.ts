@@ -1,56 +1,57 @@
 // server/index.ts
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
-import testWebhookRouter from "./test-webhook";
 import { loadUser } from "./middleware/auth";
 import path from "path";
-import dotenv from "dotenv";
 import pg from "pg";
+
 const { Pool } = pg;
 config();
 
-dotenv.config();
-
+// Create PostgreSQL pool
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 const app = express();
 
+// Basic middleware
 app.use(express.json());
-// Serve static files (videos, thumbnails)
-// ADD THESE LINES
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", webhookRouter);
 
-// // Add this ONLY in development
-// if (process.env.NODE_ENV !== "production") {
-//   app.use("/test", testWebhookRouter);
-//   console.log("⚠️  Test endpoints enabled at /test/*");
-// }
+// ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
+const PgSession = connectPgSimple(session);
 
-// Session middleware
 app.use(
   session({
+    store: new PgSession({
+      pool: pool,
+      tableName: "sessions",
+      createTableIfMissing: true, // Auto-create table if missing
+    }),
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
     resave: false,
     saveUninitialized: false,
+    rolling: true, // Reset expiry on each request
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     },
   })
 );
 
-// ✅ IMPORTANT: Load user from session (must be after session, before routes)
+// ✅ Load user from session (must be after session, before routes)
 app.use(loadUser);
 
 // Auth routes (login, signup, logout)
@@ -112,6 +113,8 @@ app.use((req, res, next) => {
 
   const PORT = parseInt(process.env.PORT || "5000", 10);
   server.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
+    log(`🚀 Server running on port ${PORT}`);
+    log(`📱 Environment: ${app.get("env")}`);
+    log(`🔐 Session store: PostgreSQL`);
   });
 })();

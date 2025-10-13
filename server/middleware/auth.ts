@@ -27,6 +27,16 @@ async function loadUser(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = (req.session as any)?.userId;
 
+    // ✅ DEBUG LOGGING (remove after fixing)
+    console.log("🔍 Auth Check:", {
+      path: req.path,
+      method: req.method,
+      hasSession: !!req.session,
+      sessionID: req.sessionID,
+      userId: userId,
+      hasCookie: !!req.headers.cookie,
+    });
+
     if (userId) {
       const [user] = await db
         .select()
@@ -49,7 +59,16 @@ async function loadUser(req: Request, res: Response, next: NextFunction) {
           isTrialActive: user.isTrialActive,
           trialEndsAt: user.trialEndsAt,
         };
+        console.log("✅ User loaded:", user.email, user.role);
+      
       }
+      else {
+        console.log("❌ User not found in DB for userId:", userId);
+      }
+      
+    }
+    else {
+      console.log("❌ No userId in session");
     }
 
     next();
@@ -64,9 +83,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const userId = (req.session as any)?.userId;
 
   if (!userId || !req.user) {
+    console.log("❌ Auth required but not authenticated:", req.path);
     return res.status(401).json({ message: "Authentication required" });
   }
-
+  console.log("✅ Auth passed:", req.user.email);
   next();
 }
 
