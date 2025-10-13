@@ -47,7 +47,7 @@ export default function Signup() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="flex items-center space-x-3 mb-8">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-construction rounded-lg flex items-center justify-center">
               <Rocket className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -131,7 +131,7 @@ export default function Signup() {
 
             <Button
               type="submit"
-              className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium"
+              className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white font-medium"
               disabled={isLoading}
             >
               {isLoading ? "Creating account..." : "Create Account"}
@@ -193,7 +193,7 @@ export default function Signup() {
       </div>
 
       {/* Right Side - Benefits */}
-      <div className="hidden lg:flex lg:flex-1 bg-gradient-to-br from-blue-600 via-purple-600 to-blue-700 p-12 items-center justify-center relative overflow-hidden">
+      <div className="hidden lg:flex lg:flex-1 bg-gradient-construction p-12 items-center justify-center relative overflow-hidden">
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"></div>

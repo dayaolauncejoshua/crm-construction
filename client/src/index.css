@@ -4,8 +4,6 @@
 @tailwind components;
 @tailwind utilities;
 
-
-
 :root {
   --background: hsl(0, 0%, 100%);
   --foreground: hsl(222.2, 84%, 4.9%);
@@ -41,6 +39,14 @@
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: 0.5rem;
+
+  /* 🆕 ADD Construction Industry Orange */
+  --construction-orange: hsl(25, 95%, 53%); /* #f97316 */
+  --construction-orange-foreground: hsl(0, 0%, 100%);
+
+  /* 🆕 ADD Construction variants */
+  --construction-orange-light: hsl(25, 95%, 65%);
+  --construction-orange-dark: hsl(25, 95%, 43%);
 }
 
 .dark {
@@ -68,6 +74,48 @@
   --chart-3: hsl(43, 96%, 56%);
   --chart-4: hsl(147, 78%, 42%);
   --chart-5: hsl(341, 75%, 51%);
+
+  /* 🆕 ADD Construction Orange for dark mode */
+  --construction-orange: hsl(25, 95%, 53%);
+  --construction-orange-foreground: hsl(0, 0%, 100%);
+}
+
+/* 🆕 ADD Utility classes for construction orange */
+.bg-construction {
+  background-color: hsl(25, 95%, 53%);
+}
+
+.bg-construction\/10 {
+  background-color: hsl(25, 95%, 53%, 0.1);
+}
+
+.text-construction {
+  color: hsl(25, 95%, 53%);
+}
+
+.border-construction {
+  border-color: hsl(25, 95%, 53%);
+}
+
+.border-construction\/20 {
+  border-color: hsl(25, 95%, 53%, 0.2);
+}
+
+/* 🆕 Gradient utilities using existing primary + construction orange */
+.bg-gradient-construction {
+  background: linear-gradient(
+    135deg,
+    hsl(215, 85%, 49%) 0%,
+    hsl(25, 95%, 53%) 100%
+  );
+}
+
+.bg-gradient-construction-hover:hover {
+  background: linear-gradient(
+    135deg,
+    hsl(215, 85%, 55%) 0%,
+    hsl(25, 95%, 60%) 100%
+  );
 }
 
 @layer base {
@@ -209,10 +257,10 @@
 
 /* Hide scrollbar but keep functionality */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari, Opera */
+  display: none; /* Chrome, Safari, Opera */
 }

@@ -1,393 +1,643 @@
 // client/src/pages/landing.tsx
-
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { Play, Check, Users, TrendingUp, Clock } from "lucide-react";
-
-const step1Schema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  company: z.string().min(1, "Company name is required"),
-  industry: z.string().default("business"),
-});
-
-const step2Schema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  phone: z.string().min(10, "Please enter a valid phone number"),
-  consent: z.boolean().refine(val => val === true, "Consent is required"),
-});
-
-type Step1Data = z.infer<typeof step1Schema>;
-type Step2Data = z.infer<typeof step2Schema>;
+import {
+  Play,
+  Check,
+  Users,
+  TrendingUp,
+  Clock,
+  Zap,
+  Shield,
+  MessageCircle,
+  Calendar,
+  Target,
+  HardHat,
+  Building2,
+  Wrench,
+  ArrowRight,
+} from "lucide-react";
 
 export default function Landing() {
-  const [step, setStep] = useState(1);
-  const [step1Data, setStep1Data] = useState<Step1Data | null>(null);
-  const [auditResult, setAuditResult] = useState<any>(null);
-  const { toast } = useToast();
-
-  const step1Form = useForm<Step1Data>({
-    resolver: zodResolver(step1Schema),
-    defaultValues: {
-      email: "",
-      company: "",
-      industry: "business",
-    },
-  });
-
-  const step2Form = useForm<Step2Data>({
-    resolver: zodResolver(step2Schema),
-    defaultValues: {
-      firstName: "",
-      phone: "",
-      consent: false,
-    },
-  });
-
-  const submitLeadMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/leads", data);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setAuditResult(data.auditResults);
-      toast({
-        title: "Success!",
-        description: "Your audit is ready! Check your phone for instant results.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onStep1Submit = (data: Step1Data) => {
-    setStep1Data(data);
-    setStep(2);
-  };
-
-  const onStep2Submit = (data: Step2Data) => {
-    if (!step1Data) return;
-
-    const leadData = {
-      ...step1Data,
-      ...data,
-      clientId: "demo-client", // TODO: Replace with actual client selection
-      source: "landing_page",
-      consentGiven: data.consent,
-      auditInputs: {
-        website: step1Data.company.toLowerCase().replace(/\s/g, "") + ".com",
-        industry: step1Data.industry,
-      },
-      auditType: "business",
-    };
-
-    submitLeadMutation.mutate(leadData);
-  };
-
-  if (auditResult) {
-    return <AuditResultsPage auditResult={auditResult} />;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary to-blue-700">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center text-white">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              Stop Losing Leads to Slow Response Times
-            </h1>
-            <p className="text-xl md:text-2xl mb-12 text-blue-100 max-w-3xl mx-auto">
-              Get qualified leads in your pipeline within 2 minutes with our AI-powered system
-            </p>
-
-            {/* VSL Placeholder */}
-            <div className="max-w-4xl mx-auto mb-12">
-              <Card className="bg-black/30 border-0">
-                <CardContent className="p-8">
-                  <div className="bg-slate-800 rounded-lg h-64 md:h-80 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Play className="text-white text-xl ml-1" />
-                      </div>
-                      <p className="text-white font-medium text-lg">
-                        How We Generate 200+ Qualified Leads/Month
-                      </p>
-                      <p className="text-blue-200 text-sm">3:42 • Click to play</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Lead Capture Form */}
-            <Card className="max-w-2xl mx-auto">
-              <CardContent className="p-8">
-                <h3 className="text-2xl font-bold text-slate-900 mb-6">
-                  Get Your Free 2-Minute Lead Audit
-                </h3>
-
-                {step === 1 && (
-                  <form onSubmit={step1Form.handleSubmit(onStep1Submit)} className="space-y-4">
-                    <div>
-                      <Label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
-                        Business Email
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="john@company.com"
-                        {...step1Form.register("email")}
-                        className="w-full"
-                      />
-                      {step1Form.formState.errors.email && (
-                        <p className="text-red-500 text-sm mt-1">
-                          {step1Form.formState.errors.email.message}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor="company" className="block text-sm font-medium text-slate-700 mb-2">
-                        Company Name
-                      </Label>
-                      <Input
-                        id="company"
-                        type="text"
-                        placeholder="Your Company LLC"
-                        {...step1Form.register("company")}
-                        className="w-full"
-                      />
-                      {step1Form.formState.errors.company && (
-                        <p className="text-red-500 text-sm mt-1">
-                          {step1Form.formState.errors.company.message}
-                        </p>
-                      )}
-                    </div>
-                    <Button type="submit" className="w-full bg-primary hover:bg-primary/90">
-                      Continue to Phone Capture
-                    </Button>
-                  </form>
-                )}
-
-                {step === 2 && (
-                  <div className="space-y-4">
-                    <div className="bg-success/10 border border-success/20 rounded-lg p-4 mb-4">
-                      <div className="flex items-center text-success font-medium text-sm">
-                        <Check className="w-4 h-4 mr-2" />
-                        Email verified successfully
-                      </div>
-                    </div>
-                    
-                    <form onSubmit={step2Form.handleSubmit(onStep2Submit)} className="space-y-4">
-                      <div>
-                        <Label htmlFor="firstName" className="block text-sm font-medium text-slate-700 mb-2">
-                          First Name
-                        </Label>
-                        <Input
-                          id="firstName"
-                          type="text"
-                          placeholder="John"
-                          {...step2Form.register("firstName")}
-                          className="w-full"
-                        />
-                        {step2Form.formState.errors.firstName && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {step2Form.formState.errors.firstName.message}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-2">
-                          Phone Number
-                        </Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="+1 (555) 123-4567"
-                          {...step2Form.register("phone")}
-                          className="w-full"
-                        />
-                        {step2Form.formState.errors.phone && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {step2Form.formState.errors.phone.message}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg">
-                        <label className="flex items-start space-x-2">
-                          <input
-                            type="checkbox"
-                            {...step2Form.register("consent")}
-                            className="mt-1"
-                          />
-                          <span>
-                            By providing your phone number, you consent to receive automated text messages 
-                            about your lead audit results and follow-up information. Message and data rates may apply. 
-                            Reply STOP to opt out anytime.
-                          </span>
-                        </label>
-                        {step2Form.formState.errors.consent && (
-                          <p className="text-red-500 text-sm mt-1">
-                            {step2Form.formState.errors.consent.message}
-                          </p>
-                        )}
-                      </div>
-                      <Button 
-                        type="submit" 
-                        className="w-full bg-accent hover:bg-accent/90"
-                        disabled={submitLeadMutation.isPending}
-                      >
-                        {submitLeadMutation.isPending ? "Processing..." : "Get My Free Audit Now"}
-                      </Button>
-                    </form>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Social Proof */}
-      <div className="bg-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <p className="text-slate-600 mb-8">Trusted by 200+ businesses across industries</p>
-            <div className="flex justify-center items-center space-x-8 opacity-60">
-              <div className="bg-slate-200 px-6 py-3 rounded">Construction Co.</div>
-              <div className="bg-slate-200 px-6 py-3 rounded">Marketing Agency</div>
-              <div className="bg-slate-200 px-6 py-3 rounded">MedSpa Group</div>
-            </div>
-          </div>
-
-          {/* Benefits */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="text-primary text-2xl" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                &lt;2 Minute Response
-              </h3>
-              <p className="text-slate-600">
-                Lightning-fast AI responses while competitors take hours
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <TrendingUp className="text-accent text-2xl" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                5-10x More Leads
-              </h3>
-              <p className="text-slate-600">
-                Capture leads that would otherwise go to slower competitors
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="text-warning text-2xl" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                70% AI Qualified
-              </h3>
-              <p className="text-slate-600">
-                AI handles qualification, you focus on closing hot leads
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <Header />
+      <HeroSection />
+      <TrustedBySection />
+      <HowItWorksSection />
+      <FeaturesSection />
+      <StatsSection />
+      <CTASection />
+      <Footer />
     </div>
   );
 }
 
-function AuditResultsPage({ auditResult }: { auditResult: any }) {
+function Header() {
   return (
-    <div className="min-h-screen bg-slate-50 py-12">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">
-            Your Business Audit Results
-          </h1>
-          <p className="text-slate-600">
-            Here's what we found and how we can help you improve
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo - Using existing theme colors */}
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
+              <HardHat className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                AI Lead System
+              </h1>
+              <p className="text-xs text-muted-foreground">For Construction</p>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="hidden md:flex items-center space-x-8">
+            <a
+              href="#features"
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
+              Features
+            </a>
+            <a
+              href="#how-it-works"
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
+              How It Works
+            </a>
+            <a
+              href="#pricing"
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
+              Pricing
+            </a>
+          </nav>
+
+          {/* Auth Buttons */}
+          <div className="flex items-center space-x-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => (window.location.href = "/login")}
+            >
+              Login
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => (window.location.href = "/signup")}
+              className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all px-8"
+            >
+              Start Free Trial
+            </Button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function HeroSection() {
+  return (
+    <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Left: Content */}
+          <div>
+            {/* Badge */}
+            <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-4 py-2 mb-6">
+              <Zap className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-primary">
+                #1 AI Lead System for Construction
+              </span>
+            </div>
+
+            {/* Headline */}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
+              Stop Losing
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">
+                {" "}
+                $100K+ Projects{" "}
+              </span>
+              to Slow Responses
+            </h1>
+
+            {/* Subheadline */}
+            <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
+              AI-powered lead qualification system that responds in under 2
+              minutes, qualifies prospects 24/7, and books meetings
+              automatically via WhatsApp.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <Button
+                size="lg"
+                onClick={() => (window.location.href = "/signup")}
+                className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
+              >
+                Start 14-Day Free Trial
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-2 hover:bg-primary/5 text-lg px-8"
+              >
+                <Play className="mr-2 w-5 h-5" />
+                Watch Demo
+              </Button>
+            </div>
+
+            {/* Trust Indicators */}
+            <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
+              <div className="flex items-center space-x-2">
+                <Check className="w-5 h-5 text-success" />
+                <span>No credit card required</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Check className="w-5 h-5 text-success" />
+                <span>Cancel anytime</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Check className="w-5 h-5 text-success" />
+                <span>Setup in 10 minutes</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Visual */}
+          <div className="relative">
+            {/* Main Card - Dashboard Preview */}
+            <Card className="shadow-2xl border-2 overflow-hidden">
+              <div className="bg-gradient-construction p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                      <MessageCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="text-white">
+                      <p className="font-semibold">AI Assistant Active</p>
+                      <p className="text-xs text-white/80">
+                        Responding in real-time
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-3 h-3 bg-success rounded-full animate-pulse"></div>
+                </div>
+              </div>
+
+              <CardContent className="p-6">
+                {/* Stat Cards */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-success/10 border border-success/20 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-success">47</div>
+                    <div className="text-xs text-success/80">
+                      Hot Leads Today
+                    </div>
+                  </div>
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-primary">98%</div>
+                    <div className="text-xs text-primary/80">
+                      AI Qualification
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Activity */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-2 h-2 bg-success rounded-full"></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        Meeting booked: John Smith
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Commercial renovation - $250K
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      2m ago
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        AI qualified: Sarah Johnson
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Residential build - Hot lead
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      5m ago
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-2 h-2 bg-construction rounded-full"></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        New inquiry: Mike Chen
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Kitchen remodel inquiry
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      8m ago
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Floating Badge */}
+            <div className="absolute -top-4 -right-4 bg-card rounded-xl shadow-xl border-2 border-construction/20 p-4 rotate-3">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-construction">
+                  2 min
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Avg Response
+                </div>
+              </div>
+            </div>
+
+            {/* Decorative Elements */}
+            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-primary/20 rounded-full blur-3xl"></div>
+            <div className="absolute -top-8 -right-8 w-32 h-32 bg-construction/20 rounded-full blur-3xl"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TrustedBySection() {
+  return (
+    <section className="py-12 bg-card border-y">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p className="text-center text-sm font-medium text-muted-foreground mb-8">
+          Trusted by 200+ construction companies nationwide
+        </p>
+        <div className="flex flex-wrap justify-center items-center gap-12 opacity-60">
+          <div className="flex items-center space-x-2">
+            <Building2 className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <p className="font-bold text-foreground">BuildPro</p>
+              <p className="text-xs text-muted-foreground">Construction</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HardHat className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <p className="font-bold text-foreground">Apex Builders</p>
+              <p className="text-xs text-muted-foreground">Residential</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Wrench className="w-8 h-8 text-muted-foreground" />
+            <div>
+              <p className="font-bold text-foreground">Elite Remodeling</p>
+              <p className="text-xs text-muted-foreground">Commercial</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorksSection() {
+  const steps = [
+    {
+      number: "1",
+      icon: MessageCircle,
+      title: "Lead Comes In",
+      description:
+        "Prospect reaches out via WhatsApp, website, or ad. AI responds in under 2 minutes.",
+      colorClass: "bg-primary text-primary-foreground",
+      bgClass: "bg-primary/10",
+      iconColorClass: "text-primary",
+    },
+    {
+      number: "2",
+      icon: Target,
+      title: "AI Qualifies",
+      description:
+        "Smart questions determine budget, timeline, and project scope automatically.",
+      colorClass: "bg-construction text-white",
+      bgClass: "bg-construction/10",
+      iconColorClass: "text-construction",
+    },
+    {
+      number: "3",
+      icon: Calendar,
+      title: "Hot Lead Handoff",
+      description:
+        "Qualified leads are instantly flagged for you. Book meetings with one click and close more deals.",
+      colorClass: "bg-success text-success-foreground",
+      bgClass: "bg-success/10",
+      iconColorClass: "text-success",
+    },
+  ];
+
+  return (
+    <section id="how-it-works" className="py-20 bg-muted/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+            How It Works
+          </h2>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            From inquiry to qualified lead in minutes, not hours
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
-                <Check className="text-success w-5 h-5 mr-2" />
-                Quick Wins
-              </h3>
-              <ul className="space-y-2">
-                {auditResult.wins?.map((win: string, index: number) => (
-                  <li key={index} className="text-slate-700 flex items-start">
-                    <div className="w-2 h-2 bg-success rounded-full mt-2 mr-2 flex-shrink-0"></div>
-                    {win}
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+        <div className="grid md:grid-cols-3 gap-8 items-stretch">
+          {steps.map((step, index) => (
+            <div key={index} className="relative flex">
+              <Card className="border-2 hover:border-primary/50 transition-all hover:shadow-lg h-full w-full">
+                <CardContent className="p-8 flex flex-col h-full">
+                  {/* ✅ Number and Icon - SIDE BY SIDE at top */}
+                  <div className="flex items-center justify-center gap-3 mb-8">
+                    {/* Number Badge */}
+                    <div
+                      className={`flex items-center justify-center w-14 h-14 rounded-full font-bold text-lg ${step.colorClass} shadow-lg`}
+                    >
+                      {step.number}
+                    </div>
 
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                Key Metrics
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-slate-600">Audit Score</p>
-                  <p className="text-2xl font-bold text-primary">{auditResult.score}/100</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600">Estimated ROI</p>
-                  <p className="text-lg font-semibold text-slate-900">{auditResult.estimatedROI}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600">Implementation Timeline</p>
-                  <p className="text-lg font-semibold text-slate-900">{auditResult.timeline}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    {/* Icon */}
+                    <div
+                      className={`flex items-center justify-center w-14 h-14 rounded-xl ${step.bgClass}`}
+                    >
+                      <step.icon className={`w-7 h-7 ${step.iconColorClass}`} />
+                    </div>
+                  </div>
 
-        <Card className="bg-primary text-white">
-          <CardContent className="p-8 text-center">
-            <h3 className="text-2xl font-bold mb-4">
-              Ready to Implement These Improvements?
-            </h3>
-            <p className="text-blue-100 mb-6">
-              Book a 15-minute strategy call to discuss your specific needs and get a custom implementation plan.
-            </p>
-            <Button className="bg-white text-primary hover:bg-slate-100">
-              Book Free Strategy Call
-            </Button>
-          </CardContent>
-        </Card>
+                  {/* Content - Centered and grows to fill space */}
+                  <div className="flex flex-col flex-1 text-center">
+                    <h3 className="text-xl font-bold text-foreground mb-3">
+                      {step.title}
+                    </h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {step.description}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <div className="mt-8 text-center text-sm text-slate-500">
-          <p>You'll receive a text message within 2 minutes with additional details and next steps.</p>
+              {/* Arrow Between Cards */}
+              {index < steps.length - 1 && (
+                <div className="hidden md:flex absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
+                  <div className="bg-white rounded-full p-2 shadow-lg border border-slate-200">
+                    <ArrowRight className="w-5 h-5 text-slate-400" />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+function FeaturesSection() {
+  const features = [
+    {
+      icon: Clock,
+      title: "Sub-2-Minute Response",
+      description:
+        "AI responds instantly while competitors take hours. Capture leads before they move on.",
+      bgClass: "bg-primary/10",
+      iconColorClass: "text-primary",
+    },
+    {
+      icon: Target,
+      title: "Smart Qualification",
+      description:
+        "AI asks the right questions about budget, timeline, and project scope automatically.",
+      bgClass: "bg-construction/10",
+      iconColorClass: "text-construction",
+    },
+    {
+      icon: Calendar,
+      title: "One-Click Meeting Scheduling",
+      description:
+        "Qualified leads come with all the details. Book meetings instantly through your calendar with automated confirmations.",
+      bgClass: "bg-success/10",
+      iconColorClass: "text-success",
+    },
+    {
+      icon: MessageCircle,
+      title: "WhatsApp Native",
+      description:
+        "Prospects prefer WhatsApp. Meet them where they are with seamless conversations.",
+      bgClass: "bg-primary/10",
+      iconColorClass: "text-primary",
+    },
+    {
+      icon: TrendingUp,
+      title: "Real-Time Analytics",
+      description:
+        "Track lead quality, response times, and conversion rates in one dashboard.",
+      bgClass: "bg-construction/10",
+      iconColorClass: "text-construction",
+    },
+    {
+      icon: Shield,
+      title: "Human Handoff",
+      description:
+        "Take over any conversation instantly when you want to step in personally.",
+      bgClass: "bg-success/10",
+      iconColorClass: "text-success",
+    },
+  ];
+
+  return (
+    <section id="features" className="py-20 bg-background">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+            Everything You Need to Convert Leads
+          </h2>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Built specifically for construction companies who want more projects
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((feature, index) => (
+            <Card
+              key={index}
+              className="border-2 hover:border-primary/50 transition-all hover:shadow-lg"
+            >
+              <CardContent className="p-6">
+                <div
+                  className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 ${feature.bgClass}`}
+                >
+                  <feature.icon
+                    className={`w-6 h-6 ${feature.iconColorClass}`}
+                  />
+                </div>
+                <h3 className="text-lg font-bold text-foreground mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-muted-foreground">{feature.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatsSection() {
+  return (
+    <section className="py-20 bg-gradient-to-br from-blue-600 to-orange-500 text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            Results That Speak for Themselves
+          </h2>
+        </div>
+
+        <div className="grid md:grid-cols-4 gap-8">
+          <div className="text-center">
+            <div className="text-5xl font-bold mb-2">5-10x</div>
+            <div className="text-white/80">More Qualified Leads</div>
+          </div>
+          <div className="text-center">
+            <div className="text-5xl font-bold mb-2">2 min</div>
+            <div className="text-white/80">Average Response Time</div>
+          </div>
+          <div className="text-center">
+            <div className="text-5xl font-bold mb-2">73%</div>
+            <div className="text-white/80">AI Qualification Rate</div>
+          </div>
+          <div className="text-center">
+            <div className="text-5xl font-bold mb-2">24/7</div>
+            <div className="text-white/80">Always Available</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CTASection() {
+  return (
+    <section className="py-20 bg-muted/30">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
+          Ready to Close More Deals?
+        </h2>
+        <p className="text-xl text-muted-foreground mb-8">
+          Start your 14-day free trial. No credit card required.
+        </p>
+        <Button
+          size="lg"
+          onClick={() => (window.location.href = "/signup")}
+          className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
+        >
+          Start Free Trial
+          <ArrowRight className="ml-2 w-5 h-5" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="bg-secondary text-secondary-foreground py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid md:grid-cols-4 gap-8 mb-8">
+          {/* Brand */}
+          <div>
+            <div className="flex items-center space-x-2 mb-4">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-orange-500 rounded-lg flex items-center justify-center">
+                <HardHat className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-bold">AI Lead System</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              AI-powered lead generation for construction companies.
+            </p>
+          </div>
+
+          {/* Product */}
+          <div>
+            <h3 className="font-semibold mb-4">Product</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="#features" className="hover:text-foreground">
+                  Features
+                </a>
+              </li>
+              <li>
+                <a href="#pricing" className="hover:text-foreground">
+                  Pricing
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  Demo
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Company */}
+          <div>
+            <h3 className="font-semibold mb-4">Company</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  About
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  Contact
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  Support
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h3 className="font-semibold mb-4">Legal</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground">
+                  Terms of Service
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
+          <p>© 2025 AI Lead System. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
   );
 }

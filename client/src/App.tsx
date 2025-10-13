@@ -140,8 +140,20 @@ function ProtectedRouter() {
     );
   }
 
-  // Public pages that don't require authentication
-  const publicPages = ["/login", "/signup", "/landing"];
+  // ✅ NEW: Landing page is the default for unauthenticated users
+  const publicPages = ["/", "/login", "/signup", "/landing"];
+
+  // Redirect to landing if not authenticated and trying to access protected page
+  if (!isAuthenticated && !publicPages.includes(location)) {
+    setLocation("/");
+    return null;
+  }
+
+  // ✅ NEW: Redirect authenticated users away from landing page
+  if (isAuthenticated && location === "/") {
+    setLocation("/dashboard");
+    return null;
+  }
 
   // Redirect to login if not authenticated and not on public page
   if (!isAuthenticated && !publicPages.includes(location)) {
@@ -168,8 +180,6 @@ function ProtectedRouter() {
           newLeadsCount={newLeadsCount}
           user={user}
           onSignOut={handleSignOut}
-          
-         
           clients={clients || []}
           selectedClientId={selectedClientId || ""}
           onClientChange={setSelectedClientId}
@@ -179,15 +189,23 @@ function ProtectedRouter() {
       <div className={shouldShowNavigation ? "md:ml-64" : ""}>
         <div className={shouldShowNavigation ? "md:pt-0 pt-16" : ""}>
           <Switch>
+            {/* ✅ PUBLIC ROUTES - No auth required */}
+            <Route path="/" component={Landing} />{" "}
+            {/* ✅ Landing is now the homepage */}
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
-            <Route path="/landing" component={Landing} />
+            <Route path="/landing" component={Landing} />{" "}
+            {/* Keep /landing as alias */}
             <Route path="/trial-unlock" component={TrialUnlock} />
+
+            {/* ✅ PROTECTED ROUTES - Auth required */}
             <Route path="/super-admin" component={SuperAdmin} />
             <Route path="/super-admin/users" component={SuperAdminUsers} />
-            <Route path="/" component={Dashboard} />
-            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/dashboard" component={Dashboard} />{" "}
+            {/* ✅ Dashboard now requires /dashboard */}
             <Route path="/dashboard/:clientId" component={Dashboard} />
+
+            
             <Route path="/clients" component={Clients} />
             <Route path="/leads" component={Leads} />
             <Route path="/conversations" component={Conversations} />
@@ -210,12 +228,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ClientProvider> {/* ← ADD THIS */}
+        <ClientProvider>
           <TooltipProvider>
             <Toaster />
             <ProtectedRouter />
           </TooltipProvider>
-        </ClientProvider> {/* ← ADD THIS */}
+        </ClientProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

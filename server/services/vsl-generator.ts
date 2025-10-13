@@ -227,8 +227,8 @@ export class VSLGenerator {
           "-b:a 192k",
         ])
         .output(outputPath)
-        .on("end", resolve)
-        .on("error", reject)
+        .on("end", () => resolve())
+        .on("error", (err) => reject(err))
         .run();
     });
   }
