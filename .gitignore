@@ -4,3 +4,16 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# ✅ ADD THESE - CRITICAL FOR SECURITY!
+.env
+.env.local
+.env.production
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db

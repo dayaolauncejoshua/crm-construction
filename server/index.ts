@@ -103,6 +103,11 @@ app.use((req, res, next) => {
     await setupVite(app, server);
   } else {
     serveStatic(app);
+
+    // ✅ Serve React app for all non-API routes in production
+    app.get("*", (req: Request, res: Response) => {
+      res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
+    });
   }
 
   const PORT = parseInt(process.env.PORT || "5000", 10);
