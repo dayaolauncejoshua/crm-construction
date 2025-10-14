@@ -14,6 +14,7 @@ import pg from "pg";
 
 const { Pool } = pg;
 config();
+config({ override: false });
 
 // Create PostgreSQL pool
 export const pool = new Pool({
@@ -22,7 +23,13 @@ export const pool = new Pool({
 
 const app = express();
 
+// for production
+// app.set("trust proxy", 1);
 app.set("trust proxy", 1);
+// ✅ Trust proxy (production only)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 // Basic middleware
 app.use(express.json());
@@ -34,6 +41,8 @@ app.use("/webhook", webhookRouter);
 
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
+
+const isProduction = process.env.NODE_ENV === "production";
 
 app.use(
   session({
@@ -48,13 +57,17 @@ app.use(
     rolling: true, // Reset expiry on each request
     name: "sessionId",
     proxy: true,
+    proxy: isProduction,
     cookie: {
       secure: process.env.NODE_ENV === "development",
       secure: true,
+      secure: isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       sameSite: "lax",
+      sameSite: isProduction ? "lax" : "lax",
+
       path: "/",
     },
   })

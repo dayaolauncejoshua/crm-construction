@@ -1,5 +1,5 @@
 // client/src/pages/login.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 
 export default function Login() {
+  usePageTitle("Login");
+
   const [, setLocation] = useLocation();
   const { login, isAuthenticated } = useAuth();
   const { toast } = useToast();

@@ -1,4 +1,5 @@
 // client/src/pages/vsl.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -74,6 +75,8 @@ const createVSLSchema = z.object({
 type CreateVSLData = z.infer<typeof createVSLSchema>;
 
 export default function VSL() {
+  usePageTitle("VSL Generator");
+
   const { selectedClientId } = useClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedVSL, setSelectedVSL] = useState<any>(null);

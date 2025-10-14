@@ -1,3 +1,4 @@
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useRoute } from "wouter";
 import { useMutation } from "@tanstack/react-query";
@@ -6,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function ResetPassword() {
+  usePageTitle("Reset Password");
+
   const [, params] = useRoute("/reset-password/:token");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

@@ -1,9 +1,11 @@
 // client/src/pages/not-found.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 
 export default function NotFound() {
+  usePageTitle("Page Not Found", false);
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md mx-4">

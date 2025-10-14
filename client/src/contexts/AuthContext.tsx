@@ -8,7 +8,8 @@ import {
   ReactNode,
 } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, getQueryFn } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 interface User {
   id: string;
@@ -39,33 +40,59 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [location] = useLocation();
 
-  // Fetch current user
-  const { data, isLoading, refetch } = useQuery<{ user: User }>({
+  // ✅ Define public pages
+  const publicPages = [
+    "/",
+    "/login",
+    "/signup",
+    "/landing",
+    "/verify-email",
+    "/forgot-password",
+  ];
+
+  const isPublicRoute = (path: string) => {
+    return (
+      publicPages.includes(path) ||
+      path.startsWith("/verify/") ||
+      path.startsWith("/reset-password/")
+    );
+  };
+
+  // ✅ Only fetch current user on protected pages
+  const { data, isLoading, refetch } = useQuery<{ user: User } | null>({
     queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }), // ✅ Return null on 401, don't throw
     retry: false,
+    enabled: !isPublicRoute(location), // ✅ Only run on protected pages
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
     if (data?.user) {
       setUser(data.user);
+    } else if (data === null) {
+      // 401 or no user
+      setUser(null);
     }
   }, [data]);
 
   // ✅ Listen for cross-tab auth changes
   useEffect(() => {
-    // Listen for storage events (from other tabs)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "auth_updated") {
-        console.log("🔄 Auth state changed in another tab, refetching...");
-        refetch();
+        console.log("🔄 Auth state changed in another tab");
+        if (!isPublicRoute(location)) {
+          refetch();
+        }
       }
     };
 
-    // Listen for window focus (when user returns to this tab)
     const handleWindowFocus = () => {
-      console.log("👁️ Window focused, checking auth state...");
-      refetch();
+      if (!isPublicRoute(location)) {
+        refetch();
+      }
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -75,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("focus", handleWindowFocus);
     };
-  }, [refetch]);
+  }, [refetch, location]);
 
   // Login
   const loginMutation = useMutation({
@@ -103,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: (data) => {
       setUser(data.user);
       queryClient.invalidateQueries();
+      localStorage.setItem("auth_updated", Date.now().toString());
     },
   });
 
@@ -136,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: (data) => {
       setUser(data.user);
       queryClient.invalidateQueries();
+      localStorage.setItem("auth_updated", Date.now().toString());
     },
   });
 
@@ -152,6 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: () => {
       setUser(null);
       queryClient.clear();
+      localStorage.setItem("auth_updated", Date.now().toString());
+      console.log("✅ Logged out successfully");
     },
   });
 

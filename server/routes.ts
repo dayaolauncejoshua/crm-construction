@@ -22,8 +22,9 @@ import {
 import bcrypt from "bcrypt";
 import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 
-import { generateVSLScript } from "./services/openai";
+import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
+
 
 // import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
@@ -466,14 +467,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const [kpis, conversations, hotLeads, recentActivity] = await Promise.all(
+      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] = await Promise.all(
         [
           storage.getKPIs(clientId),
           storage.getConversations(clientId, 50),
           storage.getHotLeads(clientId),
           storage.getRecentActivity(clientId),
+          storage.getLeads(clientId, 100),
+          storage.getBookings(clientId),
         ]
       );
+
+      console.log("📊 Dashboard data fetched:");
+      console.log("  - KPIs:", kpis);
+      console.log("  - Conversations:", conversations.length);
+      console.log("  - Hot Leads:", hotLeads.length);
+      console.log("  - Recent Activity:", recentActivity.length);
+      console.log("  - Leads:", leads.length);
+      console.log("  - Bookings:", bookings.length);
 
       const conversationMap = new Map(conversations.map((c) => [c.id, c]));
       hotLeads.forEach((hl) => {
@@ -488,6 +499,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         conversations: allConversations,
         hotLeads,
         recentActivity,
+        leads,
+        bookings,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 export default function VerifyToken() {
+  usePageTitle("Verify Email");
+
   const [, params] = useRoute("/verify/:token");
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");

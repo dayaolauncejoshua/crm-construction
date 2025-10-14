@@ -1,5 +1,5 @@
 // client/src/pages/conversations.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -73,6 +73,8 @@ import {
 } from "@/components/ui/popover";
 
 export default function Conversations() {
+  usePageTitle("Conversations");
+
   const { user } = useAuth();
   const { selectedClientId } = useClient();
 

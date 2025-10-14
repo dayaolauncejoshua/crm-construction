@@ -1,5 +1,5 @@
 // client/src/pages/vsl.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -48,6 +48,8 @@ const whiteLabelSchema = z.object({
 type WhiteLabelData = z.infer<typeof whiteLabelSchema>;
 
 export default function WhiteLabel() {
+  usePageTitle("White Label Settings");
+
   const [selectedClientId, setSelectedClientId] = useState("demo-client");
   const [previewDevice, setPreviewDevice] = useState("desktop");
   const [isPreviewMode, setIsPreviewMode] = useState(false);

@@ -38,38 +38,41 @@ import ResetPassword from "@/pages/ResetPassword";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
-  const { selectedClientId, setSelectedClientId } = useClient(); // ← ADD THIS
+  const { selectedClientId, setSelectedClientId } = useClient();
   const [location, setLocation] = useLocation();
 
-  // Fetch clients based on role
+  // ✅ Fetch clients - ONLY when authenticated
   const { data: clients } = useQuery({
     queryKey: ["/api/clients", user?.id, user?.role],
     queryFn: async () => {
       if (!user?.id) return [];
 
-      // Super admin gets all clients for viewing
       if (user?.role === "super_admin") {
-        const response = await fetch("/api/super-admin/clients");
+        const response = await fetch("/api/super-admin/clients", {
+          credentials: "include",
+        });
         if (!response.ok) return [];
         return response.json();
       }
 
-      // Regular users get only their clients
-      const response = await fetch(`/api/clients?userId=${user?.id}`);
+      const response = await fetch(`/api/clients?userId=${user?.id}`, {
+        credentials: "include",
+      });
       if (!response.ok) return [];
       return response.json();
     },
-    enabled: !!user?.id && isAuthenticated,
+    enabled: !!user?.id && isAuthenticated, // ✅ Only when authenticated
+    staleTime: 30 * 1000,
   });
 
-  // ← ADD THIS: Auto-select first client if none selected
+  // Auto-select first client if none selected
   useEffect(() => {
     if (clients && clients.length > 0 && !selectedClientId) {
       setSelectedClientId(clients[0].id);
     }
   }, [clients, selectedClientId, setSelectedClientId]);
 
-  // ← CHANGE THIS: Use selectedClientId instead of clients?.[0]?.id
+  // ✅ Fetch dashboard - ONLY when authenticated
   const { data: dashboardData } = useQuery<{
     conversations: any[];
     kpis: any;
@@ -78,40 +81,42 @@ function ProtectedRouter() {
     queryFn: async () => {
       if (!selectedClientId) return null;
 
-      // Super admin gets platform-wide dashboard
       if (user?.role === "super_admin") {
-        const response = await fetch("/api/super-admin/dashboard");
+        const response = await fetch("/api/super-admin/dashboard", {
+          credentials: "include",
+        });
+        if (!response.ok) return null;
         return response.json();
       }
 
-      // Regular users get their client dashboard
-      const response = await fetch(`/api/dashboard/${selectedClientId}`);
+      const response = await fetch(`/api/dashboard/${selectedClientId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) return null;
       return response.json();
     },
-    enabled: user?.role === "super_admin" || !!selectedClientId,
+    enabled: isAuthenticated && (user?.role === "super_admin" || !!selectedClientId), // ✅ Only when authenticated
     staleTime: 30 * 1000,
   });
 
-  // Calculate unread count from conversations
   const unreadCount =
     dashboardData?.conversations?.reduce((total: number, conv: any) => {
       return total + (conv.unreadCount || 0);
     }, 0) || 0;
 
-  // Calculate new leads count (status = "new")
   const newLeadsCount =
     dashboardData?.conversations?.filter(
       (conv: any) => conv.lead?.status === "new" && !conv.lead?.viewedAt
     ).length || 0;
 
-  const { data: wsData } = useWebSocket();
+  // ✅ WebSocket - pass isAuthenticated
+  const { data: wsData } = useWebSocket(isAuthenticated);
 
   useEffect(() => {
-    if (!wsData || !selectedClientId) return;
+    if (!wsData || !selectedClientId || !isAuthenticated) return;
 
     console.log("🌐 App-level WebSocket event:", wsData.type);
 
-    // Refresh dashboard data (for sidebar badges) on any relevant event
     if (
       wsData.type === "new_message" ||
       wsData.type === "new_conversation" ||
@@ -119,21 +124,48 @@ function ProtectedRouter() {
       wsData.type === "lead_updated" ||
       wsData.type === "hot_lead_alert"
     ) {
-      console.log("🔄 Invalidating dashboard query for sidebar update");
-
-      // Invalidate dashboard to update unread counts
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
     }
-  }, [wsData, selectedClientId]);
+  }, [wsData, selectedClientId, isAuthenticated]);
 
-  // Pages that don't need navigation layout
+  // ✅ Handle redirects in useEffect
+  useEffect(() => {
+    const publicPages = [
+      "/",
+      "/login",
+      "/signup",
+      "/landing",
+      "/verify-email",
+      "/forgot-password",
+    ];
+
+    const isPublicRoute = (path: string) => {
+      return (
+        publicPages.includes(path) ||
+        path.startsWith("/verify/") ||
+        path.startsWith("/reset-password/")
+      );
+    };
+
+    if (isLoading) return;
+
+    if (isAuthenticated && (location === "/" || location === "/login" || location === "/signup")) {
+      setLocation("/dashboard");
+      return;
+    }
+
+    if (!isAuthenticated && !isPublicRoute(location)) {
+      setLocation("/");
+      return;
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
+
   const fullScreenPages = ["/trial-unlock", "/landing", "/login", "/signup"];
   const shouldShowNavigation =
     !fullScreenPages.includes(location) && isAuthenticated;
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -144,41 +176,6 @@ function ProtectedRouter() {
       </div>
     );
   }
-
-  // ✅ NEW: Landing page is the default for unauthenticated users
-  const publicPages = [
-    "/",
-    "/login",
-    "/signup",
-    "/landing",
-    "/verify-email",
-    "/forgot-password",
-  ];
-
-  const isPublicRoute = (path: string) => {
-    return (
-      publicPages.includes(path) ||
-      path.startsWith("/verify/") ||
-      path.startsWith("/reset-password/")
-    );
-  };
-
-  // Redirect to landing if not authenticated and trying to access protected page
-  if (!isAuthenticated && !isPublicRoute(location)) {
-    setLocation("/");
-    return null;
-  }
-
-  // ✅ NEW: Redirect authenticated users away from landing page
-  if (isAuthenticated && location === "/" && !location.startsWith("/verify")) {
-  setLocation("/dashboard");
-  return null;
-}
-
-  // Redirect to login if not authenticated and not on public page
-  if (!isAuthenticated && !isPublicRoute(location)) {
-  return <Login />;
-}
 
   const handleSignOut = async () => {
     try {
@@ -209,19 +206,19 @@ function ProtectedRouter() {
       <div className={shouldShowNavigation ? "md:ml-64" : ""}>
         <div className={shouldShowNavigation ? "md:pt-0 pt-16" : ""}>
           <Switch>
-            {/* ✅ PUBLIC ROUTES - No auth required */}
-            <Route path="/" component={Landing} />{" "}
-            {/* ✅ Landing is now the homepage */}
+            <Route path="/" component={Landing} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
-            <Route path="/landing" component={Landing} />{" "}
-            {/* Keep /landing as alias */}
+            <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
-            {/* ✅ PROTECTED ROUTES - Auth required */}
+            <Route path="/verify-email" component={VerifyEmail} />
+            <Route path="/verify/:token" component={VerifyToken} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password/:token" component={ResetPassword} />
+
             <Route path="/super-admin" component={SuperAdmin} />
             <Route path="/super-admin/users" component={SuperAdminUsers} />
-            <Route path="/dashboard" component={Dashboard} />{" "}
-            {/* ✅ Dashboard now requires /dashboard */}
+            <Route path="/dashboard" component={Dashboard} />
             <Route path="/dashboard/:clientId" component={Dashboard} />
             <Route path="/clients" component={Clients} />
             <Route path="/leads" component={Leads} />
@@ -233,10 +230,6 @@ function ProtectedRouter() {
             <Route path="/follow-ups" component={FollowUps} />
             <Route path="/white-label" component={WhiteLabel} />
             <Route path="/sops" component={SOPs} />
-            <Route path="/verify-email" component={VerifyEmail} />
-            <Route path="/verify/:token" component={VerifyToken} />
-            <Route path="/forgot-password" component={ForgotPassword} />
-            <Route path="/reset-password/:token" component={ResetPassword} />
             <Route component={NotFound} />
           </Switch>
         </div>

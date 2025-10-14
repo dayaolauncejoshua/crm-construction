@@ -1,4 +1,5 @@
 // client/src/pages/landing.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 
 export default function Landing() {
+  usePageTitle("AI Lead System - Intelligent CRM for Construction", false);
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <Header />

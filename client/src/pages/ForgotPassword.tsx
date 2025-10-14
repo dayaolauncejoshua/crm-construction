@@ -1,3 +1,5 @@
+// client/src/pages/ForgotPassword
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useMutation } from "@tanstack/react-query";
@@ -6,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function ForgotPassword() {
+  usePageTitle("Forgot Password");
+
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
 

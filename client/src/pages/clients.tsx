@@ -1,4 +1,5 @@
 // client/src/pages/clients.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -80,6 +81,8 @@ const createClientSchema = z.object({
 type CreateClientData = z.infer<typeof createClientSchema>;
 
 export default function Clients() {
+  usePageTitle("Clients");
+
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
