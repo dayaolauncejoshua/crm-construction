@@ -2,29 +2,51 @@
 
 import { useState, useEffect, useRef } from "react";
 
-export function useWebSocket() {
+export function useWebSocket(isAuthenticated: boolean = true) {
   const [data, setData] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
-    // Always connect to backend server port
-    const wsUrl = "ws://localhost:5000/ws";
-    
+    // ✅ Only connect if authenticated
+    if (!isAuthenticated) {
+      console.log("⏸️ WebSocket disabled - not authenticated");
+      
+      // Cleanup if exists
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
+      setIsConnected(false);
+      return;
+    }
+
+    // Determine WebSocket URL based on environment
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = process.env.NODE_ENV === "production" 
+      ? `${protocol}//${window.location.host}/ws`
+      : "ws://localhost:5000/ws";
+
     const connect = () => {
       console.log("Attempting to connect to:", wsUrl);
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       socket.onopen = () => {
-        console.log("WebSocket connected successfully");
+        console.log("✅ WebSocket connected");
         setIsConnected(true);
       };
 
       socket.onmessage = (event) => {
         try {
           const parsedData = JSON.parse(event.data);
-          console.log("WebSocket message received:", parsedData);
+          console.log("📨 WebSocket message:", parsedData);
           setData(parsedData);
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -32,13 +54,18 @@ export function useWebSocket() {
       };
 
       socket.onclose = () => {
-        console.log("WebSocket disconnected, reconnecting in 3s...");
+        console.log("WebSocket disconnected");
         setIsConnected(false);
-        setTimeout(connect, 3000);
+        
+        // Only reconnect if still authenticated
+        if (isAuthenticated) {
+          console.log("Reconnecting in 3s...");
+          reconnectTimeoutRef.current = setTimeout(connect, 3000);
+        }
       };
 
       socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        console.log("WebSocket error:", error);
         setIsConnected(false);
       };
     };
@@ -46,11 +73,18 @@ export function useWebSocket() {
     connect();
 
     return () => {
+      console.log("🔌 Cleaning up WebSocket");
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
     };
-  }, []);
+  }, [isAuthenticated]);
 
   return { data, isConnected };
 }

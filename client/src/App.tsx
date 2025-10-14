@@ -41,25 +41,28 @@ function ProtectedRouter() {
   const { selectedClientId, setSelectedClientId } = useClient();
   const [location, setLocation] = useLocation();
 
-  // Fetch clients based on role
+  // ✅ Fetch clients - ONLY when authenticated
   const { data: clients } = useQuery({
     queryKey: ["/api/clients", user?.id, user?.role],
     queryFn: async () => {
       if (!user?.id) return [];
 
-      // Super admin gets all clients for viewing
       if (user?.role === "super_admin") {
-        const response = await fetch("/api/super-admin/clients");
+        const response = await fetch("/api/super-admin/clients", {
+          credentials: "include",
+        });
         if (!response.ok) return [];
         return response.json();
       }
 
-      // Regular users get only their clients
-      const response = await fetch(`/api/clients?userId=${user?.id}`);
+      const response = await fetch(`/api/clients?userId=${user?.id}`, {
+        credentials: "include",
+      });
       if (!response.ok) return [];
       return response.json();
     },
-    enabled: !!user?.id && isAuthenticated,
+    enabled: !!user?.id && isAuthenticated, // ✅ Only when authenticated
+    staleTime: 30 * 1000,
   });
 
   // Auto-select first client if none selected
@@ -69,6 +72,7 @@ function ProtectedRouter() {
     }
   }, [clients, selectedClientId, setSelectedClientId]);
 
+  // ✅ Fetch dashboard - ONLY when authenticated
   const { data: dashboardData } = useQuery<{
     conversations: any[];
     kpis: any;
@@ -77,40 +81,42 @@ function ProtectedRouter() {
     queryFn: async () => {
       if (!selectedClientId) return null;
 
-      // Super admin gets platform-wide dashboard
       if (user?.role === "super_admin") {
-        const response = await fetch("/api/super-admin/dashboard");
+        const response = await fetch("/api/super-admin/dashboard", {
+          credentials: "include",
+        });
+        if (!response.ok) return null;
         return response.json();
       }
 
-      // Regular users get their client dashboard
-      const response = await fetch(`/api/dashboard/${selectedClientId}`);
+      const response = await fetch(`/api/dashboard/${selectedClientId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) return null;
       return response.json();
     },
-    enabled: user?.role === "super_admin" || !!selectedClientId,
+    enabled: isAuthenticated && (user?.role === "super_admin" || !!selectedClientId), // ✅ Only when authenticated
     staleTime: 30 * 1000,
   });
 
-  // Calculate unread count from conversations
   const unreadCount =
     dashboardData?.conversations?.reduce((total: number, conv: any) => {
       return total + (conv.unreadCount || 0);
     }, 0) || 0;
 
-  // Calculate new leads count (status = "new")
   const newLeadsCount =
     dashboardData?.conversations?.filter(
       (conv: any) => conv.lead?.status === "new" && !conv.lead?.viewedAt
     ).length || 0;
 
-  const { data: wsData } = useWebSocket();
+  // ✅ WebSocket - pass isAuthenticated
+  const { data: wsData } = useWebSocket(isAuthenticated);
 
   useEffect(() => {
-    if (!wsData || !selectedClientId) return;
+    if (!wsData || !selectedClientId || !isAuthenticated) return;
 
     console.log("🌐 App-level WebSocket event:", wsData.type);
 
-    // Refresh dashboard data (for sidebar badges) on any relevant event
     if (
       wsData.type === "new_message" ||
       wsData.type === "new_conversation" ||
@@ -118,18 +124,14 @@ function ProtectedRouter() {
       wsData.type === "lead_updated" ||
       wsData.type === "hot_lead_alert"
     ) {
-      console.log("🔄 Invalidating dashboard query for sidebar update");
-
-      // Invalidate dashboard to update unread counts
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
     }
-  }, [wsData, selectedClientId]);
+  }, [wsData, selectedClientId, isAuthenticated]);
 
-  // ✅ FIX: Handle redirects in useEffect instead of during render
+  // ✅ Handle redirects in useEffect
   useEffect(() => {
-    // Define public pages
     const publicPages = [
       "/",
       "/login",
@@ -147,28 +149,23 @@ function ProtectedRouter() {
       );
     };
 
-    // Skip redirects during loading
     if (isLoading) return;
 
-    // Redirect authenticated users away from landing/login/signup
     if (isAuthenticated && (location === "/" || location === "/login" || location === "/signup")) {
       setLocation("/dashboard");
       return;
     }
 
-    // Redirect unauthenticated users to landing from protected pages
     if (!isAuthenticated && !isPublicRoute(location)) {
       setLocation("/");
       return;
     }
   }, [isAuthenticated, isLoading, location, setLocation]);
 
-  // Pages that don't need navigation layout
   const fullScreenPages = ["/trial-unlock", "/landing", "/login", "/signup"];
   const shouldShowNavigation =
     !fullScreenPages.includes(location) && isAuthenticated;
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -209,7 +206,6 @@ function ProtectedRouter() {
       <div className={shouldShowNavigation ? "md:ml-64" : ""}>
         <div className={shouldShowNavigation ? "md:pt-0 pt-16" : ""}>
           <Switch>
-            {/* PUBLIC ROUTES - No auth required */}
             <Route path="/" component={Landing} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
@@ -220,7 +216,6 @@ function ProtectedRouter() {
             <Route path="/forgot-password" component={ForgotPassword} />
             <Route path="/reset-password/:token" component={ResetPassword} />
 
-            {/* PROTECTED ROUTES - Auth required */}
             <Route path="/super-admin" component={SuperAdmin} />
             <Route path="/super-admin/users" component={SuperAdminUsers} />
             <Route path="/dashboard" component={Dashboard} />
