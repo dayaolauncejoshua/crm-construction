@@ -7,10 +7,6 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
@@ -26,7 +22,13 @@ export const pool = new Pool({
 
 const app = express();
 
-app.set("trust proxy", 1);
+// for production
+// app.set("trust proxy", 1);
+
+// ✅ Trust proxy (production only)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 // Basic middleware
 app.use(express.json());
@@ -37,6 +39,8 @@ app.use("/webhook", webhookRouter);
 
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
+
+const isProduction = process.env.NODE_ENV === "production";
 
 app.use(
   session({
@@ -50,12 +54,12 @@ app.use(
     saveUninitialized: false,
     rolling: true, // Reset expiry on each request
     name: "sessionId",
-    proxy: true,
+    proxy: isProduction,
     cookie: {
-      secure: true,
+      secure: isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: "lax",
+      sameSite: isProduction ? "lax" : "lax",
       path: "/",
     },
   })

@@ -22,7 +22,7 @@ import {
 import bcrypt from "bcrypt";
 import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 
-import { generateVSLScript } from "./services/openai";
+import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
 
 // import vslapp from "./routes/vsl.route2";
