@@ -13,7 +13,7 @@ import pg from "pg";
 
 
 const { Pool } = pg;
-config();
+config({override: false});
 
 // Create PostgreSQL pool
 export const pool = new Pool({
