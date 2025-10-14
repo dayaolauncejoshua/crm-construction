@@ -38,7 +38,7 @@ import ResetPassword from "@/pages/ResetPassword";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
-  const { selectedClientId, setSelectedClientId } = useClient(); // ← ADD THIS
+  const { selectedClientId, setSelectedClientId } = useClient();
   const [location, setLocation] = useLocation();
 
   // Fetch clients based on role
@@ -62,14 +62,13 @@ function ProtectedRouter() {
     enabled: !!user?.id && isAuthenticated,
   });
 
-  // ← ADD THIS: Auto-select first client if none selected
+  // Auto-select first client if none selected
   useEffect(() => {
     if (clients && clients.length > 0 && !selectedClientId) {
       setSelectedClientId(clients[0].id);
     }
   }, [clients, selectedClientId, setSelectedClientId]);
 
-  // ← CHANGE THIS: Use selectedClientId instead of clients?.[0]?.id
   const { data: dashboardData } = useQuery<{
     conversations: any[];
     kpis: any;
@@ -128,6 +127,42 @@ function ProtectedRouter() {
     }
   }, [wsData, selectedClientId]);
 
+  // ✅ FIX: Handle redirects in useEffect instead of during render
+  useEffect(() => {
+    // Define public pages
+    const publicPages = [
+      "/",
+      "/login",
+      "/signup",
+      "/landing",
+      "/verify-email",
+      "/forgot-password",
+    ];
+
+    const isPublicRoute = (path: string) => {
+      return (
+        publicPages.includes(path) ||
+        path.startsWith("/verify/") ||
+        path.startsWith("/reset-password/")
+      );
+    };
+
+    // Skip redirects during loading
+    if (isLoading) return;
+
+    // Redirect authenticated users away from landing/login/signup
+    if (isAuthenticated && (location === "/" || location === "/login" || location === "/signup")) {
+      setLocation("/dashboard");
+      return;
+    }
+
+    // Redirect unauthenticated users to landing from protected pages
+    if (!isAuthenticated && !isPublicRoute(location)) {
+      setLocation("/");
+      return;
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
+
   // Pages that don't need navigation layout
   const fullScreenPages = ["/trial-unlock", "/landing", "/login", "/signup"];
   const shouldShowNavigation =
@@ -144,41 +179,6 @@ function ProtectedRouter() {
       </div>
     );
   }
-
-  // ✅ NEW: Landing page is the default for unauthenticated users
-  const publicPages = [
-    "/",
-    "/login",
-    "/signup",
-    "/landing",
-    "/verify-email",
-    "/forgot-password",
-  ];
-
-  const isPublicRoute = (path: string) => {
-    return (
-      publicPages.includes(path) ||
-      path.startsWith("/verify/") ||
-      path.startsWith("/reset-password/")
-    );
-  };
-
-  // Redirect to landing if not authenticated and trying to access protected page
-  if (!isAuthenticated && !isPublicRoute(location)) {
-    setLocation("/");
-    return null;
-  }
-
-  // ✅ NEW: Redirect authenticated users away from landing page
-  if (isAuthenticated && location === "/" && !location.startsWith("/verify")) {
-  setLocation("/dashboard");
-  return null;
-}
-
-  // Redirect to login if not authenticated and not on public page
-  if (!isAuthenticated && !isPublicRoute(location)) {
-  return <Login />;
-}
 
   const handleSignOut = async () => {
     try {
@@ -209,19 +209,21 @@ function ProtectedRouter() {
       <div className={shouldShowNavigation ? "md:ml-64" : ""}>
         <div className={shouldShowNavigation ? "md:pt-0 pt-16" : ""}>
           <Switch>
-            {/* ✅ PUBLIC ROUTES - No auth required */}
-            <Route path="/" component={Landing} />{" "}
-            {/* ✅ Landing is now the homepage */}
+            {/* PUBLIC ROUTES - No auth required */}
+            <Route path="/" component={Landing} />
             <Route path="/login" component={Login} />
             <Route path="/signup" component={Signup} />
-            <Route path="/landing" component={Landing} />{" "}
-            {/* Keep /landing as alias */}
+            <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
-            {/* ✅ PROTECTED ROUTES - Auth required */}
+            <Route path="/verify-email" component={VerifyEmail} />
+            <Route path="/verify/:token" component={VerifyToken} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password/:token" component={ResetPassword} />
+
+            {/* PROTECTED ROUTES - Auth required */}
             <Route path="/super-admin" component={SuperAdmin} />
             <Route path="/super-admin/users" component={SuperAdminUsers} />
-            <Route path="/dashboard" component={Dashboard} />{" "}
-            {/* ✅ Dashboard now requires /dashboard */}
+            <Route path="/dashboard" component={Dashboard} />
             <Route path="/dashboard/:clientId" component={Dashboard} />
             <Route path="/clients" component={Clients} />
             <Route path="/leads" component={Leads} />
@@ -233,10 +235,6 @@ function ProtectedRouter() {
             <Route path="/follow-ups" component={FollowUps} />
             <Route path="/white-label" component={WhiteLabel} />
             <Route path="/sops" component={SOPs} />
-            <Route path="/verify-email" component={VerifyEmail} />
-            <Route path="/verify/:token" component={VerifyToken} />
-            <Route path="/forgot-password" component={ForgotPassword} />
-            <Route path="/reset-password/:token" component={ResetPassword} />
             <Route component={NotFound} />
           </Switch>
         </div>
