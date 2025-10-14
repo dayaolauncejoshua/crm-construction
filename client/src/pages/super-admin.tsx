@@ -1,5 +1,5 @@
 // client/src/pages/super-admin.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 
 export default function SuperAdmin() {
+  usePageTitle("Super Admin Dashboard");
   const [selectedTimeRange, setSelectedTimeRange] = useState("7d");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserStatus, setSelectedUserStatus] = useState("all");

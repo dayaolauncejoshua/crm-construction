@@ -1,5 +1,5 @@
 // client/src/pages/signup.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Rocket, CheckCircle, Shield, Zap } from "lucide-react";
 
 export default function Signup() {
+  usePageTitle("Signup");
+
   const [, setLocation] = useLocation();
   const { signup, isAuthenticated } = useAuth();
   const { toast } = useToast();

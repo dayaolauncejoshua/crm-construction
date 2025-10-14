@@ -1,5 +1,5 @@
 // client/src/pages/calendar.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -66,6 +66,7 @@ import {
 } from "lucide-react";
 
 export default function CalendarPage() {
+  usePageTitle("Calendar & Bookings");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();

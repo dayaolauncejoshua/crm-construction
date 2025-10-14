@@ -1,5 +1,5 @@
 // client/src/pages/follow-ups.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -74,6 +74,7 @@ const createFollowUpSchema = z.object({
 type CreateFollowUpData = z.infer<typeof createFollowUpSchema>;
 
 export default function FollowUps() {
+  usePageTitle("Follow-ups");
   const [selectedClientId, setSelectedClientId] = useState("demo-client");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedSequence, setSelectedSequence] = useState<any>(null);

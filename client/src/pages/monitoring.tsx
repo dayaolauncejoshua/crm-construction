@@ -1,5 +1,5 @@
 // client/src/pages/monitoring.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 export default function Monitoring() {
+  usePageTitle("Monitoring");
   const [selectedClientId, setSelectedClientId] = useState("demo-client");
   const [activeTab, setActiveTab] = useState("competitors");
   const { toast } = useToast();

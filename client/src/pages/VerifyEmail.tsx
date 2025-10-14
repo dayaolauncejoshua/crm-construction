@@ -1,7 +1,7 @@
 import { useState, useEffect} from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery} from "@tanstack/react-query";
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   Mail,
   CheckCircle,
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function VerifyEmail() {
+  usePageTitle("Email Verification");
+
   const { user } = useAuth();
   const [resendSuccess, setResendSuccess] = useState(false);
   const [, setLocation] = useLocation();

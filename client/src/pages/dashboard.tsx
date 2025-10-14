@@ -1,5 +1,5 @@
 // client/src/pages/dashboard.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,10 +49,11 @@ import {
 } from "lucide-react";
 
 export default function Dashboard() {
+  
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
-
+  usePageTitle(user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard")
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
 

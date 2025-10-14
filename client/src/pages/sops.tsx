@@ -1,4 +1,5 @@
 // client/src/pages/sops.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -88,6 +89,8 @@ type CreateVideoSOPData = z.infer<typeof createVideoSOPSchema>;
 type CreateNotionSOPData = z.infer<typeof createNotionSOPSchema>;
 
 export default function SOPs() {
+  usePageTitle("SOPs");
+
   const [selectedClientId, setSelectedClientId] = useState("demo-client");
   const [activeTab, setActiveTab] = useState("video");
   const [showCreateVideoDialog, setShowCreateVideoDialog] = useState(false);

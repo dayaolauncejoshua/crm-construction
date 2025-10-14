@@ -1,4 +1,5 @@
 // client/src/pages/analytics.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -50,6 +51,8 @@ import {
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
 
 export default function Analytics() {
+  usePageTitle("Analytics & Reporting");
+
   const [selectedClientId, setSelectedClientId] = useState("demo-client");
   const [timeRange, setTimeRange] = useState("7d");
   const [, setLocation] = useLocation();

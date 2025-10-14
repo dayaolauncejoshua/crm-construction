@@ -1,4 +1,5 @@
 // client/src/pages/leads.tsx
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -58,6 +59,8 @@ import {
 } from "lucide-react";
 
 export default function Leads() {
+  usePageTitle("Leads");
+
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();

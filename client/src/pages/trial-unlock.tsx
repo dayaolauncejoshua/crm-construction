@@ -1,5 +1,5 @@
 // client/src/pages/trial-unlock.tsx
-
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ interface TrialStatus {
 }
 
 export default function TrialUnlock() {
+  usePageTitle("Unlock Free Trial");
   const [isActivating, setIsActivating] = useState(false);
   const { toast } = useToast();
 
