@@ -46,14 +46,15 @@ import {
   ArrowRight,
   PhoneCall,
   Mail,
+  HardHat, // ✅ Construction icon
 } from "lucide-react";
 
 export default function Dashboard() {
-  
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
-  usePageTitle(user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard")
+  usePageTitle(user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard");
+
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
 
@@ -172,21 +173,22 @@ export default function Dashboard() {
     }));
   }, [leads]);
 
+  // ✅ CONSTRUCTION-THEMED TEMPERATURE DATA
   const temperatureData = [
     {
       name: "Hot",
       value: leads.filter((l: any) => l.temperature === "hot").length,
-      color: "#ef4444",
+      color: "#ea580c", // construction orange
     },
     {
       name: "Warm",
       value: leads.filter((l: any) => l.temperature === "warm").length,
-      color: "#f59e0b",
+      color: "#f59e0b", // amber
     },
     {
       name: "Cold",
       value: leads.filter((l: any) => l.temperature === "cold").length,
-      color: "#3b82f6",
+      color: "#2563eb", // primary blue
     },
   ];
 
@@ -216,7 +218,7 @@ export default function Dashboard() {
       if (conv.lead?.responseTimeSeconds) {
         const createdAt = new Date(conv.createdAt);
         const dayIndex = createdAt.getDay();
-        weekData[dayIndex].avgTime += conv.lead.responseTimeSeconds / 60; // Convert to minutes
+        weekData[dayIndex].avgTime += conv.lead.responseTimeSeconds / 60;
         weekData[dayIndex].count++;
       }
     });
@@ -228,7 +230,7 @@ export default function Dashboard() {
     }));
   }, [conversations]);
 
-    // Handle real-time updates
+  // Handle real-time updates
   useEffect(() => {
     if (wsData) {
       console.log("WebSocket update:", wsData);
@@ -238,33 +240,32 @@ export default function Dashboard() {
 
   // Skeleton Loader
   if (isLoading && selectedClientId) {
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <Skeleton className="h-8 w-64 mb-2" />
-        <Skeleton className="h-4 w-96" />
-      </header>
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-slate-200 px-6 py-4">
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </header>
 
-      <main className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <Skeleton className="h-4 w-3/4 mb-4" />
-                <Skeleton className="h-8 w-1/2 mb-2" />
-                <Skeleton className="h-3 w-1/4" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <Skeleton className="h-96 w-full rounded" />
-      </main>
-    </div>
-  );
-}
+        <main className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-4 w-3/4 mb-4" />
+                  <Skeleton className="h-8 w-1/2 mb-2" />
+                  <Skeleton className="h-3 w-1/4" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Skeleton className="h-96 w-full rounded" />
+        </main>
+      </div>
+    );
+  }
 
   return (
-    
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       <VerificationBanner />
       {/* Header */}
@@ -279,12 +280,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Quick Action Buttons - Moved Here */}
+            {/* Quick Action Buttons */}
             <Button
               variant="outline"
               size="sm"
               onClick={() => setLocation("/conversations")}
-              className="gap-2"
+              className="gap-2 border-2 hover:border-construction/30"
             >
               <MessageCircle className="w-4 h-4" />
               <span className="hidden sm:inline">Conversations</span>
@@ -297,7 +298,7 @@ export default function Dashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation("/leads")}
-              className="gap-2"
+              className="gap-2 border-2 hover:border-construction/30"
             >
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">Leads</span>
@@ -310,22 +311,23 @@ export default function Dashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation("/calendar")}
+              className="border-2 hover:border-construction/30"
             >
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Calendar</span>
             </Button>
 
-            {/* Status Indicator */}
+            {/* ✅ CONSTRUCTION-THEMED STATUS INDICATOR */}
             <div
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
                 isConnected
-                  ? "bg-green-50 text-green-700"
-                  : "bg-red-50 text-red-700"
+                  ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
+                  : "bg-red-50 text-red-700 border border-red-200"
               }`}
             >
               <div
                 className={`w-2 h-2 rounded-full ${
-                  isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+                  isConnected ? "bg-construction animate-pulse" : "bg-red-500"
                 }`}
               ></div>
               <span className="font-medium hidden sm:inline">
@@ -341,10 +343,11 @@ export default function Dashboard() {
         {/* Empty State */}
         {!hasData ? (
           <div className="h-full flex items-center justify-center p-6">
-            <Card className="max-w-2xl w-full">
+            <Card className="max-w-2xl w-full border-2">
               <CardContent className="p-12 text-center">
-                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <TrendingUp className="w-10 h-10 text-blue-600" />
+                {/* ✅ CONSTRUCTION-THEMED ICON */}
+                <div className="w-20 h-20 bg-gradient-construction rounded-full flex items-center justify-center mx-auto mb-6">
+                  <HardHat className="w-10 h-10 text-white" />
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900 mb-3">
                   No Data Yet
@@ -355,13 +358,17 @@ export default function Dashboard() {
                 </p>
 
                 <div className="flex gap-3 justify-center">
-                  <Button onClick={() => setLocation("/clients")}>
+                  <Button 
+                    onClick={() => setLocation("/clients")}
+                    className="bg-gradient-construction hover:opacity-90 text-white"
+                  >
                     <UserPlus className="w-4 h-4 mr-2" />
                     Setup WhatsApp
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => setLocation("/conversations")}
+                    className="border-2 hover:border-construction/30"
                   >
                     <MessageCircle className="w-4 h-4 mr-2" />
                     View Conversations
@@ -372,15 +379,15 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="p-4 flex flex-col h-full">
-            {/* KPI Cards */}
+            {/* ✅ CONSTRUCTION-THEMED KPI CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <KPICard
                 title="Total Leads"
                 value={kpis.totalLeads.toLocaleString()}
                 change="+12.5%"
                 changeType="positive"
-                icon={<TrendingUp className="text-blue-600 text-xl" />}
-                bgColor="bg-blue-50"
+                icon={<TrendingUp className="text-construction text-xl" />}
+                bgColor="bg-orange-50"
                 subtitle="Last 30 days"
               />
               <KPICard
@@ -388,8 +395,8 @@ export default function Dashboard() {
                 value={`${kpis.conversionRate.toFixed(1)}%`}
                 change="+3.2%"
                 changeType="positive"
-                icon={<Percent className="text-green-600 text-xl" />}
-                bgColor="bg-green-50"
+                icon={<Percent className="text-primary text-xl" />}
+                bgColor="bg-blue-50"
                 subtitle="Lead to booking"
               />
               <KPICard
@@ -397,7 +404,7 @@ export default function Dashboard() {
                 value={`${(kpis.avgResponseTime / 60).toFixed(1)}min`}
                 change="-15s"
                 changeType="positive"
-                icon={<Clock className="text-orange-600 text-xl" />}
+                icon={<Clock className="text-construction text-xl" />}
                 bgColor="bg-orange-50"
                 subtitle="Average"
               />
@@ -406,8 +413,8 @@ export default function Dashboard() {
                 value={`${kpis.aiHandledPercentage.toFixed(0)}%`}
                 change="+5.1%"
                 changeType="positive"
-                icon={<Bot className="text-purple-600 text-xl" />}
-                bgColor="bg-purple-50"
+                icon={<Bot className="text-primary text-xl" />}
+                bgColor="bg-blue-50"
                 subtitle="Conversations"
               />
             </div>
@@ -416,8 +423,8 @@ export default function Dashboard() {
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
               {/* Left Column - 2/3 width */}
               <div className="lg:col-span-2 flex flex-col h-full space-y-6">
-                {/* Lead Generation Trend */}
-                <Card className="flex-none">
+                {/* ✅ CONSTRUCTION-THEMED LEAD TREND CHART */}
+                <Card className="flex-none border-2">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                       <span>Lead Generation Trend</span>
@@ -425,6 +432,7 @@ export default function Dashboard() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setLocation("/analytics")}
+                        className="hover:bg-construction/10 hover:text-construction"
                       >
                         View Details
                         <ArrowRight className="w-4 h-4 ml-2" />
@@ -435,6 +443,7 @@ export default function Dashboard() {
                     <ResponsiveContainer width="100%" height={250}>
                       <AreaChart data={leadTrendData}>
                         <defs>
+                          {/* ✅ CONSTRUCTION GRADIENT */}
                           <linearGradient
                             id="colorLeads"
                             x1="0"
@@ -444,12 +453,12 @@ export default function Dashboard() {
                           >
                             <stop
                               offset="5%"
-                              stopColor="#3b82f6"
+                              stopColor="#2563eb"
                               stopOpacity={0.3}
                             />
                             <stop
                               offset="95%"
-                              stopColor="#3b82f6"
+                              stopColor="#2563eb"
                               stopOpacity={0}
                             />
                           </linearGradient>
@@ -462,12 +471,12 @@ export default function Dashboard() {
                           >
                             <stop
                               offset="5%"
-                              stopColor="#10b981"
+                              stopColor="#ea580c"
                               stopOpacity={0.3}
                             />
                             <stop
                               offset="95%"
-                              stopColor="#10b981"
+                              stopColor="#ea580c"
                               stopOpacity={0}
                             />
                           </linearGradient>
@@ -485,7 +494,7 @@ export default function Dashboard() {
                         <Area
                           type="monotone"
                           dataKey="leads"
-                          stroke="#3b82f6"
+                          stroke="#2563eb"
                           strokeWidth={2}
                           fillOpacity={1}
                           fill="url(#colorLeads)"
@@ -493,7 +502,7 @@ export default function Dashboard() {
                         <Area
                           type="monotone"
                           dataKey="conversions"
-                          stroke="#10b981"
+                          stroke="#ea580c"
                           strokeWidth={2}
                           fillOpacity={1}
                           fill="url(#colorConversions)"
@@ -507,7 +516,7 @@ export default function Dashboard() {
                 {/* Charts Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Temperature Distribution */}
-                  <Card>
+                  <Card className="border-2">
                     <CardHeader>
                       <CardTitle className="text-base">
                         Lead Temperature
@@ -551,8 +560,8 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* Response Time Trend */}
-                  <Card>
+                  {/* ✅ CONSTRUCTION-THEMED RESPONSE TIME */}
+                  <Card className="border-2">
                     <CardHeader>
                       <CardTitle className="text-base">
                         Response Time (min)
@@ -577,9 +586,9 @@ export default function Dashboard() {
                           <Line
                             type="monotone"
                             dataKey="avgTime"
-                            stroke="#f59e0b"
+                            stroke="#ea580c"
                             strokeWidth={2}
-                            dot={{ fill: "#f59e0b" }}
+                            dot={{ fill: "#ea580c" }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -590,11 +599,11 @@ export default function Dashboard() {
 
               {/* Right Column - 1/3 width */}
               <div className="flex flex-col h-full justify-between space-y-6">
-                {/* Needs Attention */}
-                <Card className="border-l-4 border-l-red-500">
+                {/* ✅ CONSTRUCTION-THEMED NEEDS ATTENTION */}
+                <Card className="border-l-4 border-l-construction">
                   <CardHeader>
                     <CardTitle className="text-base flex items-center">
-                      <Flame className="w-5 h-5 text-red-500 mr-2" />
+                      <Flame className="w-5 h-5 text-construction mr-2" />
                       Needs Attention
                     </CardTitle>
                   </CardHeader>
@@ -604,7 +613,7 @@ export default function Dashboard() {
                         {hotLeads.slice(0, 5).map((lead: any) => (
                           <div
                             key={lead.id}
-                            className="p-3 bg-red-50 rounded-lg border border-red-200 cursor-pointer hover:bg-red-100 transition-colors"
+                            className="p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border-2 border-construction/20 cursor-pointer hover:border-construction/40 transition-colors"
                             onClick={() =>
                               setLocation(`/conversations?leadId=${lead.id}`)
                             }
@@ -613,7 +622,7 @@ export default function Dashboard() {
                               <div className="font-medium text-slate-900 text-sm">
                                 {lead.lead?.firstName} {lead.lead?.lastName}
                               </div>
-                              <Badge className="bg-red-100 text-red-800 text-xs">
+                              <Badge className="bg-construction/10 text-construction border border-construction/20 text-xs">
                                 🔥 Hot
                               </Badge>
                             </div>
@@ -635,7 +644,7 @@ export default function Dashboard() {
                         ))}
                         <Button
                           variant="link"
-                          className="w-full text-sm text-red-600"
+                          className="w-full text-sm text-construction hover:text-construction/80"
                           onClick={() => setLocation("/leads")}
                         >
                           View all hot leads →
@@ -643,7 +652,7 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div className="text-center py-8">
-                        <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                        <CheckCircle className="w-8 h-8 text-construction mx-auto mb-2" />
                         <p className="text-sm text-slate-600">
                           No urgent leads
                         </p>
@@ -656,7 +665,7 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Recent Activity */}
-                <Card className="border-l-4 border-l-slate-200">
+                <Card className="border-l-4 border-l-primary">
                   <CardHeader>
                     <CardTitle className="text-base">Recent Activity</CardTitle>
                   </CardHeader>
@@ -671,20 +680,20 @@ export default function Dashboard() {
                             <div
                               className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                                 activity.type === "booking"
-                                  ? "bg-green-100"
+                                  ? "bg-construction/10"
                                   : activity.type === "vsl"
-                                  ? "bg-orange-100"
-                                  : "bg-blue-100"
+                                  ? "bg-primary/10"
+                                  : "bg-construction/10"
                               }`}
                             >
                               {activity.type === "booking" && (
-                                <CheckCircle className="text-green-600 w-4 h-4" />
+                                <CheckCircle className="text-construction w-4 h-4" />
                               )}
                               {activity.type === "vsl" && (
-                                <Video className="text-orange-600 w-4 h-4" />
+                                <Video className="text-primary w-4 h-4" />
                               )}
                               {activity.type === "lead" && (
-                                <UserPlus className="text-blue-600 w-4 h-4" />
+                                <UserPlus className="text-construction w-4 h-4" />
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -715,7 +724,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* System Health */}
+                {/* ✅ CONSTRUCTION-THEMED SYSTEM STATUS */}
                 <Card className="border-l-4 border-l-slate-200">
                   <CardHeader>
                     <CardTitle className="text-base">System Status</CardTitle>
@@ -724,24 +733,24 @@ export default function Dashboard() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <div className="w-2 h-2 bg-construction rounded-full"></div>
                           <span className="text-sm text-slate-700">
                             WhatsApp
                           </span>
                         </div>
-                        <span className="text-xs text-green-600 font-medium">
+                        <span className="text-xs text-construction font-medium">
                           {systemHealth?.whatsapp || "Active"}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <div className="w-2 h-2 bg-primary rounded-full"></div>
                           <span className="text-sm text-slate-700">
                             AI System
                           </span>
                         </div>
-                        <span className="text-xs text-green-600 font-medium">
+                        <span className="text-xs text-primary font-medium">
                           {systemHealth?.ai || "Active"}
                         </span>
                       </div>
@@ -751,8 +760,8 @@ export default function Dashboard() {
                           <div
                             className={`w-2 h-2 rounded-full ${
                               systemHealth?.vsl === "maintenance"
-                                ? "bg-yellow-500"
-                                : "bg-green-500"
+                                ? "bg-amber-500"
+                                : "bg-construction"
                             }`}
                           ></div>
                           <span className="text-sm text-slate-700">VSL</span>
@@ -760,8 +769,8 @@ export default function Dashboard() {
                         <span
                           className={`text-xs font-medium ${
                             systemHealth?.vsl === "maintenance"
-                              ? "text-yellow-600"
-                              : "text-green-600"
+                              ? "text-amber-600"
+                              : "text-construction"
                           }`}
                         >
                           {systemHealth?.vsl || "Active"}

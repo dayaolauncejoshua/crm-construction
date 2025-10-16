@@ -1,3 +1,5 @@
+// client/src/components/navigation.tsx
+
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -162,7 +164,7 @@ export default function Navigation({
       <header className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-slate-200 px-4 py-3 z-50">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
               {userRole === "super_admin" ? (
                 <Shield className="w-5 h-5 text-white" />
               ) : (
@@ -214,7 +216,7 @@ export default function Navigation({
           <div className="p-6 border-b border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
                   {userRole === "super_admin" ? (
                     <Shield className="w-5 h-5 text-white" />
                   ) : (
@@ -320,7 +322,7 @@ export default function Navigation({
         {/* Header with Logo */}
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
               {userRole === "super_admin" ? (
                 <Shield className="w-5 h-5 text-white" />
               ) : (
@@ -364,27 +366,6 @@ export default function Navigation({
           </div>
         )}
 
-        {/* Trial Status (only for users) */}
-        {userRole !== "super_admin" && isTrialActive && (
-          <div className="p-4 mx-4 mt-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center space-x-2 mb-1">
-              <Crown className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-900">
-                Trial Active
-              </span>
-            </div>
-            <p className="text-xs text-blue-700">{daysLeft} days remaining</p>
-            <Link href="/trial-unlock">
-              <Button
-                size="sm"
-                className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-xs"
-              >
-                Upgrade Now
-              </Button>
-            </Link>
-          </div>
-        )}
-
         {/* Main Navigation Items */}
         <div className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-1">
@@ -413,34 +394,59 @@ export default function Navigation({
           </ul>
         </div>
 
-        {/* User Profile Section */}
-        <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src="/placeholder-avatar.jpg" />
-              <AvatarFallback className="bg-blue-600 text-white text-sm">
-                {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-                {user?.lastName?.[0] || ""}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
-                {user?.firstName && user?.lastName
-                  ? `${user.firstName} ${user.lastName}`
-                  : user?.email || "User"}
+         <div className="border-t border-slate-200">
+          {/* ✅ TRIAL STATUS - MOVED TO BOTTOM */}
+          {userRole !== "super_admin" && isTrialActive && (
+            <div className="p-4 mx-4 mt-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <Crown className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-900">
+                  Trial Active
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 mb-3">
+                {daysLeft} {daysLeft === 1 ? "day" : "days"} remaining
               </p>
-              <p className="text-xs text-slate-500">
-                {userRole === "super_admin" ? "Super Admin" : user?.email || ""}
-              </p>
+              <Link href="/trial-unlock">
+                <Button
+                  size="sm"
+                  className="w-full bg-gradient-construction hover:opacity-90 text-white text-xs py-2"
+                >
+                  Upgrade Now
+                </Button>
+              </Link>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="p-2"
-              onClick={onSignOut}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
+          )}
+
+          {/* User Profile Section */}
+          <div className="p-4">
+            <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src="/placeholder-avatar.jpg" />
+                <AvatarFallback className="bg-gradient-construction text-white text-sm">
+                  {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                  {user?.lastName?.[0] || ""}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">
+                  {user?.firstName && user?.lastName
+                    ? `${user.firstName} ${user.lastName}`
+                    : user?.email || "User"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {userRole === "super_admin" ? "Super Admin" : user?.email || ""}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="p-2"
+                onClick={onSignOut}
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </nav>

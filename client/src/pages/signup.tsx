@@ -35,7 +35,7 @@ export default function Signup() {
         title: "Account created!",
         description: "Please check your email to verify your account",
       });
-      setLocation("/verify-email"); // ✅ Changed from /dashboard
+      setLocation("/verify-email"); 
     } catch (error: any) {
       toast({
         title: "Signup failed",

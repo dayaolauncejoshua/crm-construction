@@ -1,12 +1,15 @@
+// client/src/pages/VerifyToken.tsx
 import { useEffect, useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePageTitle } from "@/hooks/usePageTitle";
+
 export default function VerifyToken() {
   usePageTitle("Verify Email");
 
   const [, params] = useRoute("/verify/:token");
+  const [, setLocation] = useLocation(); // ✅ Add this
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
   const [countdown, setCountdown] = useState(3);
@@ -21,16 +24,16 @@ export default function VerifyToken() {
           setStatus("success");
           setMessage(data.message || "Email verified successfully!");
 
-        // Notify other tabs about auth change
-        localStorage.setItem("auth_updated", Date.now().toString());
-        setTimeout(() => localStorage.removeItem("auth_updated"), 1000);
+          // Notify other tabs about auth change
+          localStorage.setItem("auth_updated", Date.now().toString());
+          setTimeout(() => localStorage.removeItem("auth_updated"), 1000);
           
-          // Countdown timer
+          // ✅ Countdown timer - redirect to trial-unlock instead of dashboard
           const timer = setInterval(() => {
             setCountdown((prev) => {
               if (prev <= 1) {
                 clearInterval(timer);
-                window.location.href = "/dashboard";
+                setLocation("/trial-unlock"); // ✅ CHANGED FROM /dashboard
                 return 0;
               }
               return prev - 1;
@@ -49,7 +52,7 @@ export default function VerifyToken() {
     if (params?.token) {
       verifyEmail();
     }
-  }, [params?.token]);
+  }, [params?.token, setLocation]); // ✅ Add setLocation to dependencies
 
   return (
     <div className="min-h-screen flex">
@@ -103,21 +106,26 @@ export default function VerifyToken() {
                 <p className="text-slate-600 text-lg">{message}</p>
               </div>
 
+              {/* ✅ UPDATED MESSAGE */}
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-6 border border-green-200">
                 <p className="text-sm text-slate-700 mb-3">
                   ✅ Your account is now fully activated!
                 </p>
+                <p className="text-sm text-slate-600 mb-3">
+                  🎉 Next: Unlock your 14-day free trial
+                </p>
                 <div className="flex items-center justify-center space-x-2 text-sm text-slate-500">
                   <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                  <span>Redirecting to dashboard in <strong className="text-blue-600">{countdown}</strong> seconds...</span>
+                  <span>Redirecting in <strong className="text-blue-600">{countdown}</strong> seconds...</span>
                 </div>
               </div>
 
+              {/* ✅ UPDATED BUTTON */}
               <Button
-                onClick={() => window.location.href = "/dashboard"}
+                onClick={() => setLocation("/trial-unlock")}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600"
               >
-                Go to Dashboard Now →
+                Unlock Free Trial Now →
               </Button>
             </div>
           )}
@@ -147,25 +155,23 @@ export default function VerifyToken() {
 
               <div className="space-y-3">
                 <Button
-                  onClick={() => window.location.href = "/verify-email"}
+                  onClick={() => setLocation("/verify-email")}
                   className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600"
                 >
                   Request New Verification Link
                 </Button>
                 <Button
-                  onClick={() => window.location.href = "/dashboard"}
+                  onClick={() => setLocation("/login")}
                   variant="outline"
                   className="w-full h-12"
                 >
-                  Go to Dashboard
+                  Back to Login
                 </Button>
               </div>
             </div>
           )}
         </div>
       </div>
-
-    
     </div>
   );
 }
