@@ -68,12 +68,12 @@ function Header() {
             >
               How It Works
             </a>
-            <a
-              href="#pricing"
+            <button
+              onClick={() => window.location.href = "/pricing"}
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
             >
               Pricing
-            </a>
+            </button>
           </nav>
 
           {/* Auth Buttons */}

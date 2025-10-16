@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   ReactNode,
+  useMemo,
 } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
@@ -38,59 +39,64 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [location] = useLocation();
-
-  // ✅ Define public pages
-  const publicPages = [
+// ✅ Define public pages
+  const skipAuthRoutes = [
     "/",
     "/login",
     "/signup",
     "/landing",
     "/verify-email",
     "/forgot-password",
+    "/trial-unlock",
   ];
 
-  const isPublicRoute = (path: string) => {
-    return (
-      publicPages.includes(path) ||
-      path.startsWith("/verify/") ||
-      path.startsWith("/reset-password/")
-    );
-  };
+  const shouldSkipAuth = (path: string) => {
+  return (
+    skipAuthRoutes.includes(path) ||
+    path.startsWith("/verify/") ||
+    path.startsWith("/reset-password/")
+  );
+};
 
-  // ✅ Only fetch current user on protected pages
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [location] = useLocation();
+
+  // ✅ Check auth on ALL pages except skip-auth routes
+  const shouldFetchUser = useMemo(() => {
+    return !shouldSkipAuth(location);
+  }, [location]);
+
+  // ✅ Fetch user whenever needed
   const { data, isLoading, refetch } = useQuery<{ user: User } | null>({
     queryKey: ["/api/auth/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }), // ✅ Return null on 401, don't throw
+    queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
-    enabled: !isPublicRoute(location), // ✅ Only run on protected pages
+    enabled: shouldFetchUser,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: shouldFetchUser,
   });
 
   useEffect(() => {
     if (data?.user) {
       setUser(data.user);
     } else if (data === null) {
-      // 401 or no user
       setUser(null);
     }
   }, [data]);
-
-  // ✅ Listen for cross-tab auth changes
+   // ✅ Listen for cross-tab auth changes
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "auth_updated") {
+      if (e.key === "auth_updated" && shouldFetchUser) {
         console.log("🔄 Auth state changed in another tab");
-        if (!isPublicRoute(location)) {
-          refetch();
-        }
+        refetch();
       }
     };
 
     const handleWindowFocus = () => {
-      if (!isPublicRoute(location)) {
+      if (shouldFetchUser) {
         refetch();
       }
     };
@@ -190,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
+        isLoading: shouldFetchUser ? isLoading : false,
         isAuthenticated: !!user,
         login: async (email, password) => {
           await loginMutation.mutateAsync({ email, password });

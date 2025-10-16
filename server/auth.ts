@@ -49,7 +49,7 @@ router.post("/api/auth/signup", async (req, res) => {
         firstName: firstName || null,
         lastName: lastName || null,
         role: "user",
-        emailVerified: false, // ✅ ADD THIS - Not verified yet
+        emailVerified: false,
       })
       .returning();
 
@@ -69,7 +69,10 @@ router.post("/api/auth/signup", async (req, res) => {
       // Don't fail signup if email fails
     }
 
-    // ✅ CRITICAL: Save session before responding
+    // ✅✅✅ CRITICAL FIX: Set userId in session BEFORE saving
+    (req.session as any).userId = newUser.id;
+
+    // ✅ Now save the session
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
@@ -77,6 +80,8 @@ router.post("/api/auth/signup", async (req, res) => {
       }
 
       console.log("✅ User created and session saved:", newUser.email);
+      console.log("📋 Session ID:", req.sessionID);
+      console.log("📋 User ID in session:", (req.session as any).userId);
 
       res.json({
         user: {

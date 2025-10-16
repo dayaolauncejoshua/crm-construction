@@ -25,7 +25,6 @@ import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
 
-
 // import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
 function checkOwnership(
@@ -467,16 +466,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] = await Promise.all(
-        [
+      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
+        await Promise.all([
           storage.getKPIs(clientId),
           storage.getConversations(clientId, 50),
           storage.getHotLeads(clientId),
           storage.getRecentActivity(clientId),
           storage.getLeads(clientId, 100),
           storage.getBookings(clientId),
-        ]
-      );
+        ]);
 
       console.log("📊 Dashboard data fetched:");
       console.log("  - KPIs:", kpis);
@@ -1712,13 +1710,12 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  // =========================== USER MANAGEMENT ROUTES  ====================================
+  // =========================== USER TRIAL MANAGEMENT ROUTES  ====================================
 
-  // User trial management
-  app.get("/api/user/trial-status", async (req, res) => {
+  // Get user trial status
+  app.get("/api/user/trial-status", requireAuth, async (req, res) => {
     try {
-      // In a real app, get userId from authenticated session
-      const userId = "demo-user-id"; // Mock user ID
+      const userId = req.user!.id; // ✅ Use authenticated user
       const status = await storage.getUserTrialStatus(userId);
       res.json(status);
     } catch (error) {
@@ -1727,17 +1724,31 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  app.post("/api/user/activate-trial", async (req, res) => {
+  // Activate trial
+  app.post("/api/user/activate-trial", requireAuth, async (req, res) => {
     try {
-      // In a real app, get userId from authenticated session
-      const userId = "demo-user-id"; // Mock user ID
+      const userId = req.user!.id; // ✅ Use authenticated user
+
+      console.log("🎉 Activating trial for user:", userId);
+
+      // Check if trial already activated
+      const currentStatus = await storage.getUserTrialStatus(userId);
+      if (currentStatus?.hasUnlockedTrial) {
+        return res.status(400).json({
+          message: "Trial has already been activated for this account",
+        });
+      }
+
+      // Activate trial
       const result = await storage.activateUserTrial(userId);
 
       // Log the activation
       await storage.logUserActivity(userId, "trial_activated", "trial", {
         trialDays: 14,
-        source: "dashboard",
+        source: "trial-unlock-page",
       });
+
+      console.log("✅ Trial activated successfully for user:", userId);
 
       res.json(result);
     } catch (error) {

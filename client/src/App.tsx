@@ -35,6 +35,8 @@ import VerifyEmail from "@/pages/VerifyEmail";
 import VerifyToken from "@/pages/VerifyToken";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import Pricing from "@/pages/pricing";
+
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -95,7 +97,8 @@ function ProtectedRouter() {
       if (!response.ok) return null;
       return response.json();
     },
-    enabled: isAuthenticated && (user?.role === "super_admin" || !!selectedClientId), // ✅ Only when authenticated
+    enabled:
+      isAuthenticated && (user?.role === "super_admin" || !!selectedClientId), // ✅ Only when authenticated
     staleTime: 30 * 1000,
   });
 
@@ -137,8 +140,10 @@ function ProtectedRouter() {
       "/login",
       "/signup",
       "/landing",
+      "/pricing",
       "/verify-email",
       "/forgot-password",
+      "/trial-unlock",
     ];
 
     const isPublicRoute = (path: string) => {
@@ -151,7 +156,10 @@ function ProtectedRouter() {
 
     if (isLoading) return;
 
-    if (isAuthenticated && (location === "/" || location === "/login" || location === "/signup")) {
+    if (
+      isAuthenticated &&
+      (location === "/" || location === "/login" || location === "/signup")
+    ) {
       setLocation("/dashboard");
       return;
     }
@@ -186,13 +194,24 @@ function ProtectedRouter() {
     }
   };
 
+  const trialDaysLeft =
+    user?.isTrialActive && user?.trialEndsAt
+      ? Math.max(
+          0,
+          Math.ceil(
+            (new Date(user.trialEndsAt).getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24)
+          )
+        )
+      : 0;
+
   return (
     <div className="min-h-screen bg-slate-50">
       {shouldShowNavigation && (
         <Navigation
           userRole={user?.role || "user"}
           isTrialActive={user?.isTrialActive || false}
-          daysLeft={0}
+          daysLeft={trialDaysLeft}
           unreadCount={unreadCount}
           newLeadsCount={newLeadsCount}
           user={user}
@@ -211,6 +230,7 @@ function ProtectedRouter() {
             <Route path="/signup" component={Signup} />
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
+            <Route path="/pricing" component={Pricing}/>
             <Route path="/verify-email" component={VerifyEmail} />
             <Route path="/verify/:token" component={VerifyToken} />
             <Route path="/forgot-password" component={ForgotPassword} />
