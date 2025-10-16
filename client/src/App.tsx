@@ -36,6 +36,7 @@ import VerifyToken from "@/pages/VerifyToken";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Pricing from "@/pages/pricing";
+import PaymentSuccess from "@/pages/payment-success";
 
 
 function ProtectedRouter() {
@@ -144,6 +145,7 @@ function ProtectedRouter() {
       "/verify-email",
       "/forgot-password",
       "/trial-unlock",
+      "/payment-success",
     ];
 
     const isPublicRoute = (path: string) => {
@@ -230,6 +232,8 @@ function ProtectedRouter() {
             <Route path="/signup" component={Signup} />
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
+
+            <Route path="/payment-success" component={PaymentSuccess} />
             <Route path="/pricing" component={Pricing}/>
             <Route path="/verify-email" component={VerifyEmail} />
             <Route path="/verify/:token" component={VerifyToken} />

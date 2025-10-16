@@ -45,6 +45,8 @@ export const users = pgTable("users", {
   passwordResetToken: text("password_reset_token"),
   passwordResetExpiry: timestamp("password_reset_expiry"),
 
+  stripeCustomerId: varchar("stripe_customer_id"),
+
   subscriptionType: varchar("subscription_type").default("trial"), // trial, pro, enterprise
   trialEndsAt: timestamp("trial_ends_at"),
   isTrialActive: boolean("is_trial_active").default(false),
@@ -55,6 +57,102 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Subscriptions table
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .references(() => users.id)
+    .notNull(),
+
+  // Stripe IDs
+  stripeCustomerId: varchar("stripe_customer_id").unique(),
+  stripeSubscriptionId: varchar("stripe_subscription_id").unique(),
+  stripePriceId: varchar("stripe_price_id"),
+
+  // Subscription details
+  plan: varchar("plan").notNull(), // starter, professional, enterprise
+  billingPeriod: varchar("billing_period").notNull(), // monthly, yearly
+  status: varchar("status").notNull(), // active, canceled, past_due, trialing
+
+  // Pricing
+  amount: integer("amount").notNull(), // in cents
+  currency: varchar("currency").default("usd"),
+
+  // Dates
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  canceledAt: timestamp("canceled_at"),
+
+  // Trial
+  trialStart: timestamp("trial_start"),
+  trialEnd: timestamp("trial_end"),
+
+  // Metadata
+  metadata: jsonb("metadata").default({}),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Payment history table
+export const payments = pgTable("payments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .references(() => users.id)
+    .notNull(),
+  subscriptionId: varchar("subscription_id").references(() => subscriptions.id),
+
+  // Stripe IDs
+  stripePaymentIntentId: varchar("stripe_payment_intent_id").unique(),
+  stripeInvoiceId: varchar("stripe_invoice_id"),
+
+  // Payment details
+  amount: integer("amount").notNull(), // in cents
+  currency: varchar("currency").default("usd"),
+  status: varchar("status").notNull(), // succeeded, pending, failed
+
+  // Invoice
+  invoiceUrl: varchar("invoice_url"),
+  receiptUrl: varchar("receipt_url"),
+
+  // Dates
+  paidAt: timestamp("paid_at"),
+  failedAt: timestamp("failed_at"),
+
+  // Metadata
+  description: text("description"),
+  metadata: jsonb("metadata").default({}),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const subscriptionsRelations = relations(
+  subscriptions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [subscriptions.userId],
+      references: [users.id],
+    }),
+    payments: many(payments),
+  })
+);
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  user: one(users, {
+    fields: [payments.userId],
+    references: [users.id],
+  }),
+  subscription: one(subscriptions, {
+    fields: [payments.subscriptionId],
+    references: [subscriptions.id],
+  }),
+}));
 
 // Trial activations tracking
 export const trialActivations = pgTable("trial_activations", {
@@ -158,7 +256,6 @@ export const leads = pgTable("leads", {
   updatedAt: timestamp("updated_at").defaultNow(),
   viewedAt: timestamp("viewed_at"),
   callID: varchar("call_id"),
-
 });
 
 // Lead activity log table
@@ -460,6 +557,10 @@ export type User = typeof users.$inferSelect;
 export type UpsertUser = typeof users.$inferInsert;
 export type TrialActivation = typeof trialActivations.$inferSelect;
 export type InsertTrialActivation = typeof trialActivations.$inferInsert;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
 export type UserActivity = typeof userActivities.$inferSelect;
 export type InsertUserActivity = typeof userActivities.$inferInsert;
 export type SystemMetric = typeof systemMetrics.$inferSelect;
@@ -489,3 +590,5 @@ export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Analytics = typeof analytics.$inferSelect;
+
+

@@ -2,6 +2,8 @@
 
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import stripeRouter from "./routes/stripe";
+import stripeWebhookRouter from "./routes/stripe-webhook";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 // import vslapp from "./routes/vsl.route";
@@ -99,9 +101,13 @@ function hasBookingConflict(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+   app.use("/api/stripe", stripeRouter);
+  app.use("/api/stripe", stripeWebhookRouter);
   const httpServer = createServer(app);
 
   // app.use(vslapp);
+ 
 
   let wss: WebSocketServer | null = null;
   function broadcastUpdate(data: any) {

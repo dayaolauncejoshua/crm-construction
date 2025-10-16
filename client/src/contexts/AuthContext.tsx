@@ -48,6 +48,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
     "/verify-email",
     "/forgot-password",
     "/trial-unlock",
+    "/payment-success",
   ];
 
   const shouldSkipAuth = (path: string) => {
