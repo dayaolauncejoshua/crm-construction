@@ -1,17 +1,17 @@
-
 import { Router, Request, Response } from "express";
 import OpenAI from "openai";
 import { phoneService } from "../phone/phone.phone";
 
-const router = Router();
-const client = new OpenAI();
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY2,
+});
 const WEBHOOK_SECRET = process.env.OPENAI_WEBHOOK_SIGNING_SECRET;
 
 interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
 
-router.post("/", async (req: RawBodyRequest, res: Response) => {
+export const webHookController = async (req: RawBodyRequest, res: Response) => {
   try {
     if (!WEBHOOK_SECRET) {
       console.error("OPENAI_WEBHOOK_SIGNING_SECRET is not defined");
@@ -62,6 +62,4 @@ router.post("/", async (req: RawBodyRequest, res: Response) => {
       message: error.message,
     });
   }
-});
-
-export default router;
+};

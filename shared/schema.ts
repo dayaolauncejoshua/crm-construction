@@ -552,6 +552,80 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({
   updatedAt: true,
 });
 
+// Video SOPs table
+export const videoSOPs = pgTable("video_sops", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  category: varchar("category").notNull(), // onboarding, troubleshooting, advanced, training
+  videoUrl: varchar("video_url").notNull(),
+  thumbnailUrl: varchar("thumbnail_url"),
+  duration: integer("duration").notNull(), // in seconds
+  viewCount: integer("view_count").default(0),
+  tags: jsonb("tags").default(sql`'[]'::jsonb`),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Notion SOPs table
+export const notionSOPs = pgTable("notion_sops", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
+  title: varchar("title").notNull(),
+  category: varchar("category"),
+  notionPageId: varchar("notion_page_id").notNull(),
+  pageUrl: varchar("page_url").notNull(),
+  lastSynced: timestamp("last_synced"),
+  syncStatus: varchar("sync_status").default("active"), // active, failed, disabled
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Relations
+export const videoSOPsRelations = relations(videoSOPs, ({ one }) => ({
+  client: one(clients, {
+    fields: [videoSOPs.clientId],
+    references: [clients.id],
+  }),
+}));
+
+export const notionSOPsRelations = relations(notionSOPs, ({ one }) => ({
+  client: one(clients, {
+    fields: [notionSOPs.clientId],
+    references: [clients.id],
+  }),
+}));
+
+// Insert schemas
+export const insertVideoSOPSchema = createInsertSchema(videoSOPs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertNotionSOPSchema = createInsertSchema(notionSOPs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Type exports
+export type VideoSOP = typeof videoSOPs.$inferSelect;
+export type InsertVideoSOP = z.infer<typeof insertVideoSOPSchema>;
+
+export type NotionSOP = typeof notionSOPs.$inferSelect;
+export type InsertNotionSOP = z.infer<typeof insertNotionSOPSchema>;
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type UpsertUser = typeof users.$inferInsert;

@@ -15,6 +15,13 @@
       "when": 1759842242712,
       "tag": "0001_dry_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1760441829740,
+      "tag": "0002_lowly_iron_fist",
+      "breakpoints": true
     }
   ]
 }

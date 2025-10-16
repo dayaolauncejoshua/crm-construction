@@ -232,104 +232,110 @@ export default function SOPs() {
   });
 
   // Mock data for demonstration
-  const mockVideoSOPs = [
-    {
-      id: "v1",
-      title: "Setting Up Lead Capture Forms",
-      description:
-        "Complete guide on configuring and optimizing lead capture forms for maximum conversion",
-      category: "onboarding",
-      videoUrl: "https://example.com/video1.mp4",
-      thumbnailUrl:
-        "https://via.placeholder.com/320x180/3b82f6/ffffff?text=Lead+Forms",
-      duration: 480, // 8 minutes
-      viewCount: 127,
-      tags: ["forms", "conversion", "setup"],
-      createdAt: "2024-01-10T10:00:00Z",
-      isPublic: true,
-    },
-    {
-      id: "v2",
-      title: "WhatsApp Integration Troubleshooting",
-      description:
-        "Common issues and solutions when integrating WhatsApp Business API",
-      category: "troubleshooting",
-      videoUrl: "https://example.com/video2.mp4",
-      thumbnailUrl:
-        "https://via.placeholder.com/320x180/10b981/ffffff?text=WhatsApp+Fix",
-      duration: 720, // 12 minutes
-      viewCount: 89,
-      tags: ["whatsapp", "api", "troubleshooting"],
-      createdAt: "2024-01-08T14:30:00Z",
-      isPublic: true,
-    },
-    {
-      id: "v3",
-      title: "Advanced Analytics Dashboard",
-      description:
-        "Deep dive into analytics features and creating custom reports",
-      category: "advanced",
-      videoUrl: "https://example.com/video3.mp4",
-      thumbnailUrl:
-        "https://via.placeholder.com/320x180/f59e0b/ffffff?text=Analytics",
-      duration: 900, // 15 minutes
-      viewCount: 156,
-      tags: ["analytics", "reports", "dashboard"],
-      createdAt: "2024-01-05T09:15:00Z",
-      isPublic: true,
-    },
-  ];
+  // const filteredVideoSOPs = [
+  //   {
+  //     id: "v1",
+  //     title: "Setting Up Lead Capture Forms",
+  //     description:
+  //       "Complete guide on configuring and optimizing lead capture forms for maximum conversion",
+  //     category: "onboarding",
+  //     videoUrl: "https://example.com/video1.mp4",
+  //     thumbnailUrl:
+  //       "https://via.placeholder.com/320x180/3b82f6/ffffff?text=Lead+Forms",
+  //     duration: 480, // 8 minutes
+  //     viewCount: 127,
+  //     tags: ["forms", "conversion", "setup"],
+  //     createdAt: "2024-01-10T10:00:00Z",
+  //     isPublic: true,
+  //   },
+  //   {
+  //     id: "v2",
+  //     title: "WhatsApp Integration Troubleshooting",
+  //     description:
+  //       "Common issues and solutions when integrating WhatsApp Business API",
+  //     category: "troubleshooting",
+  //     videoUrl: "https://example.com/video2.mp4",
+  //     thumbnailUrl:
+  //       "https://via.placeholder.com/320x180/10b981/ffffff?text=WhatsApp+Fix",
+  //     duration: 720, // 12 minutes
+  //     viewCount: 89,
+  //     tags: ["whatsapp", "api", "troubleshooting"],
+  //     createdAt: "2024-01-08T14:30:00Z",
+  //     isPublic: true,
+  //   },
+  //   {
+  //     id: "v3",
+  //     title: "Advanced Analytics Dashboard",
+  //     description:
+  //       "Deep dive into analytics features and creating custom reports",
+  //     category: "advanced",
+  //     videoUrl: "https://example.com/video3.mp4",
+  //     thumbnailUrl:
+  //       "https://via.placeholder.com/320x180/f59e0b/ffffff?text=Analytics",
+  //     duration: 900, // 15 minutes
+  //     viewCount: 156,
+  //     tags: ["analytics", "reports", "dashboard"],
+  //     createdAt: "2024-01-05T09:15:00Z",
+  //     isPublic: true,
+  //   },
+  // ];
 
-  const mockNotionSOPs = [
-    {
-      id: "n1",
-      title: "Client Onboarding Checklist",
-      category: "onboarding",
-      notionPageId: "abc123",
-      pageUrl: "https://notion.so/abc123",
-      lastSynced: "2024-01-15T08:00:00Z",
-      syncStatus: "active",
-      createdAt: "2024-01-01T10:00:00Z",
-    },
-    {
-      id: "n2",
-      title: "Lead Qualification Process",
-      category: "processes",
-      notionPageId: "def456",
-      pageUrl: "https://notion.so/def456",
-      lastSynced: "2024-01-14T16:30:00Z",
-      syncStatus: "active",
-      createdAt: "2024-01-02T11:00:00Z",
-    },
-    {
-      id: "n3",
-      title: "Emergency Escalation Procedures",
-      category: "troubleshooting",
-      notionPageId: "ghi789",
-      pageUrl: "https://notion.so/ghi789",
-      lastSynced: "2024-01-10T12:00:00Z",
-      syncStatus: "failed",
-      createdAt: "2024-01-03T15:00:00Z",
-    },
-  ];
+  // const filteredNotionSOPs = [
+  //   {
+  //     id: "n1",
+  //     title: "Client Onboarding Checklist",
+  //     category: "onboarding",
+  //     notionPageId: "abc123",
+  //     pageUrl: "https://notion.so/abc123",
+  //     lastSynced: "2024-01-15T08:00:00Z",
+  //     syncStatus: "active",
+  //     createdAt: "2024-01-01T10:00:00Z",
+  //   },
+  //   {
+  //     id: "n2",
+  //     title: "Lead Qualification Process",
+  //     category: "processes",
+  //     notionPageId: "def456",
+  //     pageUrl: "https://notion.so/def456",
+  //     lastSynced: "2024-01-14T16:30:00Z",
+  //     syncStatus: "active",
+  //     createdAt: "2024-01-02T11:00:00Z",
+  //   },
+  //   {
+  //     id: "n3",
+  //     title: "Emergency Escalation Procedures",
+  //     category: "troubleshooting",
+  //     notionPageId: "ghi789",
+  //     pageUrl: "https://notion.so/ghi789",
+  //     lastSynced: "2024-01-10T12:00:00Z",
+  //     syncStatus: "failed",
+  //     createdAt: "2024-01-03T15:00:00Z",
+  //   },
+  // ];
 
-  const filteredVideoSOPs = mockVideoSOPs.filter((sop) => {
-    const matchesSearch =
-      sop.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sop.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all" || sop.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredNotionSOPs = Array.isArray(notionSOPs)
+    ? notionSOPs.filter((sop) => {
+        const matchesSearch = sop.title
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase());
+        const matchesCategory =
+          selectedCategory === "all" || sop.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      })
+    : [];
 
-  const filteredNotionSOPs = mockNotionSOPs.filter((sop) => {
-    const matchesSearch = sop.title
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all" || sop.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredVideoSOPs = Array.isArray(videoSOPs)
+    ? videoSOPs.filter((sop) => {
+        const matchesSearch =
+          sop.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (sop.description || "")
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase());
+        const matchesCategory =
+          selectedCategory === "all" || sop.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      })
+    : [];
 
   const onSubmitVideoSOP = (data: CreateVideoSOPData) => {
     createVideoSOPMutation.mutate(data);
@@ -561,7 +567,7 @@ export default function SOPs() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {mockVideoSOPs.length}
+                    {filteredVideoSOPs.length}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Across all categories
@@ -578,7 +584,7 @@ export default function SOPs() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {mockVideoSOPs
+                    {filteredVideoSOPs
                       .reduce((sum, sop) => sum + sop.viewCount, 0)
                       .toLocaleString()}
                   </div>
@@ -596,7 +602,7 @@ export default function SOPs() {
                 <CardContent>
                   <div className="text-2xl font-bold">
                     {Math.round(
-                      mockVideoSOPs.reduce(
+                      filteredVideoSOPs.reduce(
                         (sum, sop) => sum + sop.duration,
                         0
                       ) / 60
@@ -702,7 +708,7 @@ export default function SOPs() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {mockNotionSOPs.length}
+                    {filteredNotionSOPs.length}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Synced from Notion
@@ -720,7 +726,7 @@ export default function SOPs() {
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">
                     {
-                      mockNotionSOPs.filter(
+                      filteredNotionSOPs.filter(
                         (sop) => sop.syncStatus === "active"
                       ).length
                     }
