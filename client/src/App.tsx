@@ -35,6 +35,8 @@ import VerifyEmail from "@/pages/VerifyEmail";
 import VerifyToken from "@/pages/VerifyToken";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import Pricing from "@/pages/pricing";
+
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -138,6 +140,7 @@ function ProtectedRouter() {
       "/login",
       "/signup",
       "/landing",
+      "/pricing",
       "/verify-email",
       "/forgot-password",
       "/trial-unlock",
@@ -227,6 +230,7 @@ function ProtectedRouter() {
             <Route path="/signup" component={Signup} />
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
+            <Route path="/pricing" component={Pricing}/>
             <Route path="/verify-email" component={VerifyEmail} />
             <Route path="/verify/:token" component={VerifyToken} />
             <Route path="/forgot-password" component={ForgotPassword} />

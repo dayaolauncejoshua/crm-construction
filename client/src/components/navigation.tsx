@@ -113,6 +113,12 @@ export default function Navigation({
       icon: <Zap className="w-4 h-4" />,
     },
     { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
+
+    { 
+    path: "/pricing", 
+    label: "Upgrade", 
+    icon: <Crown className="w-4 h-4" /> 
+  },
   ];
 
   const superAdminMenuItems: MenuItem[] = [
