@@ -1,15 +1,15 @@
 // shared/advanced-schema.ts
 
 import { sql } from "drizzle-orm";
-import { 
-  pgTable, 
-  varchar, 
-  text, 
-  timestamp, 
-  integer, 
-  decimal, 
-  boolean, 
-  jsonb 
+import {
+  pgTable,
+  varchar,
+  text,
+  timestamp,
+  integer,
+  decimal,
+  boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -17,8 +17,12 @@ import { clients, leads, conversations, users } from "./schema";
 
 // Advanced Lead Scoring Table
 export const leadScoring = pgTable("lead_scoring", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").references(() => leads.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
   score: integer("score").notNull(), // 0-100
   features: jsonb("features").notNull(), // ML features
   modelVersion: varchar("model_version").default("v1.0"),
@@ -29,8 +33,12 @@ export const leadScoring = pgTable("lead_scoring", {
 
 // Automated Follow-ups Table
 export const followUps = pgTable("follow_ups", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id").references(() => leads.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
   conversationId: varchar("conversation_id").references(() => conversations.id),
   channel: varchar("channel").notNull(), // whatsapp, email, sms
   triggerType: varchar("trigger_type").notNull(), // no_response, time_based, behavior
@@ -44,8 +52,12 @@ export const followUps = pgTable("follow_ups", {
 
 // Competitor Tracking Table
 export const competitorTracking = pgTable("competitor_tracking", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   competitorName: varchar("competitor_name").notNull(),
   platform: varchar("platform").notNull(), // facebook, google, linkedin
   adSpend: decimal("ad_spend", { precision: 10, scale: 2 }),
@@ -60,8 +72,12 @@ export const competitorTracking = pgTable("competitor_tracking", {
 
 // SERP Monitoring Table
 export const serpMonitoring = pgTable("serp_monitoring", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   keyword: varchar("keyword").notNull(),
   currentPosition: integer("current_position"),
   previousPosition: integer("previous_position"),
@@ -76,8 +92,12 @@ export const serpMonitoring = pgTable("serp_monitoring", {
 
 // Brand Mentions Table
 export const brandMentions = pgTable("brand_mentions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   platform: varchar("platform").notNull(), // reddit, twitter, linkedin, etc
   url: varchar("url"),
   content: text("content"),
@@ -94,8 +114,12 @@ export const brandMentions = pgTable("brand_mentions", {
 
 // Executive Reports Table
 export const executiveReports = pgTable("executive_reports", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   reportType: varchar("report_type").notNull(), // weekly, monthly, quarterly
   reportData: jsonb("report_data").notNull(),
   pdfUrl: varchar("pdf_url"),
@@ -110,8 +134,12 @@ export const executiveReports = pgTable("executive_reports", {
 
 // Opportunity Alerts Table
 export const opportunityAlerts = pgTable("opportunity_alerts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   alertType: varchar("alert_type").notNull(), // trending_keyword, viral_moment, competitor_gap
   title: varchar("title").notNull(),
   description: text("description"),
@@ -127,8 +155,12 @@ export const opportunityAlerts = pgTable("opportunity_alerts", {
 
 // Technical Issues Table
 export const technicalIssues = pgTable("technical_issues", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   issueType: varchar("issue_type").notNull(), // form_failure, slow_load, api_error
   severity: varchar("severity").default("medium"), // low, medium, high, critical
   affectedComponent: varchar("affected_component"),
@@ -146,7 +178,9 @@ export const technicalIssues = pgTable("technical_issues", {
 
 // Video SOPs Table
 export const videoSOPs = pgTable("video_sops", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   clientId: varchar("client_id").references(() => clients.id),
   title: varchar("title").notNull(),
   description: text("description"),
@@ -164,8 +198,12 @@ export const videoSOPs = pgTable("video_sops", {
 
 // Notion SOPs Table
 export const notionSOPs = pgTable("notion_sops", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   notionPageId: varchar("notion_page_id").notNull(),
   title: varchar("title").notNull(),
   category: varchar("category"),
@@ -177,8 +215,12 @@ export const notionSOPs = pgTable("notion_sops", {
 
 // Visual Workflows Table (Figma/Miro)
 export const visualWorkflows = pgTable("visual_workflows", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   title: varchar("title").notNull(),
   platform: varchar("platform").notNull(), // figma, miro
   boardId: varchar("board_id").notNull(),
@@ -193,8 +235,12 @@ export const visualWorkflows = pgTable("visual_workflows", {
 
 // White Label Settings Table
 export const whiteLabelSettings = pgTable("white_label_settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   brandName: varchar("brand_name").notNull(),
   logoUrl: varchar("logo_url"),
   primaryColor: varchar("primary_color"),
@@ -211,8 +257,12 @@ export const whiteLabelSettings = pgTable("white_label_settings", {
 
 // KPI Anomalies Table
 export const kpiAnomalies = pgTable("kpi_anomalies", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
   metric: varchar("metric").notNull(), // conversion_rate, response_time, lead_volume
   currentValue: decimal("current_value", { precision: 10, scale: 4 }),
   expectedValue: decimal("expected_value", { precision: 10, scale: 4 }),
@@ -228,16 +278,19 @@ export const kpiAnomalies = pgTable("kpi_anomalies", {
 // Insert schemas for new tables
 export const insertLeadScoringSchema = createInsertSchema(leadScoring);
 export const insertFollowUpSchema = createInsertSchema(followUps);
-export const insertCompetitorTrackingSchema = createInsertSchema(competitorTracking);
+export const insertCompetitorTrackingSchema =
+  createInsertSchema(competitorTracking);
 export const insertSerpMonitoringSchema = createInsertSchema(serpMonitoring);
 export const insertBrandMentionSchema = createInsertSchema(brandMentions);
 export const insertExecutiveReportSchema = createInsertSchema(executiveReports);
-export const insertOpportunityAlertSchema = createInsertSchema(opportunityAlerts);
+export const insertOpportunityAlertSchema =
+  createInsertSchema(opportunityAlerts);
 export const insertTechnicalIssueSchema = createInsertSchema(technicalIssues);
 export const insertVideoSOPSchema = createInsertSchema(videoSOPs);
 export const insertNotionSOPSchema = createInsertSchema(notionSOPs);
 export const insertVisualWorkflowSchema = createInsertSchema(visualWorkflows);
-export const insertWhiteLabelSettingsSchema = createInsertSchema(whiteLabelSettings);
+export const insertWhiteLabelSettingsSchema =
+  createInsertSchema(whiteLabelSettings);
 export const insertKpiAnomalySchema = createInsertSchema(kpiAnomalies);
 
 // Type definitions
@@ -246,7 +299,9 @@ export type InsertLeadScoring = z.infer<typeof insertLeadScoringSchema>;
 export type FollowUp = typeof followUps.$inferSelect;
 export type InsertFollowUp = z.infer<typeof insertFollowUpSchema>;
 export type CompetitorTracking = typeof competitorTracking.$inferSelect;
-export type InsertCompetitorTracking = z.infer<typeof insertCompetitorTrackingSchema>;
+export type InsertCompetitorTracking = z.infer<
+  typeof insertCompetitorTrackingSchema
+>;
 export type SerpMonitoring = typeof serpMonitoring.$inferSelect;
 export type InsertSerpMonitoring = z.infer<typeof insertSerpMonitoringSchema>;
 export type BrandMention = typeof brandMentions.$inferSelect;
@@ -254,7 +309,9 @@ export type InsertBrandMention = z.infer<typeof insertBrandMentionSchema>;
 export type ExecutiveReport = typeof executiveReports.$inferSelect;
 export type InsertExecutiveReport = z.infer<typeof insertExecutiveReportSchema>;
 export type OpportunityAlert = typeof opportunityAlerts.$inferSelect;
-export type InsertOpportunityAlert = z.infer<typeof insertOpportunityAlertSchema>;
+export type InsertOpportunityAlert = z.infer<
+  typeof insertOpportunityAlertSchema
+>;
 export type TechnicalIssue = typeof technicalIssues.$inferSelect;
 export type InsertTechnicalIssue = z.infer<typeof insertTechnicalIssueSchema>;
 export type VideoSOP = typeof videoSOPs.$inferSelect;
@@ -264,6 +321,8 @@ export type InsertNotionSOP = z.infer<typeof insertNotionSOPSchema>;
 export type VisualWorkflow = typeof visualWorkflows.$inferSelect;
 export type InsertVisualWorkflow = z.infer<typeof insertVisualWorkflowSchema>;
 export type WhiteLabelSettings = typeof whiteLabelSettings.$inferSelect;
-export type InsertWhiteLabelSettings = z.infer<typeof insertWhiteLabelSettingsSchema>;
+export type InsertWhiteLabelSettings = z.infer<
+  typeof insertWhiteLabelSettingsSchema
+>;
 export type KpiAnomaly = typeof kpiAnomalies.$inferSelect;
 export type InsertKpiAnomaly = z.infer<typeof insertKpiAnomalySchema>;

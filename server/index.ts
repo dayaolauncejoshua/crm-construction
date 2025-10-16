@@ -1,3 +1,4 @@
+import { videoSOPs } from "./../shared/advanced-schema";
 // server/index.ts
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -7,7 +8,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
 import webhookRouter from "./routes/webhook.route";
-
+import videoSOPsRouter from "./routes/videoSops.route";
+import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
@@ -38,7 +40,8 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.urlencoded({ extended: true }));
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use("/webhook", webhookRouter);
-
+app.use("/api/video-sops", videoSOPsRouter);
+app.use("/api/notion-sops", notionSOPsRouter);
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
 
