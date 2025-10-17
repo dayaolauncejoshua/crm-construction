@@ -4,7 +4,7 @@ import { Router, Request, Response } from "express";
 import Stripe from "stripe";
 import { db } from "../db";
 import { subscriptions, users } from "../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -75,6 +75,12 @@ router.post("/create-checkout-session", async (req: Request, res: Response) => {
     const priceKey = `${plan}_${billingPeriod}` as keyof typeof PRICE_IDS;
     const priceId = PRICE_IDS[priceKey];
 
+    console.log("💳 Creating checkout session:");
+    console.log("  User:", user.email);
+    console.log("  Plan:", plan);
+    console.log("  Billing:", billingPeriod);
+    console.log("  Price ID:", priceId);
+
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -86,14 +92,23 @@ router.post("/create-checkout-session", async (req: Request, res: Response) => {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/pricing`,
+      success_url: `${
+        process.env.CLIENT_URL || "http://localhost:5000"
+      }/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${
+        process.env.CLIENT_URL || "http://localhost:5000"
+      }/pricing`,
       metadata: {
         userId: user.id,
         plan,
         billingPeriod,
       },
     });
+
+    console.log("✅ Session created:", session.id);
+    console.log("✅ Checkout URL:", session.url);
+    console.log("✅ Session status:", session.status);
+    console.log("✅ Payment status:", session.payment_status);
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (error: any) {
@@ -112,19 +127,28 @@ router.get("/subscription", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    console.log("🔍 Fetching subscription for user:", req.user.id);
+
     const [subscription] = await db
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.userId, req.user.id))
-      .orderBy(subscriptions.createdAt)
+      .orderBy(desc(subscriptions.createdAt))
       .limit(1);
 
+    console.log(
+      "📊 Subscription found:",
+      subscription ? subscription.id : "none"
+    );
+
     if (!subscription) {
+      console.log("ℹ️ No subscription found for user");
       return res.json({ subscription: null });
     }
 
     // Get latest Stripe subscription data
     if (subscription.stripeSubscriptionId) {
+      console.log("🔄 Syncing with Stripe:", subscription.stripeSubscriptionId);
       // ✅ FIX: Retrieve as plain object without Response wrapper
       const stripeSubscription = await stripe.subscriptions.retrieve(
         subscription.stripeSubscriptionId
@@ -133,17 +157,45 @@ router.get("/subscription", async (req: Request, res: Response) => {
       // ✅ FIX: Type assertion to access properties correctly
       const subData = stripeSubscription as any;
 
-      await db
-        .update(subscriptions)
-        .set({
-          status: subData.status,
-          currentPeriodStart: new Date(subData.current_period_start * 1000),
-          currentPeriodEnd: new Date(subData.current_period_end * 1000),
-          cancelAtPeriodEnd: subData.cancel_at_period_end,
-        })
-        .where(eq(subscriptions.id, subscription.id));
+      console.log("🔍 Stripe subscription data:");
+      console.log("   Status:", subData.status);
+      console.log(
+        "   Current period start (raw):",
+        subData.current_period_start
+      );
+      console.log("   Current period end (raw):", subData.current_period_end);
+      console.log("   Items data:", subData.items?.data?.[0]);
+
+      // ✅ FIX: Get dates from items.data if not available at top level
+      const itemData = subData.items?.data?.[0];
+      const periodStart =
+        subData.current_period_start || itemData?.current_period_start;
+      const periodEnd =
+        subData.current_period_end || itemData?.current_period_end;
+
+      console.log("📅 Resolved dates:");
+      console.log("   Period start:", periodStart);
+      console.log("   Period end:", periodEnd);
+
+      if (periodStart && periodEnd) {
+        await db
+          .update(subscriptions)
+          .set({
+            status: subData.status,
+            currentPeriodStart: new Date(periodStart * 1000),
+            currentPeriodEnd: new Date(periodEnd * 1000),
+            cancelAtPeriodEnd: subData.cancel_at_period_end,
+            updatedAt: new Date(),
+          })
+          .where(eq(subscriptions.id, subscription.id));
+
+        console.log("✅ Subscription synced with Stripe");
+      } else {
+        console.log("⚠️ Dates not available, skipping sync");
+      }
     }
 
+    console.log("✅ Returning subscription:", subscription.plan);
     res.json({ subscription });
   } catch (error: any) {
     console.error("❌ Get subscription error:", error);
@@ -217,7 +269,9 @@ router.post("/billing-portal", async (req: Request, res: Response) => {
 
     const session = await stripe.billingPortal.sessions.create({
       customer: user.stripeCustomerId,
-      return_url: `${process.env.CLIENT_URL || "http://localhost:5000"}/dashboard`,
+      return_url: `${
+        process.env.CLIENT_URL || "http://localhost:5000"
+      }/dashboard`,
     });
 
     res.json({ url: session.url });

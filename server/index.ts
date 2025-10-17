@@ -7,8 +7,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { config } from "dotenv";
+import stripeWebhookRouter from "./routes/stripe-webhook";
 import webhookRouter from "./routes/webhook.route";
-import videoSOPsRouter from "./routes/videoSops.route";
+import videoSOPsRouter from "./routes/videoSOPs.route";
 import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
@@ -33,18 +34,18 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
+app.use("/api/stripe/webhook", express.raw({ type: "application/json" }), stripeWebhookRouter);
+
 // Basic middleware
 app.use(express.json());
 
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.urlencoded({ extended: true }));
-app.use("/webhook", express.raw({ type: "application/json" }));
-app.use("/webhook", webhookRouter);
+
 app.use("/api/video-sops", videoSOPsRouter);
 app.use("/api/notion-sops", notionSOPsRouter);
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
-
 const isProduction = process.env.NODE_ENV === "production";
 
 app.use(
@@ -59,16 +60,15 @@ app.use(
     saveUninitialized: false,
     rolling: true, // Reset expiry on each request
     name: "sessionId",
-    proxy: true,
+    
     proxy: isProduction,
     cookie: {
-      secure: process.env.NODE_ENV === "development",
-      secure: true,
+      
       secure: isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      sameSite: "lax",
+     
+
       sameSite: isProduction ? "lax" : "lax",
 
       path: "/",

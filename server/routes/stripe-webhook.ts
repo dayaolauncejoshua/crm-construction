@@ -20,7 +20,7 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
  * Stripe Webhook Handler
  * POST /webhook
  */
-router.post("/webhook", async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"];
 
   if (!sig || !webhookSecret) {
@@ -81,64 +81,127 @@ router.post("/webhook", async (req: Request, res: Response) => {
   }
 });
 
+
 // Handle successful checkout
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  console.log("🎯 handleCheckoutCompleted called");
+  
   const userId = session.metadata?.userId;
   const plan = session.metadata?.plan;
   const billingPeriod = session.metadata?.billingPeriod;
 
+  console.log("📋 Metadata:", { userId, plan, billingPeriod });
+
   if (!userId || !plan || !billingPeriod) {
-    console.error("Missing metadata in checkout session");
+    console.error("❌ Missing metadata in checkout session");
     return;
   }
 
-  // ✅ FIX: Type assertion for session
   const sessionData = session as any;
   const subscriptionId = typeof sessionData.subscription === 'string' 
     ? sessionData.subscription 
     : sessionData.subscription?.id;
 
+  console.log("🔗 Subscription ID from session:", subscriptionId);
+
   if (!subscriptionId) {
-    console.error("No subscription ID in session");
+    console.error("❌ No subscription ID in session");
     return;
   }
 
-  // Get subscription from Stripe
-  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const subData = stripeSubscription as any;
+  try {
+    console.log("📞 Fetching subscription from Stripe:", subscriptionId);
+    
+    // Get subscription from Stripe
+    const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const subData = stripeSubscription as any;
 
-  // Create subscription in database
-  await db.insert(subscriptions).values({
-    userId,
-    stripeCustomerId: sessionData.customer as string,
-    stripeSubscriptionId: subData.id,
-    stripePriceId: subData.items.data[0].price.id,
-    plan,
-    billingPeriod,
-    status: subData.status,
-    amount: subData.items.data[0].price.unit_amount || 0,
-    currency: subData.currency,
-    currentPeriodStart: new Date(subData.current_period_start * 1000),
-    currentPeriodEnd: new Date(subData.current_period_end * 1000),
-    trialStart: subData.trial_start
-      ? new Date(subData.trial_start * 1000)
-      : null,
-    trialEnd: subData.trial_end
-      ? new Date(subData.trial_end * 1000)
-      : null,
-  });
+    console.log("✅ Subscription retrieved:", subData.id);
+    console.log("   Status:", subData.status);
+    console.log("   Amount:", subData.items.data[0].price.unit_amount);
+    console.log("   Currency:", subData.currency);
+    console.log("   Trial start:", subData.trial_start);
+    console.log("   Trial end:", subData.trial_end);
 
-  // Update user subscription type
-  await db
-    .update(users)
-    .set({
-      subscriptionType: plan,
-      isTrialActive: false,
+    // ✅ ADD: Debug the actual Stripe subscription data
+    console.log("🔍 Full Stripe subscription data:");
+    console.log("   ID:", subData.id);
+    console.log("   Status:", subData.status);
+    console.log("   Current period start (raw):", subData.current_period_start);
+    console.log("   Current period end (raw):", subData.current_period_end);
+    console.log("   Currency:", subData.currency);
+    console.log("   Items:", JSON.stringify(subData.items?.data, null, 2));
+
+    // ✅ FIX: Validate dates before creating Date objects
+    const currentPeriodStart = subData.current_period_start 
+      ? new Date(subData.current_period_start * 1000)
+      : new Date();
+
+    const currentPeriodEnd = subData.current_period_end
+      ? new Date(subData.current_period_end * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default 30 days
+
+    console.log("📅 Processed dates:");
+    console.log("   Start:", currentPeriodStart.toISOString());
+    console.log("   End:", currentPeriodEnd.toISOString());
+
+    // Validate dates
+    if (isNaN(currentPeriodStart.getTime())) {
+      throw new Error("Invalid currentPeriodStart date");
+    }
+    if (isNaN(currentPeriodEnd.getTime())) {
+      throw new Error("Invalid currentPeriodEnd date");
+    }
+
+    console.log("💾 Inserting subscription into database...");
+
+    // ✅ FIX: Properly handle null trial dates and add required timestamps
+    const subscriptionData = {
+      userId,
+      stripeCustomerId: sessionData.customer as string,
+      stripeSubscriptionId: subData.id,
+      stripePriceId: subData.items.data[0].price.id,
+      plan,
+      billingPeriod,
+      status: subData.status,
+      amount: subData.items.data[0].price.unit_amount || 0,
+      currency: subData.currency,
+      currentPeriodStart,
+      currentPeriodEnd,
+      ...(subData.trial_start && {
+        trialStart: new Date(subData.trial_start * 1000)
+      }),
+      ...(subData.trial_end && {
+        trialEnd: new Date(subData.trial_end * 1000)
+      }),
+      createdAt: new Date(),
       updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
+    };
 
-  console.log(`✅ Subscription created for user ${userId}`);
+    console.log("📝 Subscription data to insert:", JSON.stringify(subscriptionData, null, 2));
+
+    // Create subscription in database
+    await db.insert(subscriptions).values(subscriptionData);
+
+    console.log("✅ Subscription inserted into database");
+    
+
+    // Update user subscription type
+    await db
+      .update(users)
+      .set({
+        subscriptionType: plan,
+        isTrialActive: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log("✅ User updated successfully");
+    console.log(`✅ Subscription created for user ${userId}`);
+  } catch (error) {
+    console.error("❌ Error in handleCheckoutCompleted:", error);
+    throw error;
+  }
 }
 
 // Handle subscription updates
@@ -210,26 +273,48 @@ async function handleSubscriptionDeleted(stripeSubscription: Stripe.Subscription
 
 // Handle successful payment
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
-  // ✅ FIX: Type assertion to access properties
   const invoiceData = invoice as any;
   
   const subscriptionId = typeof invoiceData.subscription === 'string'
     ? invoiceData.subscription
     : invoiceData.subscription?.id;
 
-  if (!subscriptionId) return;
+  if (!subscriptionId) {
+    console.log("⏭️ No subscription in invoice, skipping payment record");
+    return;
+  }
 
-  const [subscription] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.stripeSubscriptionId, subscriptionId))
-    .limit(1);
+  // ✅ FIX: Add retry logic - wait for subscription to exist
+  let subscription = null;
+  let retries = 0;
+  const maxRetries = 3;
 
-  if (!subscription) return;
+  while (!subscription && retries < maxRetries) {
+    const [sub] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, subscriptionId))
+      .limit(1);
+
+    if (sub) {
+      subscription = sub;
+    } else {
+      console.log(`⏳ Subscription not found yet, retrying (${retries + 1}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      retries++;
+    }
+  }
+
+  if (!subscription) {
+    console.error("❌ Subscription not found in database after retries");
+    return;
+  }
 
   const paymentIntentId = typeof invoiceData.payment_intent === 'string'
     ? invoiceData.payment_intent
     : invoiceData.payment_intent?.id;
+
+  console.log("💾 Recording payment...");
 
   // Record payment
   await db.insert(payments).values({
@@ -246,6 +331,7 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
       ? new Date(invoiceData.status_transitions.paid_at * 1000)
       : new Date(),
     description: invoiceData.lines?.data?.[0]?.description || undefined,
+
   });
 
   console.log(`✅ Payment recorded: ${invoiceData.id}`);

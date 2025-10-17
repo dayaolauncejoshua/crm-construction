@@ -32,6 +32,7 @@ import {
   DollarSign,
   Activity,
   Building2,
+  CreditCard
 } from "lucide-react";
 import { useState } from "react";
 
@@ -114,11 +115,17 @@ export default function Navigation({
     },
     { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
 
-    { 
-    path: "/pricing", 
-    label: "Upgrade", 
-    icon: <Crown className="w-4 h-4" /> 
-  },
+    {
+      path: "/subscription",
+      label: "Subscription",
+      icon: <CreditCard className="w-4 h-4" />,
+    },
+
+    {
+      path: "/pricing",
+      label: "Upgrade",
+      icon: <Crown className="w-4 h-4" />,
+    },
   ];
 
   const superAdminMenuItems: MenuItem[] = [
@@ -400,7 +407,7 @@ export default function Navigation({
           </ul>
         </div>
 
-         <div className="border-t border-slate-200">
+        <div className="border-t border-slate-200">
           {/* ✅ TRIAL STATUS - MOVED TO BOTTOM */}
           {userRole !== "super_admin" && isTrialActive && (
             <div className="p-4 mx-4 mt-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-lg">
@@ -430,7 +437,9 @@ export default function Navigation({
               <Avatar className="w-8 h-8">
                 <AvatarImage src="/placeholder-avatar.jpg" />
                 <AvatarFallback className="bg-gradient-construction text-white text-sm">
-                  {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                  {user?.firstName?.[0] ||
+                    user?.email?.[0]?.toUpperCase() ||
+                    "U"}
                   {user?.lastName?.[0] || ""}
                 </AvatarFallback>
               </Avatar>
@@ -441,7 +450,9 @@ export default function Navigation({
                     : user?.email || "User"}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {userRole === "super_admin" ? "Super Admin" : user?.email || ""}
+                  {userRole === "super_admin"
+                    ? "Super Admin"
+                    : user?.email || ""}
                 </p>
               </div>
               <Button

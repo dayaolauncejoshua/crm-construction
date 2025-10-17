@@ -37,6 +37,8 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Pricing from "@/pages/pricing";
 import PaymentSuccess from "@/pages/payment-success";
+import SubscriptionPage from "@/pages/SubscriptionPage";
+
 
 
 function ProtectedRouter() {
@@ -232,7 +234,7 @@ function ProtectedRouter() {
             <Route path="/signup" component={Signup} />
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
-
+            <Route path="/subscription" component={SubscriptionPage} />
             <Route path="/payment-success" component={PaymentSuccess} />
             <Route path="/pricing" component={Pricing}/>
             <Route path="/verify-email" component={VerifyEmail} />

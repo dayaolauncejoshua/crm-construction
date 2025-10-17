@@ -102,8 +102,8 @@ function hasBookingConflict(
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
-   app.use("/api/stripe", stripeRouter);
-  app.use("/api/stripe", stripeWebhookRouter);
+   app.use("/api/stripe", requireAuth, stripeRouter);
+  // app.use("/api/stripe", stripeWebhookRouter);
   const httpServer = createServer(app);
 
   // app.use(vslapp);
