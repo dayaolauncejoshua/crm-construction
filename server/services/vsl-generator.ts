@@ -4,7 +4,9 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import fetch from "node-fetch"; // ✅ needed for image download
+import fetch from "node-fetch";
+import { progressTracker } from "./progress-tracker.services";
+import { ConsoleLogger } from "../utils/console-logger.utils";
 
 import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import ffprobePath from "@ffprobe-installer/ffprobe";
@@ -20,8 +22,21 @@ interface VSLGenerationOptions {
   title: string;
   clientId: string;
   niche: string;
+  vslId: string;
 }
 
+interface Scene {
+  title: string;
+  text: string;
+  prompt: string;
+}
+interface VSLGenerationOptions {
+  vslId: string; // ✅ Make sure this is here
+  script: string;
+  title: string;
+  clientId: string;
+  niche: string;
+}
 export class VSLGenerator {
   private outputDir = path.join(process.cwd(), "uploads", "vsls");
   private tempDir = path.join(process.cwd(), "temp");
@@ -38,9 +53,16 @@ export class VSLGenerator {
   /** STEP 1: Generate voiceover */
   private async generateVoiceover(
     script: string,
-    outputPath: string
+    outputPath: string,
+    logger: ConsoleLogger
   ): Promise<void> {
-    console.log("🎤 Generating voiceover...");
+    logger.stage("🎤", "VOICEOVER", "Starting text-to-speech generation...");
+    logger.stage(
+      "📊",
+      "VOICEOVER",
+      `Script length: ${script.length} characters`
+    );
+
     const mp3Response = await openai.audio.speech.create({
       model: "tts-1-hd",
       voice: "nova",
@@ -50,77 +72,349 @@ export class VSLGenerator {
 
     const buffer = Buffer.from(await mp3Response.arrayBuffer());
     await fs.writeFile(outputPath, buffer);
-    console.log("✅ Voiceover generated");
+
+    logger.success(
+      "VOICEOVER",
+      `Audio file saved: ${path.basename(outputPath)}`
+    );
+    logger.stage(
+      "📦",
+      "VOICEOVER",
+      `File size: ${(buffer.length / 1024).toFixed(2)} KB`
+    );
   }
 
   /** STEP 2: Get audio duration */
-  private async getAudioDuration(audioPath: string): Promise<number> {
+  private async getAudioDuration(
+    audioPath: string,
+    logger: ConsoleLogger
+  ): Promise<number> {
+    logger.stage("⏱️", "ANALYSIS", "Analyzing audio duration...");
+
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(audioPath, (err, metadata) => {
-        if (err) reject(err);
-        else resolve(metadata.format.duration || 0);
+        if (err) {
+          logger.error("ANALYSIS", "Failed to get audio duration", err);
+          reject(err);
+        } else {
+          const duration = metadata.format.duration || 0;
+          logger.success(
+            "ANALYSIS",
+            `Audio duration: ${duration.toFixed(2)}s (${Math.floor(
+              duration / 60
+            )}m ${Math.floor(duration % 60)}s)`
+          );
+          resolve(duration);
+        }
       });
     });
   }
 
-  /** 🖼️ STEP 3A: Generate background image using OpenAI */
-  private async generateBackgroundImage(niche: string): Promise<string> {
-    console.log("🖼️ Generating background image for:", niche);
-    const imgPath = path.join(
-      this.tempDir,
-      `${niche.replace(/\s+/g, "_")}.jpg`
+  /** 🧠 Split script into intelligent scenes with image prompts */
+  private async splitScriptIntoScenes(
+    script: string,
+    niche: string,
+    logger: ConsoleLogger
+  ): Promise<Scene[]> {
+    logger.stage(
+      "🧠",
+      "AI ANALYSIS",
+      "Splitting script into scenes using GPT-4..."
     );
 
     try {
-      const response = await openai.images.generate({
-        model: "gpt-image-1",
-        prompt: `High-quality background image for a ${niche} promotional video. Focus on realistic and clean visuals.`,
-        size: "1536x1024", // ✅ valid widescreen format
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a video production assistant. Split the VSL script into 4-6 compelling scenes. For each scene, provide:
+1. A short title (2-4 words)
+2. The script text for that scene
+3. A detailed image prompt for DALL-E to generate a relevant background
+
+Return ONLY valid JSON in this format:
+{
+  "scenes": [
+    {
+      "title": "Scene Title",
+      "text": "Script text for this scene...",
+      "prompt": "Detailed DALL-E prompt for background image..."
+    }
+  ]
+}`,
+          },
+          {
+            role: "user",
+            content: `Niche: ${niche}\n\nScript:\n${script}\n\nCreate 4-6 scenes with engaging visuals that match the script narrative.`,
+          },
+        ],
+        temperature: 0.7,
       });
+
+      const content = response.choices[0].message.content || "{}";
+      const parsed = JSON.parse(content);
+
+      if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
+        throw new Error("Invalid scene format from AI");
+      }
+
+      logger.success("AI ANALYSIS", `Created ${parsed.scenes.length} scenes`);
+      parsed.scenes.forEach((scene, i) => {
+        logger.stage("📝", "AI ANALYSIS", `Scene ${i + 1}: "${scene.title}"`);
+      });
+
+      return parsed.scenes;
+    } catch (error) {
+      logger.warning(
+        "AI ANALYSIS",
+        "AI scene splitting failed, using fallback method"
+      );
+      logger.error("AI ANALYSIS", "Error details", error);
+      return this.fallbackSceneSplit(script, niche, logger);
+    }
+  }
+
+  /** Fallback: Basic scene splitting */
+  private fallbackSceneSplit(
+    script: string,
+    niche: string,
+    logger: ConsoleLogger
+  ): Scene[] {
+    logger.stage("🔄", "FALLBACK", "Using basic scene splitting algorithm...");
+
+    const sentences = script.split(/(?<=[.!?])\s+/);
+    const scenesCount = Math.min(
+      5,
+      Math.max(3, Math.floor(sentences.length / 3))
+    );
+    const chunkSize = Math.ceil(sentences.length / scenesCount);
+
+    logger.stage(
+      "📊",
+      "FALLBACK",
+      `Splitting ${sentences.length} sentences into ${scenesCount} scenes`
+    );
+
+    const scenes: Scene[] = [];
+    for (let i = 0; i < scenesCount; i++) {
+      const sceneText = sentences
+        .slice(i * chunkSize, (i + 1) * chunkSize)
+        .join(" ");
+      scenes.push({
+        title: `Scene ${i + 1}`,
+        text: sceneText,
+        prompt: `Professional ${niche} business scene ${
+          i + 1
+        }, modern and clean visuals, high quality`,
+      });
+      logger.stage(
+        "✓",
+        "FALLBACK",
+        `Scene ${i + 1}: ${sceneText.slice(0, 50)}...`
+      );
+    }
+
+    logger.success(
+      "FALLBACK",
+      `Created ${scenes.length} scenes using fallback method`
+    );
+    return scenes;
+  }
+
+  /** 🖼️ Generate background image using OpenAI */
+  private async generateBackgroundImage(
+    prompt: string,
+    index: number,
+    logger: ConsoleLogger
+  ): Promise<string> {
+    const imgPath = path.join(this.tempDir, `scene_${index}_${Date.now()}.jpg`);
+
+    logger.stage("🖼️", "IMAGE GEN", `[${index + 1}] Generating image...`);
+    logger.stage(
+      "📝",
+      "IMAGE GEN",
+      `[${index + 1}] Prompt: ${prompt.slice(0, 80)}...`
+    );
+
+    try {
+      const startTime = Date.now();
+
+      const response = await openai.images.generate({
+        model: "dall-e-3",
+        prompt: `${prompt}. Professional, high-quality, cinematic style, suitable for business presentation.`,
+        size: "1792x1024",
+        quality: "standard",
+      });
+
+      const generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
       const imageUrl = response.data[0].url;
       if (!imageUrl) throw new Error("No image URL received from OpenAI");
+
+      logger.stage(
+        "⬇️",
+        "IMAGE GEN",
+        `[${index + 1}] Downloading image... (generated in ${generationTime}s)`
+      );
 
       const res = await fetch(imageUrl);
       const buffer = Buffer.from(await res.arrayBuffer());
       await fs.writeFile(imgPath, buffer);
-      console.log("✅ Background image saved:", imgPath);
+
+      logger.success(
+        "IMAGE GEN",
+        `[${index + 1}] Image saved: ${path.basename(imgPath)} (${(
+          buffer.length / 1024
+        ).toFixed(2)} KB)`
+      );
       return imgPath;
     } catch (error) {
-      console.error(
-        "⚠️ Image generation failed, falling back to color background:",
+      logger.error(
+        "IMAGE GEN",
+        `[${index + 1}] Image generation failed`,
         error
       );
-      return ""; // fallback will trigger color background
+      logger.warning(
+        "IMAGE GEN",
+        `[${index + 1}] Falling back to color background`
+      );
+      return ""; // Will fallback to color background
     }
   }
 
-  /** STEP 3B: Create video with voiceover and background */
-  private async createVideo(
-    audioPath: string,
+  /** Create individual scene video */
+  private async createSceneVideo(
+    bgImagePath: string,
     outputPath: string,
     duration: number,
+    title: string,
     niche: string,
-    bgImagePath?: string
+    index: number,
+    logger: ConsoleLogger
   ): Promise<void> {
-    console.log("🎬 Creating video...");
+    logger.stage(
+      "🎬",
+      "SCENE VIDEO",
+      `[${index + 1}] Creating scene: "${title}" (${Math.round(duration)}s)`
+    );
 
     return new Promise((resolve, reject) => {
       const ff = ffmpeg();
+      const startTime = Date.now();
 
       if (bgImagePath && bgImagePath !== "") {
-        ff.input(bgImagePath).loop(duration);
-      } else {
-        ff.input(`color=c=#1e3a8a:s=1920x1080:d=${duration}`).inputFormat(
-          "lavfi"
+        logger.stage(
+          "🖼️",
+          "SCENE VIDEO",
+          `[${index + 1}] Using generated image with zoom effect`
         );
+        ff.input(bgImagePath)
+          .loop(duration)
+          .videoFilters([
+            `zoompan=z='min(zoom+0.0015,1.2)':d=${Math.ceil(
+              duration * 30
+            )}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080`,
+            `drawtext=text='${title.replace(
+              /'/g,
+              "\\'"
+            )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2:alpha='if(lt(t,1),t,if(gt(t,${
+              duration - 1
+            }),${duration}-t,1))'`,
+            `vignette=angle=PI/4`,
+          ]);
+      } else {
+        logger.stage(
+          "🎨",
+          "SCENE VIDEO",
+          `[${index + 1}] Using gradient background (fallback)`
+        );
+        ff.input(`color=c=#1e3a8a:s=1920x1080:d=${duration}`)
+          .inputFormat("lavfi")
+          .videoFilters([
+            `drawtext=text='${title.replace(
+              /'/g,
+              "\\'"
+            )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
+          ]);
       }
 
-      ff.input(audioPath)
-        .videoFilters([
-          `drawtext=text='${niche} Solutions':fontcolor=white:fontsize=64:x=(w-text_w)/2:y=(h-text_h)/2`,
-        ])
+      ff.outputOptions([
+        `-t ${duration}`,
+        "-c:v libx264",
+        "-preset medium",
+        "-crf 23",
+        "-pix_fmt yuv420p",
+        "-r 30",
+      ])
+        .output(outputPath)
+        .on("progress", (p) => {
+          if (p.percent && p.percent > 0 && p.percent % 25 === 0) {
+            logger.stage(
+              "⚙️",
+              "SCENE VIDEO",
+              `[${index + 1}] Encoding: ${Math.round(p.percent)}%`
+            );
+          }
+        })
+        .on("end", () => {
+          const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+          logger.success(
+            "SCENE VIDEO",
+            `[${index + 1}] Scene created in ${processingTime}s`
+          );
+          resolve();
+        })
+        .on("error", (err) => {
+          logger.error(
+            "SCENE VIDEO",
+            `[${index + 1}] Scene creation failed`,
+            err
+          );
+          reject(err);
+        })
+        .run();
+    });
+  }
+
+  /** Simple concatenation (no transitions) - More reliable */
+  private async mergeScenesSimple(
+    sceneVideos: string[],
+    outputPath: string,
+    audioPath: string,
+    logger: ConsoleLogger
+  ): Promise<void> {
+    logger.stage(
+      "🎞️",
+      "MERGING",
+      `Concatenating ${sceneVideos.length} scenes...`
+    );
+
+    return new Promise((resolve, reject) => {
+      const ff = ffmpeg();
+      const startTime = Date.now();
+
+      sceneVideos.forEach((video, i) => {
+        logger.stage(
+          "📥",
+          "MERGING",
+          `Input ${i + 1}: ${path.basename(video)}`
+        );
+        ff.input(video);
+      });
+      ff.input(audioPath);
+      logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
+
+      const filterComplex =
+        sceneVideos.map((_, i) => `[${i}:v]`).join("") +
+        `concat=n=${sceneVideos.length}:v=1:a=0[v]`;
+
+      logger.stage("🔧", "MERGING", "Applying concat filter...");
+
+      ff.complexFilter(filterComplex)
         .outputOptions([
-          `-t ${duration}`,
+          "-map [v]",
+          `-map ${sceneVideos.length}:a`,
           "-c:v libx264",
           "-preset medium",
           "-crf 23",
@@ -131,235 +425,314 @@ export class VSLGenerator {
         ])
         .output(outputPath)
         .on("progress", (p) => {
-          console.log(`Processing: ${Math.round(p.percent || 0)}%`);
+          if (p.percent && p.percent > 0) {
+            logger.stage(
+              "⚙️",
+              "MERGING",
+              `Processing: ${Math.round(p.percent)}%`
+            );
+          }
         })
         .on("end", () => {
-          console.log("✅ Video created successfully");
+          const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+          logger.success("MERGING", `All scenes merged in ${processingTime}s`);
           resolve();
         })
         .on("error", (err) => {
-          console.error("❌ Video creation error:", err);
+          logger.error("MERGING", "Merge failed", err);
           reject(err);
         })
         .run();
     });
   }
 
-  /** STEP 4: Generate thumbnail */
+  /** Generate thumbnail */
   private async generateThumbnail(
     videoPath: string,
-    thumbnailPath: string
+    thumbnailPath: string,
+    logger: ConsoleLogger
   ): Promise<void> {
-    console.log("📸 Generating thumbnail...");
+    logger.stage("📸", "THUMBNAIL", "Generating thumbnail from video...");
+
     return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+
       ffmpeg(videoPath)
         .screenshots({
-          timestamps: ["00:00:01"],
+          timestamps: ["00:00:02"],
           filename: path.basename(thumbnailPath),
           folder: path.dirname(thumbnailPath),
           size: "1280x720",
         })
         .on("end", () => {
-          console.log("✅ Thumbnail generated");
+          const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+          logger.success(
+            "THUMBNAIL",
+            `Thumbnail generated in ${processingTime}s`
+          );
           resolve();
         })
-        .on("error", reject);
+        .on("error", (err) => {
+          logger.error("THUMBNAIL", "Thumbnail generation failed", err);
+          reject(err);
+        });
     });
   }
 
-  /** MAIN: Generate complete VSL */
+  /** 🎬 MAIN: Generate complete multi-scene VSL */
   async generateVSL(options: VSLGenerationOptions) {
+    console.log("🔍 VSL Generator received options:", {
+      vslId: options.vslId,
+      title: options.title,
+      niche: options.niche,
+      hasScript: !!options.script,
+    });
     const videoId = uuidv4();
     const audioPath = path.join(this.tempDir, `${videoId}-audio.mp3`);
     const videoPath = path.join(this.outputDir, `${videoId}.mp4`);
     const thumbnailPath = path.join(this.outputDir, `${videoId}-thumb.jpg`);
 
+    const logger = new ConsoleLogger(options.vslId);
+    logger.start(`Title: ${options.title} | Niche: ${options.niche}`);
+
     try {
-      await this.generateVoiceover(options.script, audioPath);
-      const duration = await this.getAudioDuration(audioPath);
-      console.log(`⏱️ Duration: ${Math.round(duration)}s`);
+      // 1. Generate voiceover
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "voiceover",
+        progress: 10,
+        message: "Generating voiceover...",
+        status: "processing",
+      });
 
-      const bgImagePath = await this.generateBackgroundImage(options.niche);
+      await this.generateVoiceover(options.script, audioPath, logger);
+      const totalDuration = await this.getAudioDuration(audioPath, logger);
 
-      await this.createVideo(
-        audioPath,
-        videoPath,
-        duration,
+      // 2. Split script into scenes
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "scenes",
+        progress: 20,
+        message: "Analyzing script and creating scenes...",
+        status: "processing",
+      });
+
+      const scenes = await this.splitScriptIntoScenes(
+        options.script,
         options.niche,
-        bgImagePath
+        logger
       );
-      await this.generateThumbnail(videoPath, thumbnailPath);
-      await fs.unlink(audioPath);
+      const sceneDuration = totalDuration / scenes.length;
+      logger.stage(
+        "📊",
+        "PLANNING",
+        `Each scene will be ~${sceneDuration.toFixed(1)}s long`
+      );
+
+      // 3. Generate images for each scene
+      logger.stage(
+        "🎨",
+        "IMAGE GEN",
+        `Starting generation of ${scenes.length} images...`
+      );
+      const sceneImages: string[] = [];
+      for (const [i, scene] of scenes.entries()) {
+        const imageProgress = 20 + ((i + 1) / scenes.length) * 30;
+        progressTracker.updateProgress({
+          vslId: options.vslId,
+          stage: "images",
+          progress: Math.round(imageProgress),
+          message: `Generating image ${i + 1} of ${scenes.length}: ${
+            scene.title
+          }`,
+          status: "processing",
+        });
+
+        const imgPath = await this.generateBackgroundImage(
+          scene.prompt,
+          i,
+          logger
+        );
+        sceneImages.push(imgPath);
+      }
+      logger.success("IMAGE GEN", `All ${scenes.length} images generated`);
+
+      // 4. Create individual scene videos
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "scenes-video",
+        progress: 55,
+        message: "Creating scene videos...",
+        status: "processing",
+      });
+
+      logger.stage(
+        "🎥",
+        "SCENE VIDEO",
+        `Creating ${scenes.length} scene videos...`
+      );
+      const sceneVideos: string[] = [];
+      for (let i = 0; i < scenes.length; i++) {
+        const sceneProgress = 55 + ((i + 1) / scenes.length) * 25;
+        progressTracker.updateProgress({
+          vslId: options.vslId,
+          stage: "scenes-video",
+          progress: Math.round(sceneProgress),
+          message: `Processing scene ${i + 1} of ${scenes.length}`,
+          status: "processing",
+        });
+
+        const sceneVideoPath = path.join(
+          this.tempDir,
+          `${videoId}-scene${i}.mp4`
+        );
+        await this.createSceneVideo(
+          sceneImages[i],
+          sceneVideoPath,
+          sceneDuration,
+          scenes[i].title,
+          options.niche,
+          i,
+          logger
+        );
+        sceneVideos.push(sceneVideoPath);
+      }
+      logger.success(
+        "SCENE VIDEO",
+        `All ${scenes.length} scene videos created`
+      );
+
+      // 5. Merge scenes with audio
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "merging",
+        progress: 85,
+        message: "Merging scenes...",
+        status: "processing",
+      });
+
+      await this.mergeScenesSimple(sceneVideos, videoPath, audioPath, logger);
+
+      // 6. Generate thumbnail
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "thumbnail",
+        progress: 95,
+        message: "Generating thumbnail...",
+        status: "processing",
+      });
+
+      await this.generateThumbnail(videoPath, thumbnailPath, logger);
+
+      // 7. Cleanup temp files
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "cleanup",
+        progress: 98,
+        message: "Cleaning up...",
+        status: "processing",
+      });
+
+      logger.stage("🧹", "CLEANUP", "Removing temporary files...");
+      let cleanupCount = 0;
+
+      for (const video of sceneVideos) {
+        await fs.unlink(video).catch(() => {});
+        cleanupCount++;
+      }
+      for (const img of sceneImages) {
+        if (img) {
+          await fs.unlink(img).catch(() => {});
+          cleanupCount++;
+        }
+      }
+      await fs.unlink(audioPath).catch(() => {});
+      cleanupCount++;
+
+      logger.success("CLEANUP", `Removed ${cleanupCount} temporary files`);
+
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "complete",
+        progress: 100,
+        message: "Video generation complete!",
+        status: "completed",
+      });
+
+      logger.complete(Math.round(totalDuration));
 
       const baseUrl = process.env.BASE_URL || "http://localhost:5000";
       return {
-        videoPath,
-        thumbnailPath,
-        duration: Math.round(duration),
         videoUrl: `${baseUrl}/uploads/vsls/${videoId}.mp4`,
         thumbnailUrl: `${baseUrl}/uploads/vsls/${videoId}-thumb.jpg`,
+        duration: Math.round(totalDuration),
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Video generation failed";
+      logger.failed(errorMessage);
+
+      progressTracker.updateProgress({
+        vslId: options.vslId,
+        stage: "error",
+        progress: 0,
+        message: errorMessage,
+        status: "error",
+      });
+
+      logger.stage("🧹", "ERROR CLEANUP", "Removing partial files...");
       await fs.unlink(audioPath).catch(() => {});
       await fs.unlink(videoPath).catch(() => {});
       await fs.unlink(thumbnailPath).catch(() => {});
+
       throw error;
     }
   }
+}
 
-  /** MAIN: Generate complete multi-scene VSL */
-  // async generateVSL(options: VSLGenerationOptions) {
-  //   const videoId = uuidv4();
-  //   const audioPath = path.join(this.tempDir, `${videoId}-audio.mp3`);
-  //   const videoPath = path.join(this.outputDir, `${videoId}.mp4`);
-  //   const thumbnailPath = path.join(this.outputDir, `${videoId}-thumb.jpg`);
+// Async function to generate video in background
+async function generateVideoAsync(
+  vslId: string,
+  script: string,
+  title: string,
+  niche: string
+) {
+  try {
+    console.log("🎥 Starting video generation for VSL:", vslId);
 
-  //   try {
-  //     // 🧠 1. Split script into sections
-  //     const scenes = this.splitScriptIntoScenes(options.script);
-  //     console.log(`🪄 Script split into ${scenes.length} scenes`);
+    // ✅ CRITICAL: Explicitly pass vslId in options object
+    const generatorOptions = {
+      vslId: vslId, // Pass the VSL ID for tracking
+      script: script, // The script content
+      title: title, // VSL title
+      niche: niche, // Business niche
+      clientId: vslId, // Using vslId as clientId
+    };
 
-  //     // 🎤 2. Generate voiceover for entire script
-  //     await this.generateVoiceover(options.script, audioPath);
-  //     const totalDuration = await this.getAudioDuration(audioPath);
-  //     console.log(`⏱️ Total duration: ${Math.round(totalDuration)}s`);
+    console.log(
+      "📦 Generator options:",
+      JSON.stringify({
+        vslId: generatorOptions.vslId,
+        title: generatorOptions.title,
+        niche: generatorOptions.niche,
+        scriptLength: generatorOptions.script.length,
+      })
+    );
 
-  //     // 🖼️ 3. Generate background image for each scene
-  //     const sceneImages = [];
-  //     for (const [i, scene] of scenes.entries()) {
-  //       console.log(`🖼️ Generating image for scene ${i + 1}: ${scene.title}`);
-  //       const imgPath = await this.generateBackgroundImage(
-  //         `${options.niche} ${scene.title}`
-  //       );
-  //       sceneImages.push(imgPath);
-  //     }
+    const result = await vslGenerator.generateVSL(generatorOptions);
 
-  //     // 🎬 4. Create a video per scene
-  //     const sceneVideos = [];
-  //     const sceneDuration = totalDuration / scenes.length;
-
-  //     for (let i = 0; i < scenes.length; i++) {
-  //       const sceneVideoPath = path.join(
-  //         this.tempDir,
-  //         `${videoId}-scene${i}.mp4`
-  //       );
-  //       await this.createSceneVideo(
-  //         sceneImages[i],
-  //         sceneVideoPath,
-  //         sceneDuration,
-  //         scenes[i].title,
-  //         options.niche
-  //       );
-  //       sceneVideos.push(sceneVideoPath);
-  //     }
-
-  //     // 🎞️ 5. Merge all scene videos with transitions
-  //     await this.mergeScenesWithTransitions(sceneVideos, videoPath, audioPath);
-
-  //     // 📸 6. Generate thumbnail
-  //     await this.generateThumbnail(videoPath, thumbnailPath);
-
-  //     // 🧹 Cleanup
-  //     for (const s of sceneVideos) await fs.unlink(s).catch(() => {});
-  //     for (const i of sceneImages) await fs.unlink(i).catch(() => {});
-  //     await fs.unlink(audioPath).catch(() => {});
-
-  //     const baseUrl = process.env.BASE_URL || "http://localhost:5000";
-  //     return {
-  //       videoUrl: `${baseUrl}/uploads/vsls/${videoId}.mp4`,
-  //       thumbnailUrl: `${baseUrl}/uploads/vsls/${videoId}-thumb.jpg`,
-  //       duration: Math.round(totalDuration),
-  //     };
-  //   } catch (error) {
-  //     console.error("❌ Multi-scene VSL generation failed:", error);
-  //     throw error;
-  //   }
-  // }
-
-  /** Split long script into logical scenes */
-  private splitScriptIntoScenes(script: string) {
-    const parts = script.split(/(?<=\.|\?|\!)(?=\s+[A-Z])/g);
-    const chunkSize = Math.ceil(parts.length / 4);
-    const chunks = [];
-    for (let i = 0; i < parts.length; i += chunkSize) {
-      const text = parts.slice(i, i + chunkSize).join(" ");
-      chunks.push({
-        title: `Scene ${chunks.length + 1}`,
-        text,
-      });
-    }
-    return chunks;
-  }
-
-  /** Create individual scene video */
-  private async createSceneVideo(
-    bgImagePath: string,
-    outputPath: string,
-    duration: number,
-    title: string,
-    niche: string
-  ): Promise<void> {
-    console.log(`🎬 Creating scene video: ${title}`);
-
-    return new Promise((resolve, reject) => {
-      const ff = ffmpeg();
-
-      ff.input(bgImagePath).loop(duration);
-
-      ff.videoFilters([
-        `drawtext=text='${title}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,${duration})'`,
-        `drawtext=text='${niche} Solutions':fontcolor=lightgray:fontsize=36:x=(w-text_w)/2:y=h-100:enable='between(t,0,${duration})'`,
-      ])
-        .outputOptions([
-          `-t ${duration}`,
-          "-c:v libx264",
-          "-preset medium",
-          "-crf 23",
-          "-pix_fmt yuv420p",
-        ])
-        .output(outputPath)
-        .on("end", () => {
-          console.log(`✅ Scene created: ${outputPath}`);
-          resolve();
-        })
-        .on("error", (err) => reject(err))
-        .run();
+    await storage.updateVSL(vslId, {
+      videoUrl: result.videoUrl,
+      thumbnailUrl: result.thumbnailUrl,
+      duration: result.duration,
     });
-  }
 
-  /** Merge all scene clips with crossfade transitions */
-  private async mergeScenesWithTransitions(
-    scenes: string[],
-    outputPath: string,
-    audioPath: string
-  ): Promise<void> {
-    console.log("🎞️ Merging scenes...");
+    console.log("✅ Video generation complete for VSL:", vslId);
+  } catch (error) {
+    console.error("❌ Video generation failed for VSL:", vslId, error);
 
-    return new Promise((resolve, reject) => {
-      const ff = ffmpeg();
-
-      scenes.forEach((scene) => ff.input(scene));
-      ff.input(audioPath);
-
-      // Add transition filters (crossfade between scenes)
-      const filterComplex =
-        scenes.map((_, i) => `[${i}:v][${i}:a]`).join("") +
-        `concat=n=${scenes.length}:v=1:a=0[v]`;
-
-      ff.complexFilter(filterComplex)
-        .outputOptions([
-          "-map [v]",
-          "-map " + scenes.length + ":a",
-          "-preset medium",
-          "-crf 23",
-        ])
-        .output(outputPath)
-        .on("end", () => {
-          console.log("✅ All scenes merged");
-          resolve();
-        })
-        .on("error", (err) => reject(err))
-        .run();
+    await storage.updateVSL(vslId, {
+      script: `${script}\n\n[VIDEO GENERATION FAILED - Please regenerate]`,
     });
   }
 }
