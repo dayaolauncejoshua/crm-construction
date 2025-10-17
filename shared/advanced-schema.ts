@@ -211,6 +211,7 @@ export const notionSOPs = pgTable("notion_sops", {
   syncStatus: varchar("sync_status").default("active"), // active, failed, disabled
   pageUrl: varchar("page_url"),
   createdAt: timestamp("created_at").defaultNow(),
+  scripts: jsonb("scripts").$type<NotionScript[]>().default([]),
 });
 
 // Visual Workflows Table (Figma/Miro)
@@ -274,6 +275,19 @@ export const kpiAnomalies = pgTable("kpi_anomalies", {
   detectedAt: timestamp("detected_at").defaultNow(),
   resolvedAt: timestamp("resolved_at"),
 });
+
+// At the bottom of the file, add this type:
+export type NotionScript = {
+  id: string;
+  name: string;
+  description: string;
+  type: "automation" | "validation" | "notification";
+  trigger: "manual" | "schedule" | "event";
+  code: string;
+  enabled: boolean;
+  lastRun: string | null;
+  runCount: number;
+};
 
 // Insert schemas for new tables
 export const insertLeadScoringSchema = createInsertSchema(leadScoring);

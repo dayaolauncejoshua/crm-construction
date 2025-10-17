@@ -585,8 +585,11 @@ export const notionSOPs = pgTable("notion_sops", {
   category: varchar("category"),
   notionPageId: varchar("notion_page_id").notNull(),
   pageUrl: varchar("page_url").notNull(),
+  // ✅ Make sure you have these fields:
+  content: text("content"), // ADD THIS if missing
   lastSynced: timestamp("last_synced"),
-  syncStatus: varchar("sync_status").default("active"), // active, failed, disabled
+  syncStatus: varchar("sync_status").default("active"),
+  syncError: text("sync_error"), // ADD THIS if missing
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -664,5 +667,3 @@ export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Analytics = typeof analytics.$inferSelect;
-
-
