@@ -799,10 +799,343 @@ export default function Pricing() {
           </div>
         </section>
 
-        {/* Rest of the sections remain the same (comparison table, testimonials, FAQ, etc.) */}
-        {/* ... I'll skip these for brevity since they don't change ... */}
+        {/* Feature Comparison Table */}
+        <section className="py-20 bg-slate-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                Compare Plans
+              </h2>
+              <p className="text-xl text-slate-600">
+                See exactly what's included in each plan
+              </p>
+            </div>
+
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b-2 border-slate-200">
+                    <tr>
+                      <th className="text-left py-4 px-6 font-semibold text-slate-900">
+                        Features
+                      </th>
+                      <th className="text-center py-4 px-6 font-semibold text-slate-900">
+                        Starter
+                      </th>
+                      <th className="text-center py-4 px-6 font-semibold text-slate-900 bg-construction/10">
+                        <div className="flex flex-col items-center">
+                          <span>Professional</span>
+                          <Badge className="mt-1 bg-gradient-construction text-white text-xs">
+                            Popular
+                          </Badge>
+                        </div>
+                      </th>
+                      <th className="text-center py-4 px-6 font-semibold text-slate-900">
+                        Enterprise
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {comparisonFeatures.map((category, categoryIndex) => (
+                      <React.Fragment key={`category-group-${categoryIndex}`}>
+                        <tr className="bg-slate-100">
+                          <td
+                            colSpan={4}
+                            className="py-3 px-6 font-bold text-slate-900 text-sm uppercase tracking-wider"
+                          >
+                            {category.category}
+                          </td>
+                        </tr>
+                        {category.features.map((feature, featureIndex) => (
+                          <tr
+                            key={`feature-${categoryIndex}-${featureIndex}`}
+                            className="border-b border-slate-200 hover:bg-slate-50"
+                          >
+                            <td className="py-4 px-6 text-slate-700">
+                              {feature.name}
+                            </td>
+                            <td className="py-4 px-6 text-center">
+                              {typeof feature.starter === "boolean" ? (
+                                feature.starter ? (
+                                  <Check className="w-5 h-5 text-green-600 mx-auto" />
+                                ) : (
+                                  <X className="w-5 h-5 text-slate-300 mx-auto" />
+                                )
+                              ) : (
+                                <span className="text-slate-700 font-medium">
+                                  {feature.starter}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-center bg-construction/5">
+                              {typeof feature.pro === "boolean" ? (
+                                feature.pro ? (
+                                  <Check className="w-5 h-5 text-green-600 mx-auto" />
+                                ) : (
+                                  <X className="w-5 h-5 text-slate-300 mx-auto" />
+                                )
+                              ) : (
+                                <span className="text-slate-700 font-medium">
+                                  {feature.pro}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-center">
+                              {typeof feature.enterprise === "boolean" ? (
+                                feature.enterprise ? (
+                                  <Check className="w-5 h-5 text-green-600 mx-auto" />
+                                ) : (
+                                  <X className="w-5 h-5 text-slate-300 mx-auto" />
+                                )
+                              ) : (
+                                <span className="text-slate-700 font-medium">
+                                  {feature.enterprise}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </section>
+
+        {/* Testimonials */}
+        <section className="py-20 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                Trusted by 200+ Construction Companies
+              </h2>
+              <p className="text-xl text-slate-600">
+                See what our customers are saying
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {testimonials.map((testimonial, index) => (
+                <Card
+                  key={index}
+                  className="border-2 hover:border-construction/50 transition-all"
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center mb-4">
+                      {[...Array(testimonial.rating)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className="w-5 h-5 text-yellow-500 fill-yellow-500"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-slate-700 mb-6 italic">
+                      "{testimonial.quote}"
+                    </p>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-gradient-construction rounded-full flex items-center justify-center text-white font-bold">
+                        {testimonial.image}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {testimonial.name}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          {testimonial.role}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {testimonial.company}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section className="py-20 bg-slate-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+                Frequently Asked Questions
+              </h2>
+              <p className="text-xl text-slate-600">
+                Everything you need to know
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {faqs.map((faq, index) => (
+                <Card
+                  key={index}
+                  className="border-2 hover:border-construction/50 transition-all"
+                >
+                  <button
+                    className="w-full text-left p-6 flex items-center justify-between"
+                    onClick={() =>
+                      setExpandedFaq(expandedFaq === index ? null : index)
+                    }
+                  >
+                    <h3 className="text-lg font-semibold text-slate-900 pr-8">
+                      {faq.question}
+                    </h3>
+                    {expandedFaq === index ? (
+                      <ChevronUp className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    )}
+                  </button>
+                  {expandedFaq === index && (
+                    <div className="px-6 pb-6">
+                      <p className="text-slate-600 leading-relaxed">
+                        {faq.answer}
+                      </p>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Trust Badges */}
+        <section className="py-12 bg-white border-y border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap items-center justify-center gap-12 text-slate-600">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-6 h-6 text-green-600" />
+                <span className="font-medium">256-bit SSL Secure</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Check className="w-6 h-6 text-green-600" />
+                <span className="font-medium">30-Day Money Back</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Clock className="w-6 h-6 text-green-600" />
+                <span className="font-medium">Cancel Anytime</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Star className="w-6 h-6 text-yellow-500 fill-yellow-500" />
+                <span className="font-medium">4.9/5 Rating</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="py-20 bg-gradient-construction text-white">
+          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl md:text-4xl font-bold mb-6">
+              Ready to Close More Construction Deals?
+            </h2>
+            <p className="text-xl text-blue-100 mb-8">
+              Start your 14-day free trial today. No credit card required.
+            </p>
+            <Button
+              size="lg"
+              className="bg-white text-construction hover:bg-blue-50 text-lg px-12 py-6 shadow-xl"
+              onClick={() => setLocation("/signup")}
+            >
+              <Rocket className="w-5 h-5 mr-3" />
+              Start Free Trial
+            </Button>
+            <p className="text-sm text-blue-100 mt-6">
+              Join 200+ construction companies already winning more projects
+            </p>
+          </div>
+        </section>
+
+        {/* Footer - Only show for public users */}
+        {!isAuthenticated && (
+          <footer className="bg-slate-900 text-slate-300 py-12">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="w-8 h-8 bg-gradient-construction rounded-lg flex items-center justify-center">
+                      <HardHat className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="font-bold text-white">AI Lead System</span>
+                  </div>
+                  <p className="text-sm">
+                    AI-powered lead generation for construction companies.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-white mb-4">Product</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li>
+                      <a href="/pricing" className="hover:text-white">
+                        Pricing
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Features
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Demo
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-white mb-4">Company</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        About
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Contact
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Support
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-white mb-4">Legal</h3>
+                  <ul className="space-y-2 text-sm">
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Privacy Policy
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="hover:text-white">
+                        Terms of Service
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-700 pt-8 text-center text-sm">
+                <p>© 2025 AI Lead System. All rights reserved.</p>
+              </div>
+            </div>
+          </footer>
+        )}
 
       </main>
     </div>
   );
 }
+
