@@ -235,7 +235,7 @@ export const leads = pgTable("leads", {
   phone: varchar("phone"),
   company: varchar("company"),
   source: varchar("source").default("landing_page"),
-  status: varchar("status").default("new"), // new, qualified, hot, converted, lost
+  status: varchar("status").default("new"), // new, qualified, hot, converted, lost, not-a-lead
   temperature: varchar("temperature").default("cold"),
 
   qualificationScore: decimal("qualification_score", {

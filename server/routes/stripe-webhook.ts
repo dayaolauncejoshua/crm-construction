@@ -120,17 +120,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.log("   Status:", subData.status);
     console.log("   Amount:", subData.items.data[0].price.unit_amount);
     console.log("   Currency:", subData.currency);
-    console.log("   Trial start:", subData.trial_start);
-    console.log("   Trial end:", subData.trial_end);
-
-    // ✅ ADD: Debug the actual Stripe subscription data
-    console.log("🔍 Full Stripe subscription data:");
-    console.log("   ID:", subData.id);
-    console.log("   Status:", subData.status);
-    console.log("   Current period start (raw):", subData.current_period_start);
-    console.log("   Current period end (raw):", subData.current_period_end);
-    console.log("   Currency:", subData.currency);
-    console.log("   Items:", JSON.stringify(subData.items?.data, null, 2));
 
     // ✅ FIX: Validate dates before creating Date objects
     const currentPeriodStart = subData.current_period_start 
@@ -153,12 +142,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       throw new Error("Invalid currentPeriodEnd date");
     }
 
-    console.log("💾 Inserting subscription into database...");
+    const stripeCustomerId = sessionData.customer as string;
 
-    // ✅ FIX: Properly handle null trial dates and add required timestamps
+    // ✅ NEW: Check if subscription already exists for this customer
+    const [existingSubscription] = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeCustomerId, stripeCustomerId))
+      .limit(1);
+
     const subscriptionData = {
       userId,
-      stripeCustomerId: sessionData.customer as string,
+      stripeCustomerId,
       stripeSubscriptionId: subData.id,
       stripePriceId: subData.items.data[0].price.id,
       plan,
@@ -174,17 +169,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       ...(subData.trial_end && {
         trialEnd: new Date(subData.trial_end * 1000)
       }),
-      createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    console.log("📝 Subscription data to insert:", JSON.stringify(subscriptionData, null, 2));
+    if (existingSubscription) {
+      // ✅ UPDATE existing subscription
+      console.log("🔄 Subscription already exists, updating...");
+      
+      await db
+        .update(subscriptions)
+        .set(subscriptionData)
+        .where(eq(subscriptions.id, existingSubscription.id));
 
-    // Create subscription in database
-    await db.insert(subscriptions).values(subscriptionData);
+      console.log("✅ Subscription updated in database");
+    } else {
+      // ✅ INSERT new subscription
+      console.log("💾 Inserting new subscription into database...");
+      
+      await db.insert(subscriptions).values({
+        ...subscriptionData,
+        createdAt: new Date(),
+      });
 
-    console.log("✅ Subscription inserted into database");
-    
+      console.log("✅ Subscription inserted into database");
+    }
 
     // Update user subscription type
     await db
@@ -197,7 +205,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .where(eq(users.id, userId));
 
     console.log("✅ User updated successfully");
-    console.log(`✅ Subscription created for user ${userId}`);
+    console.log(`✅ Subscription created/updated for user ${userId}`);
   } catch (error) {
     console.error("❌ Error in handleCheckoutCompleted:", error);
     throw error;

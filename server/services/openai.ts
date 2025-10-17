@@ -86,11 +86,151 @@ export interface AuditResult {
   score: number;
 }
 
+export interface IntentClassification {
+  isRelevant: boolean;
+  intent: "construction" | "unrelated" | "spam" | "test";
+  confidence: number;
+  reasoning: string;
+}
+
+export async function classifyIntent(
+  message: string,
+  conversationHistory: any[],
+  clientData: any
+): Promise<IntentClassification> {
+  try {
+    const conversationText = conversationHistory
+      .map((msg) => {
+        const sender = msg.sender === "lead" ? "Customer" : "Agent";
+        return `${sender}: ${msg.content}`;
+      })
+      .join("\n");
+
+    const prompt = `You are an intent classifier for ${
+      clientData?.name || "a construction company"
+    }.
+
+COMPANY SERVICES:
+- Commercial building construction
+- Residential construction
+- Fit-outs and renovations
+- Project management
+- Construction consulting
+- Site development
+
+CONVERSATION HISTORY:
+${conversationText}
+
+LATEST MESSAGE: "${message}"
+
+**TASK:** Determine if this inquiry is relevant to construction services.
+
+**RELEVANT (construction-related):**
+✅ Questions about building, construction, renovation, projects
+✅ Asking about services, pricing, timelines
+✅ Site visits, meetings, consultations
+✅ Project inquiries (residential, commercial, industrial)
+✅ Budget discussions for construction
+✅ Location/area service questions
+
+**NOT RELEVANT (mark as unrelated):**
+❌ Food orders (burgers, pizza, etc.)
+❌ Random questions unrelated to construction
+❌ Test messages ("test", "hello" repeatedly without context)
+❌ Spam, advertising other services
+❌ Personal conversations not about projects
+❌ Clearly wrong number
+
+**EXAMPLES:**
+
+"I want to build a house" → RELEVANT (construction inquiry)
+"How much for a commercial building?" → RELEVANT (service inquiry)
+"I need a burger" → NOT RELEVANT (food order)
+"testing testing" → NOT RELEVANT (test message)
+"Can you construct a warehouse?" → RELEVANT (construction)
+"Do you deliver pizza?" → NOT RELEVANT (wrong business)
+
+Respond with JSON only:
+{
+  "isRelevant": true/false,
+  "intent": "construction" | "unrelated" | "spam" | "test",
+  "confidence": 0.95,
+  "reasoning": "Customer is asking about burger delivery, which is unrelated to construction services"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an intent classification expert. Respond only with valid JSON. Be strict - only mark as relevant if it's clearly construction-related.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3, // Low temperature for consistent classification
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    return {
+      isRelevant: result.isRelevant ?? false,
+      intent: result.intent || "unrelated",
+      confidence: result.confidence || 0.5,
+      reasoning: result.reasoning || "Unable to classify intent",
+    };
+  } catch (error) {
+    console.error("Error classifying intent:", error);
+    // Default to relevant to avoid false negatives
+    return {
+      isRelevant: true,
+      intent: "construction",
+      confidence: 0.5,
+      reasoning: "Classification failed, defaulting to relevant",
+    };
+  }
+}
+
 export async function qualifyLead(
   leadData: any,
   conversationHistory: any[]
 ): Promise<LeadQualificationResult> {
   try {
+    const latestMessage = conversationHistory[conversationHistory.length - 1];
+
+    if (latestMessage && latestMessage.sender === "lead") {
+      const clientData = { name: "Construction Company" }; // Get from context
+      const intentClassification = await classifyIntent(
+        latestMessage.content,
+        conversationHistory,
+        clientData
+      );
+
+      console.log("🎯 Intent Classification:", intentClassification);
+
+      // If not relevant, return low score immediately
+      if (
+        !intentClassification.isRelevant &&
+        intentClassification.confidence > 0.7
+      ) {
+        console.log("❌ Non-construction inquiry detected");
+        return {
+          score: 0.05, // Very low score
+          intent: intentClassification.intent,
+          urgency: "none",
+          budget: "unqualified",
+          timeline: "none",
+          needsHumanAttention: false,
+          reasoning: `Non-construction inquiry: ${intentClassification.reasoning}`,
+          nextAction: "mark_as_not_a_lead",
+        };
+      }
+    }
+
     const conversationText = conversationHistory
       .map((msg) => {
         const sender = msg.sender === "lead" ? "Customer" : "Agent";
@@ -225,6 +365,56 @@ export async function generateAIResponse(
   clientData: any
 ): Promise<string> {
   try {
+    // ✅ NEW: Check if inquiry is relevant
+    const latestMessage = conversationHistory[conversationHistory.length - 1];
+
+    if (latestMessage && latestMessage.sender === "lead") {
+      const intentClassification = await classifyIntent(
+        latestMessage.content,
+        conversationHistory,
+        clientData
+      );
+
+      console.log("🎯 Response Intent Check:", intentClassification);
+
+      // ✅ If not construction-related, use polite redirect
+      if (
+        !intentClassification.isRelevant &&
+        intentClassification.confidence > 0.7
+      ) {
+        console.log("❌ Generating redirect response for off-topic inquiry");
+
+        // Count how many redirect messages we've already sent
+        const redirectCount = conversationHistory.filter((msg) =>
+          msg.sender === "ai" &&
+          (msg.content.includes("construction company") ||
+           msg.content.includes("building projects") ||
+           msg.content.includes("wrong business"))
+        ).length;
+
+        console.log(`🔢 Redirect count: ${redirectCount}`);
+
+        if (redirectCount >= 2) {
+          console.log("⛔ Maximum redirects reached, sending termination message");
+          return `Final notice: This is ${clientData?.name || "a construction company"}. We only handle construction and building projects. This conversation will not receive further responses. Please verify your contact information.`;
+        }
+
+         // First or second redirect: Use escalating responses
+        const redirectResponses = [
+          // First redirect (friendly)
+          `Hi! I think there might be some confusion. We're ${
+            clientData?.name || "a construction company"
+          } specializing in building projects. We handle construction, renovations, and development projects. If you have a construction project in mind, I'd be happy to help!`,
+
+          // Second redirect (firmer)
+          `Just to clarify: we're a construction company. We build commercial buildings, homes, and handle renovation projects. If you're looking for construction services, I'm here to assist. Otherwise, you may have reached us by mistake.`,
+        ];
+
+        // Return appropriate response based on count
+        return redirectResponses[Math.min(redirectCount, redirectResponses.length - 1)];
+      }
+    }
+
     // ✅ FIX: Better conversation mapping
     const conversationText = conversationHistory
       .map((msg) => {

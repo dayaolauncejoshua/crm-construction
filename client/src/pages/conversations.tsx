@@ -487,7 +487,8 @@ export default function Conversations() {
       (filterStatus === "hot" &&
         parseFloat(conv.qualificationScore || "0") >= 0.7) ||
       (filterStatus === "ai" && conv.isAiHandled === true) ||
-      (filterStatus === "human" && conv.isAiHandled === false);
+      (filterStatus === "human" && conv.isAiHandled === false) ||
+      (filterStatus === "not-lead" && conv.lead?.status === "not-a-lead");
 
     return matchesSearch && matchesStatus;
   });
@@ -688,6 +689,10 @@ export default function Conversations() {
     const temperature = conversation.lead?.temperature;
     const status = conversation.lead?.status;
 
+    if (status === "not-a-lead") {
+    return <Badge className="bg-gray-100 text-gray-800">🚫 Not a Lead</Badge>;
+  }
+
     // Show temperature badge
     if (temperature === "hot") {
       return <Badge className="bg-red-100 text-red-800">🔥 Hot Lead</Badge>;
@@ -769,6 +774,10 @@ export default function Conversations() {
     return matchesSearch && matchesCategory;
   });
 
+  const notLeadCount = conversations.filter(
+    (c: any) => c.lead?.status === "not-a-lead"
+  ).length;
+
   return (
     <div className="h-screen flex flex-col">
       <div className="flex-1 flex overflow-hidden">
@@ -788,9 +797,7 @@ export default function Conversations() {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>
-                    Conversations
-                  </BreadcrumbPage>
+                  <BreadcrumbPage>Conversations</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -852,6 +859,9 @@ export default function Conversations() {
                   </SelectItem>
                   <SelectItem value="human">
                     Human ({humanHandlingCount})
+                  </SelectItem>
+                  <SelectItem value="not-lead">
+                    Not a Lead ({notLeadCount})
                   </SelectItem>
                 </SelectContent>
               </Select>

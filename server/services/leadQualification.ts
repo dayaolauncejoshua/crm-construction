@@ -84,7 +84,7 @@ export class LeadQualificationService {
       message,
       timestamp,
       this.handleIncomingMessage.bind(this),
-      phoneNumberId,
+      phoneNumberId
     );
   }
 
@@ -110,31 +110,32 @@ export class LeadQualificationService {
         let targetClient = null;
 
         // Match by Phone Number ID
-        if (phoneNumberId){
-          console.log(`🔍 Looking for client with Phone number ID: ${phoneNumberId}`);
-
-          // Loop through regular users to and their clients
-        for (const user of allUsers) {
-          if (user.role === "super_admin") continue;
-
-          const userClients = await storage.getClients(user.id);
-
-          // Find active client with matching WhatsApp Phone Number ID
-          const matchedClient = userClients.find(
-            (c) =>
-              c.isActive && c.whatsappPhoneNumberId === phoneNumberId
+        if (phoneNumberId) {
+          console.log(
+            `🔍 Looking for client with Phone number ID: ${phoneNumberId}`
           );
 
-           if (matchedClient) {
-            targetClient = matchedClient;
-            console.log(
-              `✅ Found client with WhatsApp number: ${matchedClient.name} (${matchedClient.whatsappNumber})`
+          // Loop through regular users to and their clients
+          for (const user of allUsers) {
+            if (user.role === "super_admin") continue;
+
+            const userClients = await storage.getClients(user.id);
+
+            // Find active client with matching WhatsApp Phone Number ID
+            const matchedClient = userClients.find(
+              (c) => c.isActive && c.whatsappPhoneNumberId === phoneNumberId
             );
-            break;
+
+            if (matchedClient) {
+              targetClient = matchedClient;
+              console.log(
+                `✅ Found client with WhatsApp number: ${matchedClient.name} (${matchedClient.whatsappNumber})`
+              );
+              break;
+            }
           }
         }
-        }
-         
+
         // Fallback: use first active client
         if (!targetClient) {
           console.log(
@@ -151,7 +152,9 @@ export class LeadQualificationService {
 
             if (firstWithWhatsApp) {
               targetClient = firstWithWhatsApp;
-              console.log(`✅ Using fallback client: ${firstWithWhatsApp.name}`);
+              console.log(
+                `✅ Using fallback client: ${firstWithWhatsApp.name}`
+              );
               break;
             }
           }
@@ -268,6 +271,116 @@ export class LeadQualificationService {
 
         console.log("AI Qualification:", qualification);
 
+        // ✅ CHECK: Is this a non-construction inquiry?
+        if (
+          qualification.nextAction === "mark_as_not_a_lead" ||
+          qualification.score < 0.1
+        ) {
+          console.log("🚫 Marking as not-a-lead");
+
+          // ✅ NEW: Count redirect messages
+          const redirectCount = messages.filter(
+            (msg) =>
+              msg.sender === "ai" &&
+              (msg.content.includes("construction company") ||
+                msg.content.includes("building projects") ||
+                msg.content.includes("wrong business"))
+          ).length;
+
+          console.log(`🔢 Total redirects sent: ${redirectCount}`);
+
+          // Update lead status
+          await storage.updateLead(lead.id, {
+            status: "not-a-lead",
+            qualificationScore: qualification.score.toString(),
+            temperature: "cold",
+            tags: ["not-construction", "irrelevant"],
+          });
+
+          // ✅ NEW: After final redirect (3rd message), disable AI
+          if (redirectCount >= 2) {
+            console.log(
+              "⛔ Disabling AI for this conversation - max redirects reached"
+            );
+
+            await storage.updateConversation(conversation.id, {
+              qualificationScore: qualification.score.toString(),
+              lastMessageAt: new Date(),
+              isAiHandled: false, // ← STOP AI FROM RESPONDING
+              status: "closed", // ← CLOSE CONVERSATION
+            });
+
+            // Add additional tags
+            await storage.updateLead(lead.id, {
+              status: "spam",
+              tags: [
+                "not-construction",
+                "irrelevant",
+                "terminated",
+                "wrong-number",
+              ],
+            });
+          } else {
+            // Still within redirect limit
+            await storage.updateConversation(conversation.id, {
+              qualificationScore: qualification.score.toString(),
+              lastMessageAt: new Date(),
+              isAiHandled: true, // Keep AI handling for now
+            });
+          }
+
+          // Broadcast lead update
+          const updatedLead = await storage.getLead(lead.id);
+          this.broadcastUpdate({
+            type: "lead_updated",
+            lead: updatedLead,
+            conversationId: conversation.id,
+          });
+
+          // ✅ Generate polite redirect response
+          console.log("💬 Generating redirect response...");
+
+          const client = await storage.getClient(lead.clientId);
+          const aiResponse = await generateAIResponse(messages, lead, client);
+
+          console.log("AI Redirect Response:", aiResponse);
+
+          // STOP TYPING
+          this.broadcastUpdate({
+            type: "typing_indicator",
+            conversationId: conversation.id,
+            isTyping: false,
+            sender: "ai",
+          });
+
+          // Send redirect message
+          await whatsappService.sendTextMessage(from, aiResponse);
+
+          await storage.createMessage({
+            conversationId: conversation.id,
+            content: aiResponse,
+            sender: "ai",
+            channel: "whatsapp",
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+          });
+
+          console.log(
+            "✅ Redirect message sent, conversation marked as not-a-lead"
+          );
+
+          // Broadcast final message update
+          this.broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: { content: "AI redirect sent", sender: "ai" },
+          });
+
+          // ✅ STOP HERE - Don't continue with normal flow
+          return;
+        }
+
+        // ✅ NORMAL FLOW: Construction-related inquiry
         // Determine temperature based on score
         let temperature: "hot" | "warm" | "cold";
         if (qualification.score >= 0.7) {
@@ -278,13 +391,13 @@ export class LeadQualificationService {
           temperature = "cold";
         }
 
-        // Update conversation with score
+        // ✅ UPDATE CONVERSATION with score
         await storage.updateConversation(conversation.id, {
           qualificationScore: qualification.score.toString(),
           lastMessageAt: new Date(),
         });
 
-        // Update lead with temperature and auto-qualify hot leads
+        // ✅ UPDATE LEAD with temperature and auto-qualify hot leads
         await storage.updateLead(lead.id, {
           qualificationScore: qualification.score.toString(),
           temperature: temperature,

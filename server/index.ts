@@ -1,5 +1,5 @@
-import { videoSOPs } from "./../shared/advanced-schema";
 // server/index.ts
+import { videoSOPs } from "./../shared/advanced-schema";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
@@ -22,6 +22,34 @@ config({ override: false });
 // Create PostgreSQL pool
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000, // 10 second timeout
+});
+
+// ✅ Add connection error handling
+pool.on("error", (err) => {
+  console.error("❌ Unexpected database error:", err);
+  if (err.message?.includes("ENOTFOUND")) {
+    console.error("💡 Database hostname cannot be resolved");
+    console.error("💡 If using Neon free tier, check if database is suspended");
+  }
+});
+
+// ✅ Test connection on startup
+pool.query("SELECT NOW()", (err, res) => {
+  if (err) {
+    console.error("❌ Database connection failed:", err.message);
+    if (err.message?.includes("ENOTFOUND")) {
+      console.error("💡 Cannot resolve database hostname");
+      console.error("💡 Check your DATABASE_URL in .env");
+      console.error(
+        "💡 If using Neon, visit https://console.neon.tech to wake up database"
+      );
+    }
+  } else {
+    console.log("✅ Database connected successfully");
+  }
 });
 
 const app = express();
@@ -34,7 +62,11 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
-app.use("/api/stripe/webhook", express.raw({ type: "application/json" }), stripeWebhookRouter);
+app.use(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookRouter
+);
 
 // Basic middleware
 app.use(express.json());
@@ -60,14 +92,12 @@ app.use(
     saveUninitialized: false,
     rolling: true, // Reset expiry on each request
     name: "sessionId",
-    
+
     proxy: isProduction,
     cookie: {
-      
       secure: isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-     
 
       sameSite: isProduction ? "lax" : "lax",
 
