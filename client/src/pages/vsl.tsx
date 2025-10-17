@@ -19,7 +19,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -33,7 +32,25 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -44,7 +61,6 @@ import {
 } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -61,8 +77,19 @@ import {
   Download,
   Share,
   Wand2,
+  Copy,
+  Check,
+  BarChart3,
+  X,
+  Code,
+  Facebook,
+  Twitter,
+  Linkedin,
+  Mail,
 } from "lucide-react";
 import { useClient } from "@/contexts/ClientContext";
+import { Label } from "@radix-ui/react-dropdown-menu";
+
 const createVSLSchema = z.object({
   title: z.string().min(1, "Title is required"),
   niche: z.string().min(1, "Niche is required"),
@@ -81,21 +108,13 @@ export default function VSL() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedVSL, setSelectedVSL] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [vslToDelete, setVslToDelete] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-
-  // Fetch clients
-  const { data: clients } = useQuery({
-    queryKey: ["/api/clients"],
-    queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
-      return response.json();
-    },
-  });
-
-  // Fetch VSLs
-
-  // ✅ Create VSL mutation uses active client
 
   // Create VSL form
   const form = useForm<CreateVSLData>({
@@ -110,112 +129,66 @@ export default function VSL() {
     },
   });
 
-  // Create VSL mutation
-  // const createVSLMutation = useMutation({
-  //   mutationFn: async (data: CreateVSLData) => {
-  //     const response = await apiRequest("POST", "/api/vsls", {
-  //       ...data,
-  //       clientId: selectedClientId,
-  //     });
-  //     return response.json();
-  //   },
-  //   onSuccess: () => {
-  //     queryClient.invalidateQueries({
-  //       queryKey: ["/api/vsls", selectedClientId],
-  //     });
-  //     setShowCreateDialog(false);
-  //     form.reset();
-  //     toast({
-  //       title: "Success!",
-  //       description:
-  //         "VSL script generated successfully. Video creation in progress...",
-  //     });
-  //   },
-  //   onError: (error) => {
-  //     toast({
-  //       title: "Error",
-  //       description: error.message,
-  //       variant: "destructive",
-  //     });
-  //   },
-  // });
-  // 🚀 Fetch VSLs (auto-refresh every 5 seconds)
+  // Fetch VSLs (auto-refresh every 5 seconds)
   const { data: vsls, isLoading } = useQuery({
     queryKey: ["/api/vsls", selectedClientId],
-    enabled: !!selectedClientId, // only run if client selected
+    enabled: !!selectedClientId,
     queryFn: async () => {
       const response = await fetch(`/api/vsls/${selectedClientId}`);
       if (!response.ok) throw new Error("Failed to load VSLs");
       return response.json();
     },
-    refetchInterval: 5000, // 🔁 refresh every 5 seconds
+    refetchInterval: 5000,
   });
 
-  // 🚀 Create VSL Mutation with Optimistic Update
+  // Create VSL Mutation
   const createVSLMutation = useMutation({
     mutationFn: async (data: CreateVSLData) => {
       const response = await apiRequest("POST", "/api/vsls", {
         ...data,
-        clientId: selectedClientId, // ✅ dynamic client
+        clientId: selectedClientId,
       });
       return response.json();
     },
-
-    // ✅ Optimistic update (instantly show new VSL)
-    onMutate: async (newVSL) => {
-      await queryClient.cancelQueries({
-        queryKey: ["/api/vsls", selectedClientId],
-      });
-
-      const previousData = queryClient.getQueryData([
-        "/api/vsls",
-        selectedClientId,
-      ]);
-
-      // Temporarily show the new one in the list
-      queryClient.setQueryData(["/api/vsls", selectedClientId], (old: any) => [
-        ...(old || []),
-        {
-          id: Math.random().toString(36).substring(2, 9), // fake temp id
-          title: newVSL.title,
-          niche: newVSL.niche,
-          script: "Generating script...",
-          videoUrl: null,
-          thumbnailUrl: null,
-          duration: 0,
-          viewCount: 0,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-
-      return { previousData };
-    },
-
-    // ✅ When successful
-    onSuccess: (newVSL) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["/api/vsls", selectedClientId],
       });
-
       setShowCreateDialog(false);
       form.reset();
-
       toast({
         title: "Success!",
         description:
           "VSL script generated successfully. Video creation in progress...",
       });
     },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
-    // ❌ On error, roll back to old data
-    onError: (error: any, _newVSL, context: any) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(
-          ["/api/vsls", selectedClientId],
-          context.previousData
-        );
-      }
-
+  // Delete VSL Mutation
+  const deleteVSLMutation = useMutation({
+    mutationFn: async (vslId: string) => {
+      const response = await apiRequest("DELETE", `/api/vsls/${vslId}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/vsls", selectedClientId],
+      });
+      toast({
+        title: "Success",
+        description: "VSL deleted successfully",
+      });
+      setShowDeleteDialog(false);
+      setVslToDelete(null);
+    },
+    onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message,
@@ -244,6 +217,60 @@ export default function VSL() {
     }
   };
 
+  // Handle Preview
+  const handlePreview = (vsl: any) => {
+    setSelectedVSL(vsl);
+    setShowPreview(true);
+  };
+
+  // Handle Analytics
+  const handleAnalytics = (vsl: any) => {
+    setSelectedVSL(vsl);
+    setShowAnalytics(true);
+  };
+
+  // Handle Share
+  const handleShare = (vsl: any) => {
+    setSelectedVSL(vsl);
+    setShowShare(true);
+  };
+
+  // Handle Delete
+  const handleDelete = (vslId: string) => {
+    setVslToDelete(vslId);
+    setShowDeleteDialog(true);
+  };
+
+  // Handle Download
+  const handleDownload = (vsl: any) => {
+    if (vsl.videoUrl) {
+      window.open(vsl.videoUrl, "_blank");
+      toast({
+        title: "Download Started",
+        description: "Your video is downloading...",
+      });
+    }
+  };
+
+  // Copy to Clipboard
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({
+      title: "Copied!",
+      description: "Link copied to clipboard",
+    });
+  };
+
+  // Get Embed Code
+  const getEmbedCode = (vsl: any) => {
+    if (!vsl || !vsl.videoUrl) {
+      return "<!-- Video URL not available yet -->";
+    }
+    return `<iframe src="${vsl.videoUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -256,36 +283,16 @@ export default function VSL() {
             <Skeleton className="h-10 w-40" />
           </div>
         </header>
-
         <main className="flex-1 overflow-auto p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+            {[1, 2, 3].map((i) => (
               <Card key={i}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Skeleton className="w-12 h-12 rounded-lg" />
-                      <div>
-                        <Skeleton className="h-5 w-32 mb-2" />
-                        <Skeleton className="h-4 w-20" />
-                      </div>
-                    </div>
-                    <Skeleton className="w-8 h-8" />
-                  </div>
+                  <Skeleton className="h-20 w-full" />
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <Skeleton className="aspect-video w-full rounded-lg" />
-                  <div className="grid grid-cols-3 gap-3">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <Skeleton className="h-20 w-full rounded-lg" />
-                  <div className="flex space-x-2">
-                    <Skeleton className="h-9 flex-1" />
-                    <Skeleton className="h-9 flex-1" />
-                    <Skeleton className="h-9 flex-1" />
-                  </div>
+                <CardContent>
+                  <Skeleton className="aspect-video w-full mb-4" />
+                  <Skeleton className="h-24 w-full" />
                 </CardContent>
               </Card>
             ))}
@@ -313,7 +320,7 @@ export default function VSL() {
                 Generate VSL
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Generate New VSL</DialogTitle>
               </DialogHeader>
@@ -407,7 +414,7 @@ export default function VSL() {
                         <FormLabel>Main Pain Points (Optional)</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="e.g., Struggling to get quality leads, losing projects to competitors, slow response times"
+                            placeholder="e.g., Struggling to get quality leads, losing projects to competitors"
                             rows={3}
                             {...field}
                           />
@@ -443,7 +450,7 @@ export default function VSL() {
                         <FormLabel>Proof Elements (Optional)</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="e.g., 300% increase in leads, 50+ happy clients, case studies"
+                            placeholder="e.g., 300% increase in leads, 50+ happy clients"
                             rows={3}
                             {...field}
                           />
@@ -496,6 +503,7 @@ export default function VSL() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+
         {vsls?.length === 0 ? (
           <div className="text-center py-12">
             <Video className="w-12 h-12 text-slate-400 mx-auto mb-4" />
@@ -528,22 +536,50 @@ export default function VSL() {
                         {getStatusBadge(vsl)}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
+
+                    {/* More Options Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleDownload(vsl)}
+                          disabled={!vsl.videoUrl}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Download
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(vsl.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
                   {/* Video Preview */}
                   {vsl.videoUrl ? (
-                    <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
-                      <video
-                        src={vsl.videoUrl}
-                        poster={vsl.thumbnailUrl}
+                    <div
+                      className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden group cursor-pointer"
+                      onClick={() => handlePreview(vsl)}
+                    >
+                      <img
+                        src={vsl.thumbnailUrl}
+                        alt={vsl.title}
                         className="w-full h-full object-cover"
-                        controls
                       />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Play className="w-16 h-16 text-white" />
+                      </div>
                     </div>
                   ) : (
                     <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center">
@@ -566,7 +602,7 @@ export default function VSL() {
                     </div>
                     <div>
                       <div className="text-lg font-semibold text-slate-900">
-                        {vsl.duration ? formatDuration(vsl.duration) : "3:00"}
+                        {vsl.duration ? formatDuration(vsl.duration) : "0:00"}
                       </div>
                       <div className="text-xs text-slate-500">Duration</div>
                     </div>
@@ -595,17 +631,32 @@ export default function VSL() {
                   {/* Actions */}
                   <div className="flex space-x-2">
                     {vsl.videoUrl && (
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handlePreview(vsl)}
+                      >
                         <Play className="w-4 h-4 mr-1" />
                         Preview
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleAnalytics(vsl)}
+                    >
                       <TrendingUp className="w-4 h-4 mr-1" />
                       Analytics
                     </Button>
                     {vsl.videoUrl && (
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleShare(vsl)}
+                      >
                         <Share className="w-4 h-4 mr-1" />
                         Share
                       </Button>
@@ -622,6 +673,219 @@ export default function VSL() {
           </div>
         )}
       </main>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="sm:max-w-[900px]">
+          <DialogHeader>
+            <DialogTitle>{selectedVSL?.title}</DialogTitle>
+            <DialogDescription>Full VSL Preview</DialogDescription>
+          </DialogHeader>
+          {selectedVSL?.videoUrl && (
+            <div className="aspect-video w-full">
+              <video
+                src={selectedVSL.videoUrl}
+                controls
+                className="w-full h-full rounded-lg"
+                autoPlay
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Analytics Dialog */}
+      <Dialog open={showAnalytics} onOpenChange={setShowAnalytics}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>VSL Analytics</DialogTitle>
+            <DialogDescription>{selectedVSL?.title}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center">
+                    <Eye className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold">
+                      {selectedVSL?.viewCount || 0}
+                    </div>
+                    <div className="text-sm text-slate-500">Total Views</div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center">
+                    <TrendingUp className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold">
+                      {parseFloat(selectedVSL?.conversionRate || "0").toFixed(
+                        1
+                      )}
+                      %
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      Conversion Rate
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <h3 className="font-semibold mb-4">Performance Metrics</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-600">
+                      Average Watch Time
+                    </span>
+                    <span className="font-medium">
+                      {formatDuration(
+                        Math.floor((selectedVSL?.duration || 0) * 0.7)
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-600">
+                      Completion Rate
+                    </span>
+                    <span className="font-medium">68%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-600">
+                      Click-through Rate
+                    </span>
+                    <span className="font-medium">12.5%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Dialog */}
+      <Dialog open={showShare} onOpenChange={setShowShare}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Share VSL</DialogTitle>
+            <DialogDescription>
+              Share this video with your audience
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Copy Link */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                Video Link
+              </Label>
+              <div className="flex space-x-2">
+                <Input
+                  value={selectedVSL?.videoUrl || ""}
+                  readOnly
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(selectedVSL?.videoUrl || "")}
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Embed Code */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                Embed Code
+              </Label>
+              <div className="flex space-x-2">
+                <Textarea
+                  value={getEmbedCode(selectedVSL)}
+                  readOnly
+                  className="flex-1 font-mono text-xs"
+                  rows={3}
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(getEmbedCode(selectedVSL))}
+                >
+                  <Code className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Social Share */}
+            <div>
+              <Label className="text-sm font-medium mb-3 block">
+                Share on Social Media
+              </Label>
+              <div className="grid grid-cols-4 gap-2">
+                <Button
+                  variant="outline"
+                  className="flex flex-col items-center py-3 h-auto"
+                >
+                  <Facebook className="w-5 h-5 mb-1 text-blue-600" />
+                  <span className="text-xs">Facebook</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex flex-col items-center py-3 h-auto"
+                >
+                  <Twitter className="w-5 h-5 mb-1 text-sky-500" />
+                  <span className="text-xs">Twitter</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex flex-col items-center py-3 h-auto"
+                >
+                  <Linkedin className="w-5 h-5 mb-1 text-blue-700" />
+                  <span className="text-xs">LinkedIn</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex flex-col items-center py-3 h-auto"
+                >
+                  <Mail className="w-5 h-5 mb-1 text-slate-600" />
+                  <span className="text-xs">Email</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the VSL
+              and remove it from the database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                vslToDelete && deleteVSLMutation.mutate(vslToDelete)
+              }
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

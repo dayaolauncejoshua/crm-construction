@@ -31,12 +31,6 @@ interface Scene {
   prompt: string;
 }
 
-interface WordTiming {
-  word: string;
-  start: number;
-  end: number;
-}
-
 export class VSLGenerator {
   private outputDir = path.join(process.cwd(), "uploads", "vsls");
   private tempDir = path.join(process.cwd(), "temp");
@@ -82,62 +76,6 @@ export class VSLGenerator {
       "VOICEOVER",
       `File size: ${(buffer.length / 1024).toFixed(2)} KB`
     );
-  }
-
-  /** STEP 1.5: Get word-level timestamps using Whisper */
-  private async getWordTimings(
-    audioPath: string,
-    logger: ConsoleLogger
-  ): Promise<WordTiming[]> {
-    logger.stage(
-      "🎯",
-      "TRANSCRIPTION",
-      "Getting word-level timestamps from Whisper..."
-    );
-
-    try {
-      const audioFile = await fs.readFile(audioPath);
-      const file = new File([audioFile], path.basename(audioPath), {
-        type: "audio/mpeg",
-      });
-
-      const transcription = await openai.audio.transcriptions.create({
-        file: file,
-        model: "whisper-1",
-        response_format: "verbose_json",
-        timestamp_granularities: ["word"],
-      });
-
-      const words: WordTiming[] = [];
-
-      // @ts-ignore - OpenAI types may not include word-level timestamps yet
-      if (transcription.words && Array.isArray(transcription.words)) {
-        // @ts-ignore
-        for (const word of transcription.words) {
-          words.push({
-            word: word.word,
-            start: word.start,
-            end: word.end,
-          });
-        }
-      }
-
-      logger.success(
-        "TRANSCRIPTION",
-        `Got ${words.length} word timings (${(
-          transcription.duration || 0
-        ).toFixed(2)}s)`
-      );
-
-      return words;
-    } catch (error) {
-      logger.warning(
-        "TRANSCRIPTION",
-        "Failed to get word timings, will use fallback method"
-      );
-      logger.error("TRANSCRIPTION", "Error details", error);
-      return [];
-    }
   }
 
   /** STEP 2: Get audio duration */
@@ -466,87 +404,102 @@ Return ONLY valid JSON in this format:
     });
   }
 
-  /** Generate ASS subtitle file with karaoke effect */
-  private async generateKaraokeSubtitles(
-    wordTimings: WordTiming[],
+  /** Generate SRT subtitle file from scenes */
+  private async generateSubtitles(
+    scenes: Scene[],
+    sceneDuration: number,
     outputPath: string,
     logger: ConsoleLogger
   ): Promise<void> {
-    logger.stage("🎤", "SUBTITLES", "Generating karaoke-style subtitles...");
+    logger.stage("📝", "SUBTITLES", "Generating subtitle file...");
 
-    // ASS file header with styling
-    let assContent = `[Script Info]
-Title: VSL Subtitles
-ScriptType: v4.00+
-WrapStyle: 0
-PlayResX: 1920
-PlayResY: 1080
-ScaledBorderAndShadow: yes
+    let srtContent = "";
+    let subtitleIndex = 1;
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,48,&H00FFFFFF,&H00FFFF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,50,50,80,1
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      const startTime = i * sceneDuration;
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-`;
+      const chunks = this.splitTextIntoChunks(scene.text, 100);
+      const chunkDuration = sceneDuration / chunks.length;
 
-    if (wordTimings.length === 0) {
-      logger.warning(
-        "SUBTITLES",
-        "No word timings available, using basic subtitles"
-      );
-      assContent += `Dialogue: 0,0:00:00.00,0:00:10.00,Default,,0,0,0,,No subtitles available\n`;
-    } else {
-      // Group words into lines (max 6-8 words per line)
-      const wordsPerLine = 7;
+      for (let j = 0; j < chunks.length; j++) {
+        const chunkStart = startTime + j * chunkDuration;
+        const chunkEnd = startTime + (j + 1) * chunkDuration;
 
-      for (let i = 0; i < wordTimings.length; i += wordsPerLine) {
-        const lineWords = wordTimings.slice(i, i + wordsPerLine);
-        const startTime = lineWords[0].start;
-        const endTime = lineWords[lineWords.length - 1].end;
+        srtContent += `${subtitleIndex}\n`;
+        srtContent += `${this.formatSRTTime(
+          chunkStart
+        )} --> ${this.formatSRTTime(chunkEnd)}\n`;
+        srtContent += `${chunks[j].trim()}\n\n`;
 
-        // Build karaoke tags for each word
-        let karaokeText = "";
-        for (const word of lineWords) {
-          const duration = Math.round((word.end - word.start) * 100); // centiseconds
-          karaokeText += `{\\k${duration}}${word.word} `;
-        }
-
-        const startFormatted = this.formatASSTime(startTime);
-        const endFormatted = this.formatASSTime(endTime);
-
-        assContent += `Dialogue: 0,${startFormatted},${endFormatted},Default,,0,0,0,,${karaokeText.trim()}\n`;
+        subtitleIndex++;
       }
-
-      logger.success(
-        "SUBTITLES",
-        `Generated ${Math.ceil(
-          wordTimings.length / wordsPerLine
-        )} subtitle lines with word-level timing`
-      );
     }
 
-    await fs.writeFile(outputPath, assContent, "utf-8");
+    await fs.writeFile(outputPath, srtContent, "utf-8");
     logger.success(
       "SUBTITLES",
-      `ASS subtitle file created: ${path.basename(outputPath)}`
+      `Subtitle file created: ${path.basename(outputPath)}`
     );
   }
 
-  /** Format time for ASS format (H:MM:SS.cc) */
-  private formatASSTime(seconds: number): string {
+  /** Split text into subtitle-friendly chunks */
+  private splitTextIntoChunks(text: string, maxLength: number): string[] {
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const chunks: string[] = [];
+    let currentChunk = "";
+
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+
+      if ((currentChunk + " " + trimmed).length <= maxLength) {
+        currentChunk = currentChunk ? currentChunk + " " + trimmed : trimmed;
+      } else {
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
+        if (trimmed.length > maxLength) {
+          const words = trimmed.split(" ");
+          let tempChunk = "";
+
+          for (const word of words) {
+            if ((tempChunk + " " + word).length <= maxLength) {
+              tempChunk = tempChunk ? tempChunk + " " + word : word;
+            } else {
+              if (tempChunk) chunks.push(tempChunk);
+              tempChunk = word;
+            }
+          }
+          if (tempChunk) currentChunk = tempChunk;
+        } else {
+          currentChunk = trimmed;
+        }
+      }
+    }
+
+    if (currentChunk) {
+      chunks.push(currentChunk);
+    }
+
+    return chunks.length > 0 ? chunks : [text];
+  }
+
+  /** Format time for SRT format (HH:MM:SS,mmm) */
+  private formatSRTTime(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    const centiseconds = Math.floor((seconds % 1) * 100);
+    const milliseconds = Math.floor((seconds % 1) * 1000);
 
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+    return `${hours.toString().padStart(2, "0")}:${minutes
       .toString()
-      .padStart(2, "0")}.${centiseconds.toString().padStart(2, "0")}`;
+      .padStart(2, "0")}:${secs.toString().padStart(2, "0")},${milliseconds
+      .toString()
+      .padStart(3, "0")}`;
   }
 
-  /** Merge scenes with karaoke subtitles burned in */
+  /** Merge scenes with subtitles burned in */
   private async mergeScenesWithSubtitles(
     sceneVideos: string[],
     outputPath: string,
@@ -557,7 +510,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     logger.stage(
       "🎞️",
       "MERGING",
-      `Concatenating ${sceneVideos.length} scenes with karaoke subtitles...`
+      `Concatenating ${sceneVideos.length} scenes with subtitles...`
     );
 
     return new Promise((resolve, reject) => {
@@ -575,23 +528,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       ff.input(audioPath);
       logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
       logger.stage(
-        "🎤",
+        "📝",
         "MERGING",
-        `Karaoke Subtitles: ${path.basename(subtitlePath)}`
+        `Subtitles: ${path.basename(subtitlePath)}`
       );
 
       const filterComplex =
         sceneVideos.map((_, i) => `[${i}:v]`).join("") +
         `concat=n=${sceneVideos.length}:v=1:a=0[v];` +
-        `[v]ass='${subtitlePath
+        `[v]subtitles='${subtitlePath
           .replace(/\\/g, "\\\\")
-          .replace(/:/g, "\\:")}'[vout]`;
+          .replace(/:/g, "\\:")}':force_style='` +
+        `FontName=Arial,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,` +
+        `BackColour=&H80000000,Bold=1,Outline=2,Shadow=1,MarginV=50'[vout]`;
 
-      logger.stage(
-        "🔧",
-        "MERGING",
-        "Applying concat and karaoke subtitle filters..."
-      );
+      logger.stage("🔧", "MERGING", "Applying concat and subtitle filters...");
 
       ff.complexFilter(filterComplex)
         .outputOptions([
@@ -619,7 +570,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
           logger.success(
             "MERGING",
-            `All scenes merged with karaoke subtitles in ${processingTime}s`
+            `All scenes merged with subtitles in ${processingTime}s`
           );
           resolve();
         })
@@ -633,7 +584,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   /** 🎬 MAIN: Generate complete multi-scene VSL */
   async generateVSL(options: VSLGenerationOptions) {
-    console.log("📋 VSL Generator received options:", {
+    console.log("🔍 VSL Generator received options:", {
       vslId: options.vslId,
       title: options.title,
       niche: options.niche,
@@ -657,20 +608,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         message: "Generating voiceover...",
         status: "processing",
       });
-
       await this.generateVoiceover(options.script, audioPath, logger);
       const totalDuration = await this.getAudioDuration(audioPath, logger);
-
-      // 1.5 Get word-level timings from Whisper
-      progressTracker.updateProgress({
-        vslId: options.vslId,
-        stage: "transcription",
-        progress: 15,
-        message: "Analyzing word timings for karaoke effect...",
-        status: "processing",
-      });
-
-      const wordTimings = await this.getWordTimings(audioPath, logger);
 
       // 2. Split script into scenes
       progressTracker.updateProgress({
@@ -766,24 +705,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         `All ${scenes.length} scene videos created`
       );
 
-      // 5. Generate karaoke subtitles
+      // 5. Generate subtitles
       progressTracker.updateProgress({
         vslId: options.vslId,
         stage: "subtitles",
         progress: 82,
-        message: "Generating karaoke subtitles...",
+        message: "Generating subtitles...",
         status: "processing",
       });
 
-      const subtitlePath = path.join(this.tempDir, `${videoId}.ass`);
-      await this.generateKaraokeSubtitles(wordTimings, subtitlePath, logger);
+      const subtitlePath = path.join(this.tempDir, `${videoId}.srt`);
+      await this.generateSubtitles(scenes, sceneDuration, subtitlePath, logger);
 
-      // 6. Merge scenes with audio and karaoke subtitles
+      // 6. Merge scenes with audio and subtitles
       progressTracker.updateProgress({
         vslId: options.vslId,
         stage: "merging",
         progress: 85,
-        message: "Merging scenes with karaoke subtitles...",
+        message: "Merging scenes with subtitles...",
         status: "processing",
       });
 
