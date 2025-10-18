@@ -12,6 +12,7 @@ import {
   trialActivations,
   userActivities,
   systemMetrics,
+  spamPatterns,
   type User,
   type UpsertUser,
   type Client,
@@ -84,6 +85,11 @@ export interface IStorage {
   getActiveConversations(
     clientId: string
   ): Promise<(Conversation & { lead: Lead })[]>;
+
+  getAllConversations(
+    clientId: String
+  ): Promise<(Conversation & { lead: Lead })[]>;
+
   getHotLeads(clientId: string): Promise<(Conversation & { lead: Lead })[]>;
   markConversationAsRead(conversationId: string): Promise<void>; // ADD THIS
   incrementUnreadCount(conversationId: string): Promise<void>;
@@ -115,6 +121,9 @@ export interface IStorage {
     aiHandledPercentage: number;
   }>;
   getRecentActivity(clientId: string): Promise<any[]>;
+
+  getSpamPatterns():Promise<any[]>;
+  saveSpamPatterns(patterns: any[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -446,6 +455,7 @@ export class DatabaseStorage implements IStorage {
         lead: leads,
         unreadCount: conversations.unreadCount,
         lastReadAt: conversations.lastReadAt,
+        reopenedAt: conversations.reopenedAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
@@ -503,6 +513,7 @@ export class DatabaseStorage implements IStorage {
         lead: leads,
         unreadCount: conversations.unreadCount,
         lastReadAt: conversations.lastReadAt,
+        reopenedAt: conversations.reopenedAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))
@@ -514,6 +525,82 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(desc(conversations.lastMessageAt));
   }
+
+  // ✅ NEW METHOD: Get ALL conversations (including closed ones)
+  async getAllConversations(
+    clientId: string
+  ): Promise<(Conversation & { lead: Lead })[]> {
+    return await db
+      .select({
+        id: conversations.id,
+        leadId: conversations.leadId,
+        clientId: conversations.clientId,
+        channel: conversations.channel,
+        status: conversations.status,
+        isAiHandled: conversations.isAiHandled,
+        humanTakeoverAt: conversations.humanTakeoverAt,
+        lastMessageAt: conversations.lastMessageAt,
+        qualificationScore: conversations.qualificationScore,
+        createdAt: conversations.createdAt,
+        updatedAt: conversations.updatedAt,
+        lead: leads,
+        unreadCount: conversations.unreadCount,
+        lastReadAt: conversations.lastReadAt,
+        reopenedAt: conversations.reopenedAt,
+      })
+      .from(conversations)
+      .innerJoin(leads, eq(conversations.leadId, leads.id))
+      .where(eq(conversations.clientId, clientId))
+      .orderBy(desc(conversations.lastMessageAt));
+  }
+
+  // ==================== SPAM PATTERN LEARNING METHODS ====================
+
+async getSpamPatterns(): Promise<any[]> {
+  try {
+    return await db
+      .select()
+      .from(spamPatterns)
+      .where(gte(spamPatterns.confidence, "0.30")) // Lower threshold
+      .orderBy(desc(spamPatterns.confidence));
+  } catch (error) {
+    console.error("Error fetching spam patterns:", error);
+    return [];
+  }
+}
+
+async saveSpamPatterns(patterns: any[]): Promise<void> {
+  try {
+    for (const pattern of patterns) {
+      await db
+        .insert(spamPatterns)
+        .values({
+          id: pattern.id,
+          pattern: pattern.pattern,
+          category: pattern.category,
+          detectionCount: pattern.detectionCount,
+          falsePositiveCount: pattern.falsePositiveCount,
+          confidence: pattern.confidence,
+          lastDetected: pattern.lastDetected,
+          createdAt: pattern.createdAt,
+          updatedAt: pattern.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: spamPatterns.pattern, // ✅ Now this will work!
+          set: {
+            detectionCount: pattern.detectionCount,
+            falsePositiveCount: pattern.falsePositiveCount,
+            confidence: pattern.confidence,
+            lastDetected: pattern.lastDetected,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    console.log(`✅ Saved ${patterns.length} spam patterns to database`);
+  } catch (error) {
+    console.error("❌ Error saving spam patterns:", error);
+  }
+}
 
   async getHotLeads(
     clientId: string
@@ -534,6 +621,7 @@ export class DatabaseStorage implements IStorage {
         lead: leads,
         unreadCount: conversations.unreadCount,
         lastReadAt: conversations.lastReadAt,
+        reopenedAt: conversations.reopenedAt,
       })
       .from(conversations)
       .innerJoin(leads, eq(conversations.leadId, leads.id))

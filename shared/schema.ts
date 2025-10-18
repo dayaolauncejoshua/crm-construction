@@ -313,6 +313,7 @@ export const conversations = pgTable("conversations", {
   updatedAt: timestamp("updated_at").defaultNow(),
   unreadCount: integer("unread_count").default(0),
   lastReadAt: timestamp("last_read_at"),
+  reopenedAt: timestamp("reopened_at"),
 });
 
 // Messages table
@@ -332,6 +333,8 @@ export const messages = pgTable("messages", {
   deliveredAt: timestamp("delivered_at"),
   readAt: timestamp("read_at"),
   isStatusMessage: boolean("is_status_message").default(false),
+
+  reactions: jsonb("reactions").default(sql`'[]'::jsonb`), // array of emoji, userId, userName, timestamp
 });
 
 // Quick Reply Templates table
@@ -622,6 +625,25 @@ export const insertNotionSOPSchema = createInsertSchema(notionSOPs).omit({
   updatedAt: true,
 });
 
+export const spamPatterns = pgTable("spam_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pattern: varchar("pattern").notNull().unique(), // ✅ ADD .unique()
+  category: varchar("category").notNull(), // food, retail, service, test, other
+  detectionCount: integer("detection_count").default(0).notNull(), // ✅ ADD .notNull()
+  falsePositiveCount: integer("false_positive_count").default(0).notNull(), // ✅ ADD .notNull()
+  confidence: decimal("confidence", { precision: 3, scale: 2 }).default("0.50").notNull(), // ✅ ADD .notNull()
+  lastDetected: timestamp("last_detected").defaultNow().notNull(), // ✅ ADD .notNull()
+  createdAt: timestamp("created_at").defaultNow().notNull(), // ✅ ADD .notNull()
+  updatedAt: timestamp("updated_at").defaultNow().notNull(), // ✅ ADD .notNull()
+});
+
+// Insert schema
+export const insertSpamPatternSchema = createInsertSchema(spamPatterns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Type exports
 export type VideoSOP = typeof videoSOPs.$inferSelect;
 export type InsertVideoSOP = z.infer<typeof insertVideoSOPSchema>;
@@ -667,3 +689,6 @@ export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Analytics = typeof analytics.$inferSelect;
+
+export type SpamPattern = typeof spamPatterns.$inferSelect;
+export type InsertSpamPattern = z.infer<typeof insertSpamPatternSchema>;

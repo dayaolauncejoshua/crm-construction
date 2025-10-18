@@ -1,72 +1,12 @@
 // server/services/openai.ts
 
 import OpenAI from "openai";
+import { spamPatternLearning } from "./spamPatternLearning";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY2,
 });
 
-// export async function generateVSLScript(
-//   niche: string,
-//   data: {
-//     targetAudience: string;
-//     painPoints: string;
-//     solution: string;
-//     proofElements: string;
-//   }
-// ): Promise<string> {
-//   const prompt = `Create a compelling Video Sales Letter (VSL) script for a ${niche} business.
-
-// TARGET AUDIENCE: ${data.targetAudience}
-// PAIN POINTS: ${data.painPoints}
-// SOLUTION: ${data.solution}
-// PROOF: ${data.proofElements}
-
-// Create a 2-3 minute VSL script that follows this structure:
-
-// 1. HOOK (15 seconds): Start with a powerful question or statement that grabs attention
-// 2. PROBLEM AGITATION (30 seconds): Amplify the pain points and consequences
-// 3. SOLUTION INTRODUCTION (45 seconds): Present the solution and its unique benefits
-// 4. PROOF & CREDIBILITY (30 seconds): Share results, testimonials, or case studies
-// 5. CALL TO ACTION (20 seconds): Clear next step with urgency
-
-// Requirements:
-// - Conversational, engaging tone
-// - Use "you" and "your" to connect with audience
-// - Include specific numbers and results
-// - Create urgency without being pushy
-// - End with a clear, compelling call to action
-
-// Write the complete script now:`;
-
-//   try {
-//     const completion = await openai.chat.completions.create({
-//       model: "gpt-4",
-//       messages: [
-//         {
-//           role: "system",
-//           content:
-//             "You are an expert copywriter specializing in video sales letters that convert. Write persuasive, benefit-driven scripts.",
-//         },
-//         {
-//           role: "user",
-//           content: prompt,
-//         },
-//       ],
-//       temperature: 0.8,
-//       max_tokens: 2000,
-//     });
-
-//     const script = completion.choices[0]?.message?.content || "";
-
-//     console.log("✅ VSL script generated:", script.substring(0, 100) + "...");
-
-//     return script;
-//   } catch (error) {
-//     console.error("❌ Error generating VSL script:", error);
-//     throw new Error("Failed to generate VSL script");
-//   }
-// }
 export interface LeadQualificationResult {
   score: number;
   intent: string;
@@ -93,12 +33,113 @@ export interface IntentClassification {
   reasoning: string;
 }
 
+// ✅ NEW: Hardcoded keyword detection for obvious non-construction topics
+function hasNonConstructionKeywords(message: string): boolean {
+  const nonConstructionKeywords = [
+    // Food & Beverages
+    'burger', 'pizza', 'fries', 'food', 'restaurant', 'delivery', 'menu', 'order', 'eat', 'drink',
+    'coffee', 'lunch', 'dinner', 'breakfast', 'meal', 'cuisine', 'dish', 'recipe',
+    
+    // Retail & Products (non-construction)
+    'shoes', 'clothing', 'shirt', 'pants', 'dress', 'fashion', 'apparel', 'sneakers',
+    'watch', 'jewelry', 'accessories', 'handbag', 'wallet',
+    
+    // Services (non-construction)
+    'haircut', 'salon', 'spa', 'massage', 'laundry', 'cleaning service', 'dry clean',
+    'photography', 'videography', 'event planning',
+    
+    // Entertainment
+    'movie', 'concert', 'show', 'ticket', 'entertainment', 'game', 'sports equipment',
+    
+    // Technology (non-construction)
+    'laptop', 'phone', 'smartphone', 'tablet', 'computer repair', 'software', 'app development',
+    
+    // Healthcare
+    'doctor', 'clinic', 'hospital', 'medicine', 'pharmacy', 'dental',
+    
+    // Transport (non-construction)
+    'taxi', 'uber', 'grab', 'delivery service', 'shipping',
+    
+    // Test/Spam
+    'test', 'testing', 'hello hello', 'hi hi'
+  ];
+
+  const lowerMessage = message.toLowerCase();
+  return nonConstructionKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// ✅ NEW: Check if message is just a greeting
+function isOnlyGreeting(message: string): boolean {
+  const greetingPatterns = /^(hi|hello|hey|good morning|good afternoon|good evening|greetings)[\s!?.]*$/i;
+  return greetingPatterns.test(message.trim());
+}
+
 export async function classifyIntent(
   message: string,
   conversationHistory: any[],
   clientData: any
 ): Promise<IntentClassification> {
   try {
+
+    // ✅ PHASE 2: First message spam detection (Proactive)
+    if (conversationHistory.length <= 2) {
+      const firstMessageSpamIndicators = [
+        /test\s*test/i,
+        /hello\s*hello/i,
+        /hi\s*hi/i,
+        /^(ok|okay|k)$/i, // Single word responses
+        /^[0-9]+$/,  // Just numbers
+        /^.{1,3}$/,  // Very short messages (1-3 chars)
+        /^(yes|no|yeah|nope)$/i, // One-word yes/no
+      ];
+
+      for (const indicator of firstMessageSpamIndicators) {
+        if (indicator.test(message.trim())) {
+          console.log("🚫 Proactive: First message spam detected:", message);
+          return {
+            isRelevant: false,
+            intent: "test",
+            confidence: 0.9,
+            reasoning: "First message matches spam pattern (test/short/low-effort)"
+          };
+        }
+      }
+    }
+
+    // ✅ PHASE 1: Check learned patterns FIRST (before hardcoded keywords)
+    const learnedPatternCheck = await spamPatternLearning.checkAgainstLearnedPatterns(message);
+    if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > 0.85) {
+      console.log("🎯 Learned spam pattern detected:", learnedPatternCheck.matchedPattern);
+      return {
+        isRelevant: false,
+        intent: "unrelated",
+        confidence: learnedPatternCheck.confidence,
+        reasoning: `Matches learned spam pattern: "${learnedPatternCheck.matchedPattern}" (${learnedPatternCheck.category})`
+      };
+    }
+    // ✅ IMPROVED: Hardcoded keyword check (fast path)
+    if (hasNonConstructionKeywords(message)) {
+      console.log("🚫 Hardcoded keyword detected:", message);
+      return {
+        isRelevant: false,
+        intent: "unrelated",
+        confidence: 0.95,
+        reasoning: "Message contains non-construction keywords (shoes, food, etc.)"
+      };
+    }
+
+    // ✅ IMPROVED: Handle greetings
+    if (isOnlyGreeting(message) && conversationHistory.length <= 1) {
+      console.log("👋 Initial greeting detected, waiting for context");
+      return {
+        isRelevant: true, // Neutral - wait for next message
+        intent: "construction",
+        confidence: 0.5,
+        reasoning: "Initial greeting - waiting for context"
+      };
+    }
+
+    // ✅ IMPROVED: Analyze conversation trend (not just latest message)
     const conversationText = conversationHistory
       .map((msg) => {
         const sender = msg.sender === "lead" ? "Customer" : "Agent";
@@ -106,17 +147,19 @@ export async function classifyIntent(
       })
       .join("\n");
 
-    const prompt = `You are an intent classifier for ${
+    const prompt = `You are a STRICT intent classifier for ${
       clientData?.name || "a construction company"
     }.
 
-COMPANY SERVICES:
+COMPANY SERVICES (ONLY THESE):
 - Commercial building construction
 - Residential construction
 - Fit-outs and renovations
 - Project management
 - Construction consulting
 - Site development
+- Engineering services
+- Architecture
 
 CONVERSATION HISTORY:
 ${conversationText}
@@ -125,37 +168,57 @@ LATEST MESSAGE: "${message}"
 
 **TASK:** Determine if this inquiry is relevant to construction services.
 
-**RELEVANT (construction-related):**
-✅ Questions about building, construction, renovation, projects
-✅ Asking about services, pricing, timelines
-✅ Site visits, meetings, consultations
+**RELEVANT (construction-related ONLY):**
+✅ Building, construction, renovation, remodeling
 ✅ Project inquiries (residential, commercial, industrial)
-✅ Budget discussions for construction
-✅ Location/area service questions
+✅ Site development, land development
+✅ Engineering, architecture, design services
+✅ Construction quotes, estimates, pricing
+✅ Timeline, project scheduling
+✅ Materials for construction (cement, steel, etc.)
+✅ Construction equipment rental
+✅ Permits, licensing, compliance
 
 **NOT RELEVANT (mark as unrelated):**
-❌ Food orders (burgers, pizza, etc.)
+❌ Food & beverages (burger, pizza, fries, restaurant, food delivery, meal orders)
+❌ Retail products (shoes, clothing, fashion, accessories, watches, jewelry)
+❌ Personal services (salon, spa, massage, cleaning, laundry)
+❌ Entertainment (movies, concerts, tickets, events)
+❌ Healthcare (doctor, clinic, medicine, pharmacy)
+❌ Technology products (phones, laptops, software, apps)
+❌ Transportation (taxi, delivery service, shipping)
+❌ Test messages ("test test", "hello hello" without context)
+❌ Spam or advertising other businesses
 ❌ Random questions unrelated to construction
-❌ Test messages ("test", "hello" repeatedly without context)
-❌ Spam, advertising other services
-❌ Personal conversations not about projects
-❌ Clearly wrong number
+
+**CRITICAL RULES:**
+1. If the message mentions shoes, food, clothing, or other retail → ALWAYS mark as NOT RELEVANT
+2. If the message is about services NOT related to construction → ALWAYS mark as NOT RELEVANT
+3. BE STRICT - When in doubt about relevance, mark as NOT RELEVANT
+4. A greeting alone (first message) can be neutral, but any follow-up should be construction-related
 
 **EXAMPLES:**
 
-"I want to build a house" → RELEVANT (construction inquiry)
-"How much for a commercial building?" → RELEVANT (service inquiry)
-"I need a burger" → NOT RELEVANT (food order)
-"testing testing" → NOT RELEVANT (test message)
-"Can you construct a warehouse?" → RELEVANT (construction)
-"Do you deliver pizza?" → NOT RELEVANT (wrong business)
+✅ "I want to build a house" → RELEVANT (construction)
+✅ "How much for commercial building?" → RELEVANT (construction quote)
+✅ "Do you do renovations?" → RELEVANT (construction service)
+✅ "Can you construct a warehouse?" → RELEVANT (construction project)
+
+❌ "Do you sell shoes?" → NOT RELEVANT (retail product)
+❌ "I need a burger" → NOT RELEVANT (food order)
+❌ "Can you deliver pizza?" → NOT RELEVANT (food delivery)
+❌ "Do you build customized shoes?" → NOT RELEVANT (shoes are NOT construction)
+❌ "I want to eat" → NOT RELEVANT (food)
+❌ "How about fries?" → NOT RELEVANT (food)
+❌ "testing testing" → NOT RELEVANT (test message)
+❌ "Do you fix phones?" → NOT RELEVANT (tech repair)
 
 Respond with JSON only:
 {
   "isRelevant": true/false,
   "intent": "construction" | "unrelated" | "spam" | "test",
   "confidence": 0.95,
-  "reasoning": "Customer is asking about burger delivery, which is unrelated to construction services"
+  "reasoning": "Brief explanation"
 }`;
 
     const response = await openai.chat.completions.create({
@@ -164,7 +227,7 @@ Respond with JSON only:
         {
           role: "system",
           content:
-            "You are an intent classification expert. Respond only with valid JSON. Be strict - only mark as relevant if it's clearly construction-related.",
+            "You are a STRICT intent classification expert. Respond only with valid JSON. Be VERY strict - only mark as relevant if it's CLEARLY construction-related. Food, shoes, retail, entertainment = NOT RELEVANT.",
         },
         {
           role: "user",
@@ -172,7 +235,7 @@ Respond with JSON only:
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3, // Low temperature for consistent classification
+      temperature: 0.2, // ✅ REDUCED from 0.3 for more consistent classification
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -185,12 +248,12 @@ Respond with JSON only:
     };
   } catch (error) {
     console.error("Error classifying intent:", error);
-    // Default to relevant to avoid false negatives
+    // ✅ CHANGED: Default to UNRELATED instead of relevant (safer)
     return {
-      isRelevant: true,
-      intent: "construction",
+      isRelevant: false,
+      intent: "unrelated",
       confidence: 0.5,
-      reasoning: "Classification failed, defaulting to relevant",
+      reasoning: "Classification failed, defaulting to unrelated for safety",
     };
   }
 }
@@ -203,7 +266,7 @@ export async function qualifyLead(
     const latestMessage = conversationHistory[conversationHistory.length - 1];
 
     if (latestMessage && latestMessage.sender === "lead") {
-      const clientData = { name: "Construction Company" }; // Get from context
+      const clientData = { name: "Construction Company" };
       const intentClassification = await classifyIntent(
         latestMessage.content,
         conversationHistory,
@@ -212,14 +275,14 @@ export async function qualifyLead(
 
       console.log("🎯 Intent Classification:", intentClassification);
 
-      // If not relevant, return low score immediately
+      // ✅ IMPROVED: Lower confidence threshold from 0.7 to 0.6
       if (
         !intentClassification.isRelevant &&
-        intentClassification.confidence > 0.7
+        intentClassification.confidence > 0.6 // ← CHANGED from 0.7
       ) {
         console.log("❌ Non-construction inquiry detected");
         return {
-          score: 0.05, // Very low score
+          score: 0.05,
           intent: intentClassification.intent,
           urgency: "none",
           budget: "unqualified",
@@ -365,7 +428,6 @@ export async function generateAIResponse(
   clientData: any
 ): Promise<string> {
   try {
-    // ✅ NEW: Check if inquiry is relevant
     const latestMessage = conversationHistory[conversationHistory.length - 1];
 
     if (latestMessage && latestMessage.sender === "lead") {
@@ -377,19 +439,20 @@ export async function generateAIResponse(
 
       console.log("🎯 Response Intent Check:", intentClassification);
 
-      // ✅ If not construction-related, use polite redirect
+      // ✅ IMPROVED: Lower confidence threshold from 0.7 to 0.6
       if (
         !intentClassification.isRelevant &&
-        intentClassification.confidence > 0.7
+        intentClassification.confidence > 0.6 // ← CHANGED from 0.7
       ) {
         console.log("❌ Generating redirect response for off-topic inquiry");
 
-        // Count how many redirect messages we've already sent
         const redirectCount = conversationHistory.filter((msg) =>
           msg.sender === "ai" &&
           (msg.content.includes("construction company") ||
            msg.content.includes("building projects") ||
-           msg.content.includes("wrong business"))
+           msg.content.includes("wrong business") ||
+           msg.content.includes("might have been some confusion") ||
+           msg.content.includes("specialize in construction"))
         ).length;
 
         console.log(`🔢 Redirect count: ${redirectCount}`);
@@ -399,7 +462,6 @@ export async function generateAIResponse(
           return `Final notice: This is ${clientData?.name || "a construction company"}. We only handle construction and building projects. This conversation will not receive further responses. Please verify your contact information.`;
         }
 
-         // First or second redirect: Use escalating responses
         const redirectResponses = [
           // First redirect (friendly)
           `Hi! I think there might be some confusion. We're ${
@@ -410,12 +472,10 @@ export async function generateAIResponse(
           `Just to clarify: we're a construction company. We build commercial buildings, homes, and handle renovation projects. If you're looking for construction services, I'm here to assist. Otherwise, you may have reached us by mistake.`,
         ];
 
-        // Return appropriate response based on count
         return redirectResponses[Math.min(redirectCount, redirectResponses.length - 1)];
       }
     }
 
-    // ✅ FIX: Better conversation mapping
     const conversationText = conversationHistory
       .map((msg) => {
         const sender =
@@ -428,7 +488,6 @@ export async function generateAIResponse(
       })
       .join("\n");
 
-    // ✅ Get the last AI message to avoid repetition
     const lastAIMessage = conversationHistory
       .filter((msg) => msg.sender === "ai")
       .slice(-1)[0];
@@ -514,8 +573,8 @@ Respond naturally and move the conversation forward:`;
           content: prompt,
         },
       ],
-      temperature: 0.5, // ✅ REDUCED from 0.7
-      max_tokens: 150, // ✅ REDUCED from 300
+      temperature: 0.5,
+      max_tokens: 150,
     });
 
     return (
@@ -562,7 +621,7 @@ export async function generateAudit(
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -661,46 +720,3 @@ Write the complete script now:`;
     throw new Error("Failed to generate VSL script");
   }
 }
-
-// export async function generateVSLScript(
-//   niche: string,
-//   clientData: any
-// ): Promise<string> {
-//   try {
-//     const prompt = `
-//     Create a 180-second Video Sales Letter script for ${clientData.name}, a ${niche} business.
-
-//     Structure:
-//     - Hook (0-15s): Attention-grabbing opener about their pain point
-//     - Problem (15-45s): Agitate the problem with statistics
-//     - Solution (45-90s): Introduce AI lead system with <2 minute response time
-//     - Proof (90-150s): Case study with specific numbers
-//     - CTA (150-180s): Clear call to action for free audit
-
-//     Make it compelling and specific to ${niche} industry challenges.
-//     `;
-
-//     const response = await openai.chat.completions.create({
-//       model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-//       messages: [
-//         {
-//           role: "system",
-//           content:
-//             "You are a VSL script expert. Create compelling, benefit-focused scripts that convert.",
-//         },
-//         {
-//           role: "user",
-//           content: prompt,
-//         },
-//       ],
-//     });
-
-//     return response.choices[0].message.content || "Script generation failed";
-//   } catch (error) {
-//     console.error("Error generating VSL script:", error);
-//     throw new Error(
-//       "Failed to generate VSL script: " +
-//         (error instanceof Error ? error.message : "Unknown error")
-//     );
-//   }
-// }

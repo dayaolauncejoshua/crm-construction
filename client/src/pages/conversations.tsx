@@ -611,6 +611,25 @@ export default function Conversations() {
         }
         break;
 
+      case "conversation_reopened":
+        console.log("🔄 Conversation reopened:", wsData);
+
+        // Refresh conversations list
+        queryClient.invalidateQueries({
+          queryKey: [`/api/dashboard/${selectedClientId}`],
+        });
+
+        // Show alert to agent
+        toast({
+          title: "⚠️ Conversation Reopened",
+          description: `${
+            wsData.lead?.firstName || "Lead"
+          } messaged again after termination. Please review.`,
+          variant: "default",
+          duration: 10000, // Show for 10 seconds
+        });
+        break;
+
       default:
         console.log("⚠️ Unknown event type, calling refetch");
         refetch();
@@ -688,28 +707,73 @@ export default function Conversations() {
   const getStatusBadge = (conversation: any) => {
     const temperature = conversation.lead?.temperature;
     const status = conversation.lead?.status;
+    const tags = conversation.lead?.tags || [];
+    const isAiHandled = conversation.isAiHandled;
+
+     // A reopened conversation is one where AI was disabled after spam termination
+    const isReopened = tags.includes("reopened");
+    const wasTerminated = tags.includes("terminated")
+
+    // Show reopened badge for flagged conversations
+    if (isReopened && !isAiHandled) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
+        🔄 Reopened - Review Needed
+      </Badge>
+    );
+  }
+
+  if (status === "spam" || wasTerminated){
+    return (
+      <Badge className = "bg-gray-100 text-gray-800 border border-gray-300">
+        🚫 Terminated
+      </Badge>
+    );
+  }
+
+
 
     if (status === "not-a-lead") {
-    return <Badge className="bg-gray-100 text-gray-800">🚫 Not a Lead</Badge>;
+    return (
+      <Badge className="bg-gray-100 text-gray-800">
+        🚫 Not a Lead
+      </Badge>
+    );
   }
 
     // Show temperature badge
-    if (temperature === "hot") {
-      return <Badge className="bg-red-100 text-red-800">🔥 Hot Lead</Badge>;
-    } else if (temperature === "warm") {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800">😐 Warm Lead</Badge>
-      );
-    } else if (conversation.isAiHandled) {
-      return (
-        <Badge className="bg-blue-100 text-blue-800">❄️ AI Handling</Badge>
-      );
-    } else {
-      return (
-        <Badge className="bg-green-100 text-green-800">👤 Human Active</Badge>
-      );
-    }
-  };
+    if (temperature === "hot" || parseFloat(conversation.qualificationScore || "0") >= 0.7) {
+    return (
+      <Badge className="bg-red-100 text-red-800 border border-red-300">
+        🔥 Hot Lead
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 5: Warm leads
+  if (temperature === "warm" || parseFloat(conversation.qualificationScore || "0") >= 0.4) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800">
+        😐 Warm Lead
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 6: AI vs Human handling (for cold leads)
+  if (isAiHandled) {
+    return (
+      <Badge className="bg-blue-100 text-blue-800">
+        ❄️ AI Handling
+      </Badge>
+    );
+  } else {
+    return (
+      <Badge className="bg-green-100 text-green-800">
+        👤 Human Active
+      </Badge>
+    );
+  }
+};
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], {

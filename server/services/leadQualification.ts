@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
+import { spamPatternLearning } from "./spamPatternLearning";
 
 export class LeadQualificationService {
   private wss: WebSocketServer | null = null;
@@ -194,10 +195,16 @@ export class LeadQualificationService {
       }
 
       // Step 2: Find or create conversation
-      const conversations = await storage.getActiveConversations(lead.clientId);
-      let conversation = conversations.find((c) => c.leadId === lead.id);
+      // ✅ CHANGED: Look for ANY conversation (active or closed) for this lead
+      const allConversations = await storage.getAllConversations(lead.clientId);
+      let conversation = allConversations.find(
+        (c: any) => c.leadId === lead.id
+      );
+
+      let wasReopened = false;
 
       if (!conversation) {
+        // No conversation exists - create new one
         const newConv = await storage.createConversation({
           leadId: lead.id,
           clientId: lead.clientId,
@@ -209,8 +216,45 @@ export class LeadQualificationService {
         });
         conversation = { ...newConv, lead } as any;
         console.log("✅ New conversation created:", conversation?.id);
+      } else if (conversation.status === "closed") {
+        // ✅ SMART REOPENING: Conversation was closed (terminated spam)
+        console.log(
+          "🔄 Reopening previously closed conversation:",
+          conversation.id
+        );
+
+        // Reopen conversation but KEEP AI DISABLED (human review required)
+        await storage.updateConversation(conversation.id, {
+          status: "active",
+          isAiHandled: false, // ← AI stays OFF, human must review
+          lastMessageAt: new Date(),
+          reopenedAt: new Date(), // Track when it was reopened
+        } as any); // ✅ Type assertion to bypass TypeScript
+
+        // Update lead status from "spam" back to "not-a-lead" for human review
+        if (lead.status === "spam") {
+          const existingTags = Array.isArray(lead.tags) ? lead.tags : [];
+          await storage.updateLead(lead.id, {
+            status: "not-a-lead",
+            tags: [
+              ...existingTags.filter((t: string) => t !== "terminated"),
+              "reopened",
+            ], // Remove "terminated", add "reopened"
+          });
+        }
+
+        wasReopened = true;
+        console.log("✅ Conversation reopened - flagged for human review");
+
+        // Broadcast reopened conversation alert
+        this.broadcastUpdate({
+          type: "conversation_reopened",
+          conversationId: conversation.id,
+          lead: await storage.getLead(lead.id),
+          message: "Previously terminated conversation has new activity",
+        });
       } else {
-        console.log("✅ Existing conversation found:", conversation.id);
+        console.log("✅ Existing active conversation found:", conversation.id);
       }
 
       if (!conversation) {
@@ -302,6 +346,21 @@ export class LeadQualificationService {
             console.log(
               "⛔ Disabling AI for this conversation - max redirects reached"
             );
+
+            const category =
+              message.toLowerCase().includes("food") ||
+              message.toLowerCase().includes("burger") ||
+              message.toLowerCase().includes("fries")
+                ? "food"
+                : message.toLowerCase().includes("shoe") ||
+                  message.toLowerCase().includes("clothing")
+                ? "retail"
+                : message.toLowerCase().includes("test")
+                ? "test"
+                : "other";
+
+            await spamPatternLearning.learnFromSpam(message, category);
+            console.log(`🧠 Learning complete for category: ${category}`);
 
             await storage.updateConversation(conversation.id, {
               qualificationScore: qualification.score.toString(),
