@@ -1,5 +1,3 @@
-// server/services/whatsapp.ts
-
 export interface WhatsAppMessage {
   to: string;
   type: string;
@@ -28,13 +26,14 @@ export class WhatsAppService {
       process.env.WHATSAPP_PHONE_NUMBER_ID || "default_phone_id";
   }
 
-  async sendMessage(message: WhatsAppMessage): Promise<boolean> {
+  async sendMessage(message: WhatsAppMessage): Promise<{ success: boolean; messageId?: string }> {
     try {
       console.log("📤 Sending WhatsApp message:", {
         to: message.to,
         type: message.type,
         messageLength: message.text?.body?.length || 0,
       });
+      
       const response = await fetch(
         `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
         {
@@ -58,20 +57,25 @@ export class WhatsAppService {
           statusText: response.statusText,
           data: responseData,
         });
-        return false;
+        return { success: false };
       }
 
       console.log("✅ WhatsApp API success:", responseData);
-      return true;
+      
+      // ✅ Return message ID
+      return { 
+        success: true, 
+        messageId: responseData.messages?.[0]?.id 
+      };
     } catch (error) {
       console.error("❌ Error sending WhatsApp message:", error);
-      return false;
+      return { success: false };
     }
   }
 
-  async sendTextMessage(to: string, message: string): Promise<boolean> {
+  async sendTextMessage(to: string, message: string): Promise<{ success: boolean; messageId?: string }> {
     const whatsappMessage: WhatsAppMessage = {
-      to: to.replace(/\D/g, ""), // Remove non-digits
+      to: to.replace(/\D/g, ""),
       type: "text",
       text: {
         body: message,
@@ -85,7 +89,7 @@ export class WhatsAppService {
     to: string,
     templateName: string,
     variables: string[] = []
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; messageId?: string }> {
     const whatsappMessage: WhatsAppMessage = {
       to: to.replace(/\D/g, ""),
       type: "template",
@@ -112,13 +116,66 @@ export class WhatsAppService {
     return await this.sendMessage(whatsappMessage);
   }
 
+  async sendReaction(
+    toPhone: string,
+    whatsappMessageId: string,
+    emoji: string
+  ): Promise<boolean> {
+    try {
+      console.log("😊 Sending WhatsApp reaction:", {
+        toPhone,
+        whatsappMessageId,
+        emoji,
+      });
+
+      const cleanPhone = toPhone.replace(/\D/g, "");
+
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: cleanPhone,
+            type: "reaction",
+            reaction: {
+              message_id: whatsappMessageId,
+              emoji: emoji,
+            },
+          }),
+        }
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        console.error("❌ WhatsApp reaction API error:", {
+          status: response.status,
+          data: responseData,
+        });
+        return false;
+      }
+
+      console.log("✅ WhatsApp reaction API success:", responseData);
+      return true;
+    } catch (error) {
+      console.error("❌ Error sending WhatsApp reaction:", error);
+      return false;
+    }
+  }
+
   async sendAuditResult(
     to: string,
     firstName: string,
     auditType: string,
     topFinding: string,
     shortlink: string
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; messageId?: string }> {
     const message = `Hi ${firstName}, your ${auditType} is ready. Top finding: ${topFinding}. See details: ${shortlink}. Reply 1 to book, 2 to ask a question, or STOP to opt out.`;
 
     return await this.sendTextMessage(to, message);
@@ -129,7 +186,11 @@ export class WhatsAppService {
     message: string;
     timestamp: number;
     phoneNumberId: string;
-   
+    messageId?: string;
+    reaction?: {
+      messageId: string;
+      emoji: string;
+    };
   } | null {
     try {
       const entry = payload.entry?.[0];
@@ -139,11 +200,30 @@ export class WhatsAppService {
 
       if (!messages) return null;
 
+      console.log("🔍 Parsing webhook, message ID:", messages.id);
+
+      // Check if it's a reaction
+      if (messages.type === "reaction") {
+        return {
+          from: messages.from,
+          message: "",
+          timestamp: parseInt(messages.timestamp),
+          phoneNumberId: value.metadata.phone_number_id,
+          messageId: messages.id,
+          reaction: {
+            messageId: messages.reaction.message_id,
+            emoji: messages.reaction.emoji,
+          },
+        };
+      }
+
+      // Regular text message
       return {
         from: messages.from,
         message: messages.text?.body || "",
         timestamp: parseInt(messages.timestamp),
         phoneNumberId: value.metadata.phone_number_id,
+        messageId: messages.id,
       };
     } catch (error) {
       console.error("Error parsing WhatsApp webhook:", error);

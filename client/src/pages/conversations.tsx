@@ -108,6 +108,10 @@ export default function Conversations() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [conflictError, setConflictError] = useState<any>(null);
 
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
+    null
+  );
+
   const { data: availableTags } = useQuery<any[]>({
     queryKey: ["/api/lead-tags", selectedClientId],
     enabled: !!selectedClientId,
@@ -237,6 +241,34 @@ export default function Conversations() {
         title: "Error",
         description: error.message,
         variant: "destructive",
+      });
+    },
+  });
+
+  // React to message mutation
+  const reactToMessageMutation = useMutation({
+    mutationFn: async ({
+      messageId,
+      emoji,
+    }: {
+      messageId: string;
+      emoji: string;
+    }) => {
+      const response = await apiRequest(
+        "POST",
+        `/api/messages/${messageId}/react`,
+        { emoji }
+      );
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      // Refresh messages to show new reaction
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+      });
+      toast({
+        title: "Reaction added",
+        description: `You reacted with ${variables.emoji}`,
       });
     },
   });
@@ -612,6 +644,18 @@ export default function Conversations() {
         break;
 
       case "conversation_reopened":
+
+      case "message_reacted":
+        console.log("😊 Message reacted:", wsData);
+
+        // Refresh messages if it's the current conversation
+        if (wsData.conversationId === selectedConversation?.id) {
+          queryClient.invalidateQueries({
+            queryKey: ["/api/conversations", wsData.conversationId, "messages"],
+          });
+        }
+        break;
+
         console.log("🔄 Conversation reopened:", wsData);
 
         // Refresh conversations list
@@ -710,70 +754,64 @@ export default function Conversations() {
     const tags = conversation.lead?.tags || [];
     const isAiHandled = conversation.isAiHandled;
 
-     // A reopened conversation is one where AI was disabled after spam termination
+    // A reopened conversation is one where AI was disabled after spam termination
     const isReopened = tags.includes("reopened");
-    const wasTerminated = tags.includes("terminated")
+    const wasTerminated = tags.includes("terminated");
 
     // Show reopened badge for flagged conversations
     if (isReopened && !isAiHandled) {
-    return (
-      <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
-        🔄 Reopened - Review Needed
-      </Badge>
-    );
-  }
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
+          🔄 Reopened - Review Needed
+        </Badge>
+      );
+    }
 
-  if (status === "spam" || wasTerminated){
-    return (
-      <Badge className = "bg-gray-100 text-gray-800 border border-gray-300">
-        🚫 Terminated
-      </Badge>
-    );
-  }
-
-
+    if (status === "spam" || wasTerminated) {
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
+          🚫 Terminated
+        </Badge>
+      );
+    }
 
     if (status === "not-a-lead") {
-    return (
-      <Badge className="bg-gray-100 text-gray-800">
-        🚫 Not a Lead
-      </Badge>
-    );
-  }
+      return <Badge className="bg-gray-100 text-gray-800">🚫 Not a Lead</Badge>;
+    }
 
     // Show temperature badge
-    if (temperature === "hot" || parseFloat(conversation.qualificationScore || "0") >= 0.7) {
-    return (
-      <Badge className="bg-red-100 text-red-800 border border-red-300">
-        🔥 Hot Lead
-      </Badge>
-    );
-  }
+    if (
+      temperature === "hot" ||
+      parseFloat(conversation.qualificationScore || "0") >= 0.7
+    ) {
+      return (
+        <Badge className="bg-red-100 text-red-800 border border-red-300">
+          🔥 Hot Lead
+        </Badge>
+      );
+    }
 
-  // ✅ PRIORITY 5: Warm leads
-  if (temperature === "warm" || parseFloat(conversation.qualificationScore || "0") >= 0.4) {
-    return (
-      <Badge className="bg-yellow-100 text-yellow-800">
-        😐 Warm Lead
-      </Badge>
-    );
-  }
+    // ✅ PRIORITY 5: Warm leads
+    if (
+      temperature === "warm" ||
+      parseFloat(conversation.qualificationScore || "0") >= 0.4
+    ) {
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800">😐 Warm Lead</Badge>
+      );
+    }
 
-  // ✅ PRIORITY 6: AI vs Human handling (for cold leads)
-  if (isAiHandled) {
-    return (
-      <Badge className="bg-blue-100 text-blue-800">
-        ❄️ AI Handling
-      </Badge>
-    );
-  } else {
-    return (
-      <Badge className="bg-green-100 text-green-800">
-        👤 Human Active
-      </Badge>
-    );
-  }
-};
+    // ✅ PRIORITY 6: AI vs Human handling (for cold leads)
+    if (isAiHandled) {
+      return (
+        <Badge className="bg-blue-100 text-blue-800">❄️ AI Handling</Badge>
+      );
+    } else {
+      return (
+        <Badge className="bg-green-100 text-green-800">👤 Human Active</Badge>
+      );
+    }
+  };
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], {
@@ -1102,60 +1140,192 @@ export default function Conversations() {
                             : "justify-end"
                         }`}
                       >
-                        <div
-                          className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.sender === "lead"
-                              ? "bg-slate-100 text-slate-900"
-                              : message.sender === "ai"
-                              ? "bg-blue-100 text-blue-900"
-                              : "bg-primary text-white"
-                          } ${
-                            message.isStatusMessage
-                              ? "opacity-60 italic text-xs"
-                              : ""
-                          }`}
-                        >
-                          <div className="flex items-center space-x-2 mb-1">
-                            {message.sender === "ai" && (
-                              <Bot className="w-3 h-3" />
-                            )}
-                            {message.sender === "lead" && (
-                              <User className="w-3 h-3" />
-                            )}
-                            {message.sender === "human" && (
-                              <UserCheck className="w-3 h-3" />
-                            )}
-                            <span className="text-xs opacity-75">
-                              {message.sender === "ai"
-                                ? "AI Assistant"
-                                : message.sender === "lead"
-                                ? "Lead"
-                                : "You"}
-                            </span>
-                          </div>
-                          <p className="text-sm">{message.content}</p>
-                          <p className="text-xs opacity-60 mt-1 flex items-center space-x-1">
-                            <span>{formatTime(message.sentAt)}</span>
+                        {/* Message Container with relative positioning */}
+                        <div className="relative max-w-xs lg:max-w-md group">
+                          {/* Message Bubble */}
+                          <div
+                            className={`px-4 py-2 rounded-lg ${
+                              message.sender === "lead"
+                                ? "bg-slate-100 text-slate-900"
+                                : message.sender === "ai"
+                                ? "bg-blue-100 text-blue-900"
+                                : "bg-primary text-white"
+                            } ${
+                              message.isStatusMessage
+                                ? "opacity-60 italic text-xs"
+                                : ""
+                            }`}
+                          >
+                            {/* Sender Info */}
+                            <div className="flex items-center space-x-2 mb-1">
+                              {message.sender === "ai" && (
+                                <Bot className="w-3 h-3" />
+                              )}
+                              {message.sender === "lead" && (
+                                <User className="w-3 h-3" />
+                              )}
+                              {message.sender === "human" && (
+                                <UserCheck className="w-3 h-3" />
+                              )}
+                              <span className="text-xs opacity-75">
+                                {message.sender === "ai"
+                                  ? "AI Assistant"
+                                  : message.sender === "lead"
+                                  ? "Lead"
+                                  : "You"}
+                              </span>
+                            </div>
 
-                            {/* Show delivery status for outgoing messages */}
-                            {message.sender !== "lead" && (
-                              <>
-                                {!message.deliveredAt ? (
-                                  <span title="Sending...">
+                            {/* Message Content */}
+                            <p className="text-sm break-words">
+                              {message.content}
+                            </p>
+
+                            {/* Time & Status */}
+                            <p className="text-xs opacity-60 mt-1 flex items-center space-x-1">
+                              <span>{formatTime(message.sentAt)}</span>
+                              {message.sender !== "lead" && (
+                                <>
+                                  {!message.deliveredAt ? (
                                     <Clock className="w-3 h-3 text-slate-400" />
-                                  </span>
-                                ) : message.readAt ? (
-                                  <span title="Delivered and Read">
+                                  ) : message.readAt ? (
                                     <CheckCircle className="w-3 h-3 text-blue-500" />
-                                  </span>
-                                ) : (
-                                  <span title="Delivered">
+                                  ) : (
                                     <CheckCircle className="w-3 h-3 text-green-500" />
-                                  </span>
-                                )}
-                              </>
+                                  )}
+                                </>
+                              )}
+                            </p>
+                          </div>
+
+                          {/* ✅ WhatsApp-Style Reactions Overlay (Bottom Right) */}
+                          {message.reactions &&
+                            message.reactions.length > 0 && (
+                              <div
+                                className={`absolute -bottom-2 ${
+                                  message.sender === "lead"
+                                    ? "left-2"
+                                    : "right-2"
+                                } flex items-center gap-0.5 bg-white rounded-full shadow-md border border-slate-200 px-2 py-1`}
+                              >
+                                {/* Aggregate reactions by emoji */}
+                                {(() => {
+                                  const reactionCounts =
+                                    message.reactions.reduce(
+                                      (acc: any, r: any) => {
+                                        acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                        return acc;
+                                      },
+                                      {}
+                                    );
+
+                                  return Object.entries(reactionCounts).map(
+                                    ([emoji, count]: any) => (
+                                      <button
+                                        key={emoji}
+                                        className="flex items-center gap-1 hover:scale-110 transition-transform"
+                                        title={message.reactions
+                                          .filter((r: any) => r.emoji === emoji)
+                                          .map((r: any) => r.userName)
+                                          .join(", ")}
+                                        onClick={() => {
+                                          // Check if current user already reacted with this emoji
+                                          const userReacted =
+                                            message.reactions.some(
+                                              (r: any) =>
+                                                r.emoji === emoji &&
+                                                r.userId === user?.id
+                                            );
+
+                                          if (userReacted) {
+                                            // Remove reaction (you can implement this)
+                                            console.log("Remove reaction");
+                                          } else {
+                                            // Add reaction
+                                            reactToMessageMutation.mutate({
+                                              messageId: message.id,
+                                              emoji,
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        <span className="text-sm">{emoji}</span>
+                                        {count > 1 && (
+                                          <span className="text-xs text-slate-600 font-medium">
+                                            {count}
+                                          </span>
+                                        )}
+                                      </button>
+                                    )
+                                  );
+                                })()}
+                              </div>
                             )}
-                          </p>
+
+                          {/* ✅ React Button (Shows on Hover) - WhatsApp Style */}
+                          {!message.isStatusMessage && (
+                            <button
+                              onClick={() =>
+                                setShowReactionPicker(
+                                  showReactionPicker === message.id
+                                    ? null
+                                    : message.id
+                                )
+                              }
+                              className={`absolute top-1 ${
+                                message.sender === "lead" ? "right-1" : "left-1"
+                              } opacity-0 group-hover:opacity-100 transition-all duration-200 bg-white/90 hover:bg-white border border-slate-300 rounded-full p-1 shadow-sm z-10`}
+                              title="React"
+                            >
+                              <span className="text-base leading-none">😊</span>
+                            </button>
+                          )}
+
+                          {/* ✅ Reaction Picker (WhatsApp Style) */}
+                          {showReactionPicker === message.id && (
+                            <>
+                              {/* Backdrop to close picker */}
+                              <div
+                                className="fixed inset-0 z-20"
+                                onClick={() => setShowReactionPicker(null)}
+                              />
+
+                              {/* Picker */}
+                              <div
+                                className={`absolute ${
+                                  message.sender === "lead"
+                                    ? "left-0"
+                                    : "right-0"
+                                } bottom-full mb-2 bg-white rounded-full shadow-lg border border-slate-200 p-2 flex items-center gap-1 z-30 animate-in fade-in slide-in-from-bottom-2 duration-200`}
+                              >
+                                {[
+                                  "👍",
+                                  "❤️",
+                                  "😂",
+                                  "😮",
+                                  "😢",
+                                  "🙏",
+                                  "🔥",
+                                  "👏",
+                                ].map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      reactToMessageMutation.mutate({
+                                        messageId: message.id,
+                                        emoji,
+                                      });
+                                      setShowReactionPicker(null);
+                                    }}
+                                    className="hover:scale-125 transition-transform duration-150 text-2xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))

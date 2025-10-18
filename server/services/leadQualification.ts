@@ -75,31 +75,36 @@ export class LeadQualificationService {
   }
 
   async queueIncomingMessage(
-    from: string,
-    message: string,
-    timestamp: number,
-    phoneNumberId?: string
-  ): Promise<void> {
-    await messageQueue.enqueueMessage(
-      from,
-      message,
-      timestamp,
-      this.handleIncomingMessage.bind(this),
-      phoneNumberId
-    );
-  }
+  from: string,
+  message: string,
+  timestamp: number,
+  phoneNumberId?: string,
+  messageId?: string // ✅ ADD THIS
+): Promise<void> {
+  console.log(`📨 Queueing message from ${from}, messageId: ${messageId}`);
+  await messageQueue.enqueueMessage(
+    from,
+    message,
+    timestamp,
+    this.handleIncomingMessage.bind(this),
+    phoneNumberId,
+    messageId // ✅ ADD THIS
+  );
+}
 
   private async handleIncomingMessage(
     from: string,
     message: string,
     timestamp: number,
-    phoneNumberId?: string
+    phoneNumberId?: string,
+    messageId?: string
   ): Promise<void> {
     try {
       console.log("=== INCOMING MESSAGE ===");
       console.log("From:", from);
       console.log("Message:", message);
       console.log("Phone Number ID:", phoneNumberId);
+      console.log("WhatsApp Message ID:", messageId);
 
       // Step 1: Find or create lead
       let lead = await storage.getLeadByPhone(from);
@@ -263,14 +268,17 @@ export class LeadQualificationService {
       }
 
       // Step 3: Record incoming message
-      await storage.createMessage({
+      const savedMessage = await storage.createMessage({
         conversationId: conversation.id,
         content: message,
         sender: "lead",
         channel: "whatsapp",
         sentAt: new Date(timestamp * 1000),
         deliveredAt: new Date(),
+        metadata: messageId ? { whatsappMessageId: messageId } : undefined,
       });
+
+      console.log(`✅ Incoming message saved with metadata:`, savedMessage.metadata);
 
       await storage.markPreviousMessagesAsRead(conversation.id);
       await storage.incrementUnreadCount(conversation.id);
@@ -413,7 +421,10 @@ export class LeadQualificationService {
           });
 
           // Send redirect message
-          await whatsappService.sendTextMessage(from, aiResponse);
+          const redirectResult = await whatsappService.sendTextMessage(
+            from,
+            aiResponse
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -422,6 +433,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: redirectResult.messageId
+              ? { whatsappMessageId: redirectResult.messageId }
+              : undefined,
           });
 
           console.log(
@@ -509,7 +523,10 @@ export class LeadQualificationService {
 
           const handoffMessage =
             "Thanks for your message! You've been identified as a priority lead. A team member will respond within 5 minutes.";
-          await whatsappService.sendTextMessage(from, handoffMessage);
+          const handoffResult = await whatsappService.sendTextMessage(
+            from,
+            handoffMessage
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -518,6 +535,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: handoffResult.messageId
+              ? { whatsappMessageId: handoffResult.messageId }
+              : undefined,
           });
         } else {
           console.log("💬 Generating AI response...");
@@ -535,7 +555,10 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
-          await whatsappService.sendTextMessage(from, aiResponse);
+          const aiResult = await whatsappService.sendTextMessage(
+            from,
+            aiResponse
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -544,6 +567,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: aiResult.messageId
+              ? { whatsappMessageId: aiResult.messageId }
+              : undefined,
           });
 
           console.log("✅ AI response sent");

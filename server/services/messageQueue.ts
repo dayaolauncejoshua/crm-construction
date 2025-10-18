@@ -5,7 +5,8 @@ interface QueuedMessage {
   message: string;
   timestamp: number;
   retries: number;
-  phoneNumberId?: string; // ✅ ADD THIS
+  phoneNumberId?: string;
+  messageId?: string; // ✅ Already here - good!
 }
 
 interface ProcessingLock {
@@ -33,14 +34,24 @@ export class MessageQueueService {
     from: string,
     message: string,
     timestamp: number,
-    processFunction: (from: string, message: string, timestamp: number, phoneNumberId?: string) => Promise<void>, // ✅ ADD phoneNumberId param
-    phoneNumberId?: string // ✅ ADD THIS PARAMETER
+    processFunction: (
+      from: string, 
+      message: string, 
+      timestamp: number, 
+      phoneNumberId?: string,
+      messageId?: string // ✅ ADD THIS
+    ) => Promise<void>,
+    phoneNumberId?: string,
+    messageId?: string // ✅ ADD THIS PARAMETER
   ): Promise<void> {
     const normalizedPhone = this.normalizePhone(from);
     
     console.log(`📨 Message received from ${normalizedPhone}`);
     if (phoneNumberId) {
       console.log(`📞 Received on WhatsApp Business number ID: ${phoneNumberId}`);
+    }
+    if (messageId) {
+      console.log(`📋 WhatsApp Message ID: ${messageId}`); // ✅ ADD DEBUG
     }
 
     // Get or create lock for this phone number
@@ -59,7 +70,8 @@ export class MessageQueueService {
       message,
       timestamp,
       retries: 0,
-      phoneNumberId, // ✅ ADD THIS
+      phoneNumberId,
+      messageId, // ✅ ADD THIS
     };
 
     // If currently processing messages from this number, queue it
@@ -81,7 +93,13 @@ export class MessageQueueService {
   private async processMessage(
     normalizedPhone: string,
     queuedMessage: QueuedMessage,
-    processFunction: (from: string, message: string, timestamp: number, phoneNumberId?: string) => Promise<void> // ✅ ADD phoneNumberId param
+    processFunction: (
+      from: string, 
+      message: string, 
+      timestamp: number, 
+      phoneNumberId?: string,
+      messageId?: string // ✅ ADD THIS
+    ) => Promise<void>
   ): Promise<void> {
     const lock = this.locks.get(normalizedPhone)!;
 
@@ -93,7 +111,8 @@ export class MessageQueueService {
         queuedMessage.from,
         queuedMessage.message,
         queuedMessage.timestamp,
-        queuedMessage.phoneNumberId // ✅ ADD THIS
+        queuedMessage.phoneNumberId,
+        queuedMessage.messageId // ✅ ADD THIS
       );
 
       this.metrics.totalProcessed++;

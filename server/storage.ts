@@ -122,8 +122,20 @@ export interface IStorage {
   }>;
   getRecentActivity(clientId: string): Promise<any[]>;
 
-  getSpamPatterns():Promise<any[]>;
+  getSpamPatterns(): Promise<any[]>;
   saveSpamPatterns(patterns: any[]): Promise<void>;
+
+  // Message reactions
+  getMessage(messageId: string): Promise<Message | undefined>;
+  addReaction(
+    messageId: string,
+    reaction: { emoji: string; userId: string; userName: string }
+  ): Promise<void>;
+  removeReaction(
+    messageId: string,
+    userId: string,
+    emoji: string
+  ): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -556,51 +568,51 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== SPAM PATTERN LEARNING METHODS ====================
 
-async getSpamPatterns(): Promise<any[]> {
-  try {
-    return await db
-      .select()
-      .from(spamPatterns)
-      .where(gte(spamPatterns.confidence, "0.30")) // Lower threshold
-      .orderBy(desc(spamPatterns.confidence));
-  } catch (error) {
-    console.error("Error fetching spam patterns:", error);
-    return [];
+  async getSpamPatterns(): Promise<any[]> {
+    try {
+      return await db
+        .select()
+        .from(spamPatterns)
+        .where(gte(spamPatterns.confidence, "0.30")) // Lower threshold
+        .orderBy(desc(spamPatterns.confidence));
+    } catch (error) {
+      console.error("Error fetching spam patterns:", error);
+      return [];
+    }
   }
-}
 
-async saveSpamPatterns(patterns: any[]): Promise<void> {
-  try {
-    for (const pattern of patterns) {
-      await db
-        .insert(spamPatterns)
-        .values({
-          id: pattern.id,
-          pattern: pattern.pattern,
-          category: pattern.category,
-          detectionCount: pattern.detectionCount,
-          falsePositiveCount: pattern.falsePositiveCount,
-          confidence: pattern.confidence,
-          lastDetected: pattern.lastDetected,
-          createdAt: pattern.createdAt,
-          updatedAt: pattern.updatedAt,
-        })
-        .onConflictDoUpdate({
-          target: spamPatterns.pattern, // ✅ Now this will work!
-          set: {
+  async saveSpamPatterns(patterns: any[]): Promise<void> {
+    try {
+      for (const pattern of patterns) {
+        await db
+          .insert(spamPatterns)
+          .values({
+            id: pattern.id,
+            pattern: pattern.pattern,
+            category: pattern.category,
             detectionCount: pattern.detectionCount,
             falsePositiveCount: pattern.falsePositiveCount,
             confidence: pattern.confidence,
             lastDetected: pattern.lastDetected,
-            updatedAt: new Date(),
-          },
-        });
+            createdAt: pattern.createdAt,
+            updatedAt: pattern.updatedAt,
+          })
+          .onConflictDoUpdate({
+            target: spamPatterns.pattern, // ✅ Now this will work!
+            set: {
+              detectionCount: pattern.detectionCount,
+              falsePositiveCount: pattern.falsePositiveCount,
+              confidence: pattern.confidence,
+              lastDetected: pattern.lastDetected,
+              updatedAt: new Date(),
+            },
+          });
+      }
+      console.log(`✅ Saved ${patterns.length} spam patterns to database`);
+    } catch (error) {
+      console.error("❌ Error saving spam patterns:", error);
     }
-    console.log(`✅ Saved ${patterns.length} spam patterns to database`);
-  } catch (error) {
-    console.error("❌ Error saving spam patterns:", error);
   }
-}
 
   async getHotLeads(
     clientId: string
@@ -711,6 +723,75 @@ async saveSpamPatterns(patterns: any[]): Promise<void> {
       const messageIds = unreadOutgoingMessages.map((m) => m.id);
       await this.markMessagesAsRead(messageIds);
     }
+  }
+
+  // ==================== MESSAGE REACTION METHODS ====================
+
+  async getMessage(messageId: string): Promise<Message | undefined> {
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+    return message;
+  }
+
+  async addReaction(
+    messageId: string,
+    reaction: { emoji: string; userId: string; userName: string }
+  ): Promise<void> {
+    const message = await this.getMessage(messageId);
+    if (!message) throw new Error("Message not found");
+
+    const currentReactions = (message.reactions as any[]) || [];
+
+    // Check if user already reacted with this emoji
+    const existingReactionIndex = currentReactions.findIndex(
+      (r: any) => r.userId === reaction.userId && r.emoji === reaction.emoji
+    );
+
+    if (existingReactionIndex === -1) {
+      // Add new reaction
+      const newReactions = [
+        ...currentReactions,
+        {
+          ...reaction,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      await db
+        .update(messages)
+        .set({ reactions: newReactions as any })
+        .where(eq(messages.id, messageId));
+
+      console.log(
+        `✅ Added reaction ${reaction.emoji} to message ${messageId}`
+      );
+    }
+  }
+
+  async removeReaction(
+    messageId: string,
+    userId: string,
+    emoji: string
+  ): Promise<void> {
+    const message = await this.getMessage(messageId);
+    if (!message) throw new Error("Message not found");
+
+    const currentReactions = (message.reactions as any[]) || [];
+
+    // Remove the reaction
+    const newReactions = currentReactions.filter(
+      (r: any) => !(r.userId === userId && r.emoji === emoji)
+    );
+
+    await db
+      .update(messages)
+      .set({ reactions: newReactions as any })
+      .where(eq(messages.id, messageId));
+
+    console.log(`✅ Removed reaction ${emoji} from message ${messageId}`);
   }
 
   // Quick Reply Templates
