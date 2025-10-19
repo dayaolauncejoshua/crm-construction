@@ -4,11 +4,11 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
-import webhookRouter from "./routes/webhook.route";
+import voice_AI_CallRouter from "./routes/webhook.route";
 import videoSOPsRouter from "./routes/videoSOPs.route";
 import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
@@ -68,7 +68,6 @@ app.use(
   express.raw({ type: "application/json" }),
   stripeWebhookRouter
 );
-
 // Basic middleware
 app.use(express.json());
 
@@ -80,7 +79,8 @@ app.use("/api/notion-sops", notionSOPsRouter);
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
 const isProduction = process.env.NODE_ENV === "production";
-
+app.use("/webhook", express.raw({ type: "application/json" }));
+app.use("/webhook", voice_AI_CallRouter);
 app.use(
   session({
     store: new PgSession({
@@ -155,7 +155,6 @@ app.use((req, res, next) => {
     console.error("❌ Failed to initialize spam pattern learning:", error);
     // Continue anyway - service will initialize on first use
   }
-
 
   const server = await registerRoutes(app);
 
