@@ -42,7 +42,7 @@ pool.query("SELECT NOW()", (err, res) => {
     console.error("❌ Database connection failed:", err.message);
     if (err.message?.includes("ENOTFOUND")) {
       console.error("💡 Cannot resolve database hostname");
-      console.error("💡 Check your DATABASE_URL in .env");
+      console.error("💡 Check your DATABASE_  URL in .env");
       console.error(
         "💡 If using Neon, visit https://console.neon.tech to wake up database"
       );

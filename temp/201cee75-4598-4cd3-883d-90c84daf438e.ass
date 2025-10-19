@@ -1,0 +1,55 @@
+[Script Info]
+Title: VSL Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H00FFFF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,50,50,80,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.60,Default,,0,0,0,,{\k20}Are {\k36}you {\k10}tired {\k30}of {\k24}losing {\k26}out {\k14}to
+Dialogue: 0,0:00:01.60,0:00:04.00,Default,,0,0,0,,{\k58}your {\k0}competitors {\k34}or {\k24}feeling {\k24}the {\k24}pressure {\k34}of
+Dialogue: 0,0:00:04.00,0:00:06.53,Default,,0,0,0,,{\k16}slow {\k50}response {\k36}times {\k12}What {\k12}if {\k26}we {\k16}told
+Dialogue: 0,0:00:06.53,0:00:08.23,Default,,0,0,0,,{\k16}you {\k18}there's {\k28}a {\k26}solution {\k32}that {\k28}not {\k22}only
+Dialogue: 0,0:00:08.23,0:00:11.19,Default,,0,0,0,,{\k42}increases {\k68}your {\k0}leads {\k12}but {\k40}also {\k54}outpaces {\k36}your
+Dialogue: 0,0:00:11.19,0:00:16.63,Default,,0,0,0,,{\k48}competition {\k30}Problem {\k58}agitation {\k0}We {\k16}know {\k34}how {\k30}frustrating
+Dialogue: 0,0:00:16.63,0:00:19.05,Default,,0,0,0,,{\k26}it {\k20}can {\k20}be {\k28}You're {\k44}constantly {\k26}on {\k34}the
+Dialogue: 0,0:00:19.05,0:00:21.26,Default,,0,0,0,,{\k4}hunt {\k38}for {\k44}quality {\k40}leads {\k10}but {\k18}they {\k16}seem
+Dialogue: 0,0:00:21.26,0:00:23.04,Default,,0,0,0,,{\k40}to {\k0}slip {\k30}away {\k32}just {\k46}as {\k0}quickly {\k30}as
+Dialogue: 0,0:00:23.04,0:00:26.34,Default,,0,0,0,,{\k20}they {\k42}appear {\k26}Every {\k28}missed {\k50}opportunity {\k36}is {\k24}another
+Dialogue: 0,0:00:26.34,0:00:29.05,Default,,0,0,0,,{\k26}win {\k22}for {\k28}your {\k36}competitors {\k52}And {\k72}those {\k36}slow
+Dialogue: 0,0:00:29.05,0:00:31.70,Default,,0,0,0,,{\k52}response {\k36}times {\k4}They're {\k28}only {\k26}adding {\k34}fuel {\k20}to
+Dialogue: 0,0:00:31.70,0:00:33.47,Default,,0,0,0,,{\k32}the {\k14}fire {\k0}causing {\k18}you {\k36}to {\k0}miss {\k30}out
+Dialogue: 0,0:00:33.47,0:00:38.22,Default,,0,0,0,,{\k24}on {\k42}potential {\k42}clients {\k44}and {\k32}revenue {\k68}Solutionduction {\k8}But
+Dialogue: 0,0:00:38.22,0:00:40.38,Default,,0,0,0,,{\k38}here's {\k14}the {\k24}good {\k20}news {\k4}You {\k20}don't {\k38}have
+Dialogue: 0,0:00:40.38,0:00:43.93,Default,,0,0,0,,{\k24}to {\k24}struggle {\k50}anymore {\k34}Introducing {\k26}our {\k34}AI {\k36}powered
+Dialogue: 0,0:00:43.93,0:00:46.50,Default,,0,0,0,,{\k30}lead {\k38}system {\k16}a {\k30}game {\k26}changer {\k28}in {\k30}the
+Dialogue: 0,0:00:46.50,0:00:50.00,Default,,0,0,0,,{\k40}construction {\k48}industry {\k16}This {\k46}innovative {\k40}system {\k38}doesn't {\k56}just
+Dialogue: 0,0:00:50.00,0:00:52.56,Default,,0,0,0,,{\k6}deliver {\k42}leads {\k16}it {\k28}delivers {\k56}quality {\k32}leads {\k42}straight
+Dialogue: 0,0:00:52.56,0:00:54.63,Default,,0,0,0,,{\k14}to {\k22}your {\k46}doorstep {\k52}And {\k16}the {\k28}best {\k30}part
+Dialogue: 0,0:00:55.00,0:00:56.68,Default,,0,0,0,,{\k14}You'll {\k10}get {\k24}a {\k36}response {\k24}in {\k26}under {\k34}two
+Dialogue: 0,0:00:56.68,0:00:58.90,Default,,0,0,0,,{\k28}minutes {\k20}ensuring {\k32}you're {\k48}always {\k28}ahead {\k14}of {\k24}the
+Dialogue: 0,0:00:58.90,0:01:01.65,Default,,0,0,0,,{\k40}competition {\k14}With {\k30}this {\k16}you'll {\k12}get {\k38}to {\k0}focus
+Dialogue: 0,0:01:01.65,0:01:04.45,Default,,0,0,0,,{\k22}on {\k10}what {\k14}you {\k22}do {\k34}best {\k0}creating {\k84}amazing
+Dialogue: 0,0:01:04.45,0:01:09.76,Default,,0,0,0,,{\k58}construction {\k64}projects {\k34}Proof {\k32}and {\k46}credibility {\k0}Don't {\k36}just
+Dialogue: 0,0:01:09.76,0:01:11.80,Default,,0,0,0,,{\k16}take {\k24}our {\k12}word {\k26}for {\k18}it {\k20}We've {\k48}already
+Dialogue: 0,0:01:11.80,0:01:14.33,Default,,0,0,0,,{\k24}helped {\k36}over {\k38}50 {\k48}clients {\k50}increase {\k36}their {\k22}leads
+Dialogue: 0,0:01:14.33,0:01:17.01,Default,,0,0,0,,{\k28}by {\k26}a {\k32}staggering {\k106}300 {\k32}We {\k16}have {\k28}case
+Dialogue: 0,0:01:17.01,0:01:19.90,Default,,0,0,0,,{\k30}studies {\k66}showcasing {\k62}construction {\k38}companies {\k38}just {\k24}like {\k30}yours
+Dialogue: 0,0:01:19.90,0:01:22.98,Default,,0,0,0,,{\k52}who {\k24}have {\k68}significantly {\k50}boosted {\k16}their {\k38}project {\k60}acquisitions
+Dialogue: 0,0:01:22.98,0:01:25.19,Default,,0,0,0,,{\k34}and {\k30}client {\k38}base {\k54}thanks {\k18}to {\k16}our {\k32}AI
+Dialogue: 0,0:01:25.19,0:01:30.62,Default,,0,0,0,,{\k30}powered {\k50}system {\k6}Call {\k32}to {\k24}action {\k34}So {\k36}are
+Dialogue: 0,0:01:30.62,0:01:32.19,Default,,0,0,0,,{\k22}you {\k10}ready {\k28}to {\k10}leave {\k28}your {\k32}competitors {\k28}in
+Dialogue: 0,0:01:32.19,0:01:33.86,Default,,0,0,0,,{\k42}the {\k0}dust {\k32}and {\k20}emerge {\k26}as {\k18}the {\k28}leading
+Dialogue: 0,0:01:33.86,0:01:37.26,Default,,0,0,0,,{\k36}choice {\k32}for {\k40}residential {\k70}and {\k0}commercial {\k48}projects {\k2}Act
+Dialogue: 0,0:01:37.26,0:01:39.37,Default,,0,0,0,,{\k32}now {\k14}The {\k28}first {\k18}10 {\k24}to {\k14}sign {\k20}up
+Dialogue: 0,0:01:39.37,0:01:41.59,Default,,0,0,0,,{\k28}will {\k20}receive {\k28}an {\k46}exclusive {\k46}30 {\k18}day {\k36}free
+Dialogue: 0,0:01:41.59,0:01:45.08,Default,,0,0,0,,{\k24}trial {\k16}Don't {\k26}wait {\k36}because {\k30}this {\k56}opportunity {\k34}is
+Dialogue: 0,0:01:45.08,0:01:47.05,Default,,0,0,0,,{\k58}as {\k0}solid {\k18}as {\k30}the {\k44}constructions {\k26}you {\k22}build
+Dialogue: 0,0:01:47.05,0:01:49.08,Default,,0,0,0,,{\k80}It's {\k22}time {\k30}to {\k0}build {\k16}a {\k26}better {\k28}future
+Dialogue: 0,0:01:49.08,0:01:51.09,Default,,0,0,0,,{\k26}for {\k26}your {\k40}business {\k22}starting {\k36}today

@@ -165,8 +165,10 @@ export class VSLGenerator {
       });
     });
   }
+  // ...
 
-  /** 🧠 Split script into intelligent scenes with image prompts */
+  // ...
+  /** 🧠 Sp lit script into intelligent scenes with image prompts */
   private async splitScriptIntoScenes(
     script: string,
     niche: string,
@@ -184,7 +186,7 @@ export class VSLGenerator {
         messages: [
           {
             role: "system",
-            content: `You are a video production assistant. Split the VSL script into 4-6 compelling scenes. For each scene, provide:
+            content: `You are a video production assistant. Split the VSL script into **10-15 compelling, short scenes** (or roughly one scene per 2-3 sentences). For each scene, provide:
 1. A short title (2-4 words)
 2. The script text for that scene
 3. A detailed image prompt for DALL-E to generate a relevant background
@@ -194,15 +196,16 @@ Return ONLY valid JSON in this format:
   "scenes": [
     {
       "title": "Scene Title",
-      "text": "Script text for this scene...",
       "prompt": "Detailed DALL-E prompt for background image..."
+      "text": "Script text for this scene...",
     }
-  ]
+    ]
 }`,
           },
           {
+            // ...
             role: "user",
-            content: `Niche: ${niche}\n\nScript:\n${script}\n\nCreate 4-6 scenes with engaging visuals that match the script narrative.`,
+            content: `Niche: ${niche}\n\nScript:\n${script}\n\nCreate **10-15 short scenes** with engaging visuals that match the script narrative.`,
           },
         ],
         temperature: 0.7,
@@ -340,6 +343,100 @@ Return ONLY valid JSON in this format:
   }
 
   /** Create individual scene video */
+  // private async createSceneVideo(
+  //   bgImagePath: string,
+  //   outputPath: string,
+  //   duration: number,
+  //   title: string,
+  //   niche: string,
+  //   index: number,
+  //   logger: ConsoleLogger
+  // ): Promise<void> {
+  //   logger.stage(
+  //     "🎬",
+  //     "SCENE VIDEO",
+  //     `[${index + 1}] Creating scene: "${title}" (${Math.round(duration)}s)`
+  //   );
+
+  //   return new Promise((resolve, reject) => {
+  //     const ff = ffmpeg();
+  //     const startTime = Date.now();
+
+  //     if (bgImagePath && bgImagePath !== "") {
+  //       logger.stage(
+  //         "🖼️",
+  //         "SCENE VIDEO",
+  //         `[${index + 1}] Using generated image with zoom effect`
+  //       );
+  //       ff.input(bgImagePath)
+  //         .loop(duration)
+  //         .videoFilters([
+  //           `zoompan=z='min(zoom+0.0015,1.2)':d=${Math.ceil(
+  //             duration * 30
+  //           )}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080`,
+  //           `drawtext=text='${title.replace(
+  //             /'/g,
+  //             "\\'"
+  //           )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2:alpha='if(lt(t,1),t,if(gt(t,${
+  //             duration - 1
+  //           }),${duration}-t,1))'`,
+  //           `vignette=angle=PI/4`,
+  //         ]);
+  //     } else {
+  //       logger.stage(
+  //         "🎨",
+  //         "SCENE VIDEO",
+  //         `[${index + 1}] Using gradient background (fallback)`
+  //       );
+  //       ff.input(`color=c=#1e3a8a:s=1920x1080:d=${duration}`)
+  //         .inputFormat("lavfi")
+  //         .videoFilters([
+  //           `drawtext=text='${title.replace(
+  //             /'/g,
+  //             "\\'"
+  //           )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
+  //         ]);
+  //     }
+
+  //     ff.outputOptions([
+  //       `-t ${duration}`,
+  //       "-c:v libx264",
+  //       "-preset medium",
+  //       "-crf 23",
+  //       "-pix_fmt yuv420p",
+  //       "-r 30",
+  //     ])
+  //       .output(outputPath)
+  //       .on("progress", (p) => {
+  //         if (p.percent && p.percent > 0 && p.percent % 25 === 0) {
+  //           logger.stage(
+  //             "⚙️",
+  //             "SCENE VIDEO",
+  //             `[${index + 1}] Encoding: ${Math.round(p.percent)}%`
+  //           );
+  //         }
+  //       })
+  //       .on("end", () => {
+  //         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  //         logger.success(
+  //           "SCENE VIDEO",
+  //           `[${index + 1}] Scene created in ${processingTime}s`
+  //         );
+  //         resolve();
+  //       })
+  //       .on("error", (err) => {
+  //         logger.error(
+  //           "SCENE VIDEO",
+  //           `[${index + 1}] Scene creation failed`,
+  //           err
+  //         );
+  //         reject(err);
+  //       })
+  //       .run();
+  //   });
+  // }
+
+  /** Create individual scene video */
   private async createSceneVideo(
     bgImagePath: string,
     outputPath: string,
@@ -359,24 +456,31 @@ Return ONLY valid JSON in this format:
       const ff = ffmpeg();
       const startTime = Date.now();
 
+      // Properly escape text for FFmpeg drawtext filter
+      // Replace problematic characters: single quotes, colons, backslashes
+      const escapedTitle = title
+        .replace(/\\/g, "\\\\\\\\") // Escape backslashes
+        .replace(/'/g, "'\\\\\\''") // Escape single quotes
+        .replace(/:/g, "\\:") // Escape colons
+        .replace(/%/g, "\\%"); // Escape percent signs
+
       if (bgImagePath && bgImagePath !== "") {
         logger.stage(
           "🖼️",
           "SCENE VIDEO",
           `[${index + 1}] Using generated image with zoom effect`
         );
+
+        // Calculate zoom duration in frames
+        const zoomDuration = Math.ceil(duration * 30);
+
         ff.input(bgImagePath)
           .loop(duration)
           .videoFilters([
-            `zoompan=z='min(zoom+0.0015,1.2)':d=${Math.ceil(
-              duration * 30
-            )}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080`,
-            `drawtext=text='${title.replace(
-              /'/g,
-              "\\'"
-            )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2:alpha='if(lt(t,1),t,if(gt(t,${
+            `zoompan=z='min(zoom+0.0015,1.2)':d=${zoomDuration}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080`,
+            `drawtext=text='${escapedTitle}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2:alpha='if(lt(t\\,1)\\,t\\,if(gt(t\\,${
               duration - 1
-            }),${duration}-t,1))'`,
+            })\\,${duration}-t\\,1))'`,
             `vignette=angle=PI/4`,
           ]);
       } else {
@@ -388,10 +492,7 @@ Return ONLY valid JSON in this format:
         ff.input(`color=c=#1e3a8a:s=1920x1080:d=${duration}`)
           .inputFormat("lavfi")
           .videoFilters([
-            `drawtext=text='${title.replace(
-              /'/g,
-              "\\'"
-            )}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
+            `drawtext=text='${escapedTitle}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
           ]);
       }
 
@@ -546,24 +647,184 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       .padStart(2, "0")}.${centiseconds.toString().padStart(2, "0")}`;
   }
 
-  /** Merge scenes with karaoke subtitles burned in */
-  private async mergeScenesWithSubtitles(
+  // private async mergeScenesWithSubtitles(
+  //   sceneVideos: string[],
+  //   outputPath: string,
+  //   audioPath: string,
+  //   subtitlePath: string,
+  //   logger: ConsoleLogger
+  // ): Promise<void> {
+  //   logger.stage(
+  //     "🎞️",
+  //     "MERGING",
+  //     `Concatenating ${sceneVideos.length} scenes with karaoke subtitles...`
+  //   );
+
+  //   return new Promise((resolve, reject) => {
+  //     const ff = ffmpeg();
+  //     const startTime = Date.now();
+
+  //     sceneVideos.forEach((video, i) => {
+  //       logger.stage(
+  //         "📥",
+  //         "MERGING",
+  //         `Input ${i + 1}: ${path.basename(video)}`
+  //       );
+  //       ff.input(video);
+  //     });
+  //     ff.input(audioPath);
+  //     logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
+  //     logger.stage(
+  //       "🎤",
+  //       "MERGING",
+  //       `Karaoke Subtitles: ${path.basename(subtitlePath)}`
+  //     );
+
+  //     const filterComplex =
+  //       sceneVideos.map((_, i) => `[${i}:v]`).join("") +
+  //       `concat=n=${sceneVideos.length}:v=1:a=0[v];` +
+  //       `[v]ass='${subtitlePath
+  //         .replace(/\\/g, "\\\\")
+  //         .replace(/:/g, "\\:")}'[vout]`;
+
+  //     logger.stage(
+  //       "🔧",
+  //       "MERGING",
+  //       "Applying concat and karaoke subtitle filters..."
+  //     );
+
+  //     ff.complexFilter(filterComplex)
+  //       .outputOptions([
+  //         "-map [vout]",
+  //         `-map ${sceneVideos.length}:a`,
+  //         "-c:v libx264",
+  //         "-preset medium",
+  //         "-crf 23",
+  //         "-c:a aac",
+  //         "-b:a 192k",
+  //         "-pix_fmt yuv420p",
+  //         "-movflags +faststart",
+  //       ])
+  //       .output(outputPath)
+  //       .on("progress", (p) => {
+  //         if (p.percent && p.percent > 0) {
+  //           logger.stage(
+  //             "⚙️",
+  //             "MERGING",
+  //             `Processing: ${Math.round(p.percent)}%`
+  //           );
+  //         }
+  //       })
+  //       .on("end", () => {
+  //         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  //         logger.success(
+  //           "MERGING",
+  //           `All scenes merged with karaoke subtitles in ${processingTime}s`
+  //         );
+  //         resolve();
+  //       })
+  //       .on("error", (err) => {
+  //         logger.error("MERGING", "Merge failed", err);
+  //         reject(err);
+  //       })
+  //       .run();
+  //   });
+  // }
+
+  /** Merge scenes with just the audio track */
+  // private async mergeScenesAndAudio(
+  //   sceneVideos: string[],
+  //   outputPath: string,
+  //   audioPath: string,
+  //   logger: ConsoleLogger
+  // ): Promise<void> {
+  //   logger.stage(
+  //     "🎞️",
+  //     "MERGING",
+  //     `Concatenating ${sceneVideos.length} scenes with audio...`
+  //   );
+
+  //   return new Promise((resolve, reject) => {
+  //     const ff = ffmpeg();
+  //     const startTime = Date.now();
+
+  //     // Add all scene videos as inputs
+  //     sceneVideos.forEach((video, i) => {
+  //       logger.stage(
+  //         "📥",
+  //         "MERGING",
+  //         `Input ${i + 1}: ${path.basename(video)}`
+  //       );
+  //       ff.input(video);
+  //     });
+
+  //     // Add the audio track as the last input
+  //     ff.input(audioPath);
+  //     logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
+
+  //     // Filter to concatenate all video streams (v) and select the audio stream (a)
+  //     const filterComplex =
+  //       sceneVideos.map((_, i) => `[${i}:v]`).join("") +
+  //       `concat=n=${sceneVideos.length}:v=1:a=0[v];`;
+
+  //     logger.stage("🔧", "MERGING", "Applying video concatenation filter...");
+
+  //     ff.complexFilter(filterComplex)
+  //       .outputOptions([
+  //         "-map [v]", // Map the concatenated video output
+  //         `-map ${sceneVideos.length}:a`, // Map the audio input (it's the last one)
+  //         "-c:v libx264",
+  //         "-preset medium",
+  //         "-crf 23",
+  //         "-c:a aac",
+  //         "-b:a 192k",
+  //         "-pix_fmt yuv420p",
+  //         "-movflags +faststart",
+  //       ])
+  //       .output(outputPath)
+  //       .on("progress", (p) => {
+  //         if (p.percent && p.percent > 0) {
+  //           logger.stage(
+  //             "⚙️",
+  //             "MERGING",
+  //             `Processing: ${Math.round(p.percent)}%`
+  //           );
+  //         }
+  //       })
+  //       .on("end", () => {
+  //         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  //         logger.success(
+  //           "MERGING",
+  //           `All scenes merged with audio in ${processingTime}s`
+  //         );
+  //         resolve();
+  //       })
+  //       .on("error", (err) => {
+  //         logger.error("MERGING", "Merge failed", err);
+  //         reject(err);
+  //       })
+  //       .run();
+  //   });
+  // }
+
+  /** Merge scenes with just the audio track */
+  private async mergeScenesAndAudio(
     sceneVideos: string[],
     outputPath: string,
     audioPath: string,
-    subtitlePath: string,
     logger: ConsoleLogger
   ): Promise<void> {
     logger.stage(
       "🎞️",
       "MERGING",
-      `Concatenating ${sceneVideos.length} scenes with karaoke subtitles...`
+      `Concatenating ${sceneVideos.length} scenes with audio...`
     );
 
     return new Promise((resolve, reject) => {
       const ff = ffmpeg();
       const startTime = Date.now();
 
+      // Add all scene videos as inputs
       sceneVideos.forEach((video, i) => {
         logger.stage(
           "📥",
@@ -572,30 +833,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         );
         ff.input(video);
       });
+
+      // Add the audio track as the last input
       ff.input(audioPath);
       logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
-      logger.stage(
-        "🎤",
-        "MERGING",
-        `Karaoke Subtitles: ${path.basename(subtitlePath)}`
-      );
 
+      // Filter to concatenate all video streams (remove trailing semicolon!)
       const filterComplex =
         sceneVideos.map((_, i) => `[${i}:v]`).join("") +
-        `concat=n=${sceneVideos.length}:v=1:a=0[v];` +
-        `[v]ass='${subtitlePath
-          .replace(/\\/g, "\\\\")
-          .replace(/:/g, "\\:")}'[vout]`;
+        `concat=n=${sceneVideos.length}:v=1:a=0[v]`; // ← Removed the semicolon here
 
-      logger.stage(
-        "🔧",
-        "MERGING",
-        "Applying concat and karaoke subtitle filters..."
-      );
+      logger.stage("🔧", "MERGING", "Applying video concatenation filter...");
 
       ff.complexFilter(filterComplex)
         .outputOptions([
-          "-map [vout]",
+          "-map [v]",
           `-map ${sceneVideos.length}:a`,
           "-c:v libx264",
           "-preset medium",
@@ -619,7 +871,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
           logger.success(
             "MERGING",
-            `All scenes merged with karaoke subtitles in ${processingTime}s`
+            `All scenes merged with audio in ${processingTime}s`
           );
           resolve();
         })
@@ -662,13 +914,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const totalDuration = await this.getAudioDuration(audioPath, logger);
 
       // 1.5 Get word-level timings from Whisper
-      progressTracker.updateProgress({
-        vslId: options.vslId,
-        stage: "transcription",
-        progress: 15,
-        message: "Analyzing word timings for karaoke effect...",
-        status: "processing",
-      });
+      // progressTracker.updateProgress({
+      //   vslId: options.vslId,
+      //   stage: "transcription",
+      //   progress: 15,
+      //   message: "Analyzing word timings for karaoke effect...",
+      //   status: "processing",
+      // });
 
       const wordTimings = await this.getWordTimings(audioPath, logger);
 
@@ -779,21 +1031,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       await this.generateKaraokeSubtitles(wordTimings, subtitlePath, logger);
 
       // 6. Merge scenes with audio and karaoke subtitles
-      progressTracker.updateProgress({
-        vslId: options.vslId,
-        stage: "merging",
-        progress: 85,
-        message: "Merging scenes with karaoke subtitles...",
-        status: "processing",
-      });
+      // progressTracker.updateProgress({
+      //   vslId: options.vslId,
+      //   stage: "merging",
+      //   progress: 85,
+      //   message: "Merging scenes with karaoke subtitles...",
+      //   status: "processing",
+      // });
 
-      await this.mergeScenesWithSubtitles(
-        sceneVideos,
-        videoPath,
-        audioPath,
-        subtitlePath,
-        logger
-      );
+      await this.mergeScenesAndAudio(sceneVideos, videoPath, audioPath, logger);
 
       // 7. Generate thumbnail
       progressTracker.updateProgress({
