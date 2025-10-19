@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
+import { spamPatternLearning } from "./spamPatternLearning";
 
 export class LeadQualificationService {
   private wss: WebSocketServer | null = null;
@@ -74,31 +75,36 @@ export class LeadQualificationService {
   }
 
   async queueIncomingMessage(
-    from: string,
-    message: string,
-    timestamp: number,
-    phoneNumberId?: string
-  ): Promise<void> {
-    await messageQueue.enqueueMessage(
-      from,
-      message,
-      timestamp,
-      this.handleIncomingMessage.bind(this),
-      phoneNumberId
-    );
-  }
+  from: string,
+  message: string,
+  timestamp: number,
+  phoneNumberId?: string,
+  messageId?: string // ✅ ADD THIS
+): Promise<void> {
+  console.log(`📨 Queueing message from ${from}, messageId: ${messageId}`);
+  await messageQueue.enqueueMessage(
+    from,
+    message,
+    timestamp,
+    this.handleIncomingMessage.bind(this),
+    phoneNumberId,
+    messageId // ✅ ADD THIS
+  );
+}
 
   private async handleIncomingMessage(
     from: string,
     message: string,
     timestamp: number,
-    phoneNumberId?: string
+    phoneNumberId?: string,
+    messageId?: string
   ): Promise<void> {
     try {
       console.log("=== INCOMING MESSAGE ===");
       console.log("From:", from);
       console.log("Message:", message);
       console.log("Phone Number ID:", phoneNumberId);
+      console.log("WhatsApp Message ID:", messageId);
 
       // Step 1: Find or create lead
       let lead = await storage.getLeadByPhone(from);
@@ -194,10 +200,16 @@ export class LeadQualificationService {
       }
 
       // Step 2: Find or create conversation
-      const conversations = await storage.getActiveConversations(lead.clientId);
-      let conversation = conversations.find((c) => c.leadId === lead.id);
+      // ✅ CHANGED: Look for ANY conversation (active or closed) for this lead
+      const allConversations = await storage.getAllConversations(lead.clientId);
+      let conversation = allConversations.find(
+        (c: any) => c.leadId === lead.id
+      );
+
+      let wasReopened = false;
 
       if (!conversation) {
+        // No conversation exists - create new one
         const newConv = await storage.createConversation({
           leadId: lead.id,
           clientId: lead.clientId,
@@ -209,8 +221,45 @@ export class LeadQualificationService {
         });
         conversation = { ...newConv, lead } as any;
         console.log("✅ New conversation created:", conversation?.id);
+      } else if (conversation.status === "closed") {
+        // ✅ SMART REOPENING: Conversation was closed (terminated spam)
+        console.log(
+          "🔄 Reopening previously closed conversation:",
+          conversation.id
+        );
+
+        // Reopen conversation but KEEP AI DISABLED (human review required)
+        await storage.updateConversation(conversation.id, {
+          status: "active",
+          isAiHandled: false, // ← AI stays OFF, human must review
+          lastMessageAt: new Date(),
+          reopenedAt: new Date(), // Track when it was reopened
+        } as any); // ✅ Type assertion to bypass TypeScript
+
+        // Update lead status from "spam" back to "not-a-lead" for human review
+        if (lead.status === "spam") {
+          const existingTags = Array.isArray(lead.tags) ? lead.tags : [];
+          await storage.updateLead(lead.id, {
+            status: "not-a-lead",
+            tags: [
+              ...existingTags.filter((t: string) => t !== "terminated"),
+              "reopened",
+            ], // Remove "terminated", add "reopened"
+          });
+        }
+
+        wasReopened = true;
+        console.log("✅ Conversation reopened - flagged for human review");
+
+        // Broadcast reopened conversation alert
+        this.broadcastUpdate({
+          type: "conversation_reopened",
+          conversationId: conversation.id,
+          lead: await storage.getLead(lead.id),
+          message: "Previously terminated conversation has new activity",
+        });
       } else {
-        console.log("✅ Existing conversation found:", conversation.id);
+        console.log("✅ Existing active conversation found:", conversation.id);
       }
 
       if (!conversation) {
@@ -219,14 +268,17 @@ export class LeadQualificationService {
       }
 
       // Step 3: Record incoming message
-      await storage.createMessage({
+      const savedMessage = await storage.createMessage({
         conversationId: conversation.id,
         content: message,
         sender: "lead",
         channel: "whatsapp",
         sentAt: new Date(timestamp * 1000),
         deliveredAt: new Date(),
+        metadata: messageId ? { whatsappMessageId: messageId } : undefined,
       });
+
+      console.log(`✅ Incoming message saved with metadata:`, savedMessage.metadata);
 
       await storage.markPreviousMessagesAsRead(conversation.id);
       await storage.incrementUnreadCount(conversation.id);
@@ -303,6 +355,21 @@ export class LeadQualificationService {
               "⛔ Disabling AI for this conversation - max redirects reached"
             );
 
+            const category =
+              message.toLowerCase().includes("food") ||
+              message.toLowerCase().includes("burger") ||
+              message.toLowerCase().includes("fries")
+                ? "food"
+                : message.toLowerCase().includes("shoe") ||
+                  message.toLowerCase().includes("clothing")
+                ? "retail"
+                : message.toLowerCase().includes("test")
+                ? "test"
+                : "other";
+
+            await spamPatternLearning.learnFromSpam(message, category);
+            console.log(`🧠 Learning complete for category: ${category}`);
+
             await storage.updateConversation(conversation.id, {
               qualificationScore: qualification.score.toString(),
               lastMessageAt: new Date(),
@@ -354,7 +421,10 @@ export class LeadQualificationService {
           });
 
           // Send redirect message
-          await whatsappService.sendTextMessage(from, aiResponse);
+          const redirectResult = await whatsappService.sendTextMessage(
+            from,
+            aiResponse
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -363,6 +433,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: redirectResult.messageId
+              ? { whatsappMessageId: redirectResult.messageId }
+              : undefined,
           });
 
           console.log(
@@ -450,7 +523,10 @@ export class LeadQualificationService {
 
           const handoffMessage =
             "Thanks for your message! You've been identified as a priority lead. A team member will respond within 5 minutes.";
-          await whatsappService.sendTextMessage(from, handoffMessage);
+          const handoffResult = await whatsappService.sendTextMessage(
+            from,
+            handoffMessage
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -459,6 +535,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: handoffResult.messageId
+              ? { whatsappMessageId: handoffResult.messageId }
+              : undefined,
           });
         } else {
           console.log("💬 Generating AI response...");
@@ -476,7 +555,10 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
-          await whatsappService.sendTextMessage(from, aiResponse);
+          const aiResult = await whatsappService.sendTextMessage(
+            from,
+            aiResponse
+          );
 
           await storage.createMessage({
             conversationId: conversation.id,
@@ -485,6 +567,9 @@ export class LeadQualificationService {
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
+            metadata: aiResult.messageId
+              ? { whatsappMessageId: aiResult.messageId }
+              : undefined,
           });
 
           console.log("✅ AI response sent");

@@ -11,6 +11,7 @@ import {
   insertLeadSchema,
   insertClientSchema,
   insertBookingSchema,
+  messages,
 } from "@shared/schema";
 
 import { whatsappService } from "./services/whatsapp";
@@ -26,6 +27,8 @@ import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 
 import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 
 // import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
@@ -101,13 +104,11 @@ function hasBookingConflict(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-
-   app.use("/api/stripe", requireAuth, stripeRouter);
+  app.use("/api/stripe", requireAuth, stripeRouter);
   // app.use("/api/stripe", stripeWebhookRouter);
   const httpServer = createServer(app);
 
   // app.use(vslapp);
- 
 
   let wss: WebSocketServer | null = null;
   function broadcastUpdate(data: any) {
@@ -316,11 +317,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const incomingMessage = whatsappService.parseWebhook(req.body);
 
       if (incomingMessage) {
+        console.log("📩 Parsed webhook:", {
+        from: incomingMessage.from,
+        message: incomingMessage.message.substring(0, 50),
+        messageId: incomingMessage.messageId, // ← Should see WhatsApp ID here
+        hasReaction: !!incomingMessage.reaction,
+        });
+
+        // ✅ Handle reactions
+        if (incomingMessage.reaction) {
+          console.log(
+            "😊 Received WhatsApp reaction:",
+            incomingMessage.reaction
+          );
+
+          try {
+            // Find the message by WhatsApp message ID
+            console.log(
+              `🔍 Looking for message with WhatsApp ID: ${incomingMessage.reaction.messageId}`
+            );
+
+            // Query messages with this WhatsApp message ID
+            const allMessages = await db
+              .select()
+              .from(messages)
+              .where(
+                sql`${messages.metadata}->>'whatsappMessageId' = ${incomingMessage.reaction.messageId}`
+              )
+              .limit(1);
+
+            if (allMessages.length === 0) {
+              console.log(
+                `❌ Message not found with WhatsApp ID: ${incomingMessage.reaction.messageId}`
+              );
+              return res.status(200).send("OK");
+            }
+
+            const message = allMessages[0];
+            console.log(`✅ Found message: ${message.id}`);
+
+            // Find lead who reacted
+            const lead = await storage.getLeadByPhone(incomingMessage.from);
+
+            if (!lead) {
+              console.log(
+                `❌ Lead not found for phone: ${incomingMessage.from}`
+              );
+              return res.status(200).send("OK");
+            }
+
+            console.log(`✅ Found lead: ${lead.firstName} ${lead.lastName}`);
+
+            // Add reaction
+            await storage.addReaction(message.id, {
+              emoji: incomingMessage.reaction.emoji,
+              userId: lead.id,
+              userName: `${lead.firstName} ${lead.lastName}`,
+            });
+
+            console.log(`✅ Reaction saved to database`);
+
+            // Get updated message
+            const updatedMessage = await storage.getMessage(message.id);
+
+            // Broadcast via WebSocket
+            broadcastUpdate({
+              type: "message_reacted",
+              messageId: message.id,
+              reactions: updatedMessage?.reactions,
+              conversationId: message.conversationId,
+            });
+
+            console.log(`✅ Reaction broadcasted via WebSocket`);
+          } catch (error) {
+            console.error("❌ Error processing reaction:", error);
+          }
+
+          return res.status(200).send("OK");
+        }
+
+        // Handle regular message
         await leadQualificationService.queueIncomingMessage(
           incomingMessage.from,
           incomingMessage.message,
           incomingMessage.timestamp,
-          incomingMessage.phoneNumberId
+          incomingMessage.phoneNumberId,
+          incomingMessage.messageId
         );
       }
 
@@ -602,9 +684,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Lead not found" });
       }
 
+      let whatsappMessageId = null;
+
       // Send message via appropriate channel
       if (channel === "whatsapp" && lead.phone) {
-        await whatsappService.sendTextMessage(lead.phone, content);
+        console.log("📤 Sending WhatsApp message...");
+
+        // ✅ Get the response to capture message ID
+        const waResponse = await fetch(
+          `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${
+                process.env.WHATSAPP_ACCESS_TOKEN ||
+                process.env.META_ACCESS_TOKEN
+              }`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: lead.phone.replace(/\D/g, ""),
+              type: "text",
+              text: {
+                body: content,
+              },
+            }),
+          }
+        );
+
+        const waData = await waResponse.json();
+
+        if (waResponse.ok && waData.messages?.[0]?.id) {
+          whatsappMessageId = waData.messages[0].id;
+          console.log("✅ WhatsApp message sent, ID:", whatsappMessageId);
+        } else {
+          console.error("❌ WhatsApp send failed:", waData);
+        }
       }
 
       // Record message
@@ -615,7 +731,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         channel,
         sentAt: new Date(),
         deliveredAt: new Date(),
+        metadata: whatsappMessageId ? { whatsappMessageId } : undefined,
       });
+
+      console.log("✅ Message saved with metadata:", message.metadata);
 
       // Update conversation last message time
       await storage.updateConversation(conversationId, {
@@ -665,6 +784,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  // ==================== MESSAGE REACTION ROUTES ====================
+
+  // Add reaction to message
+  app.post("/api/messages/:messageId/react", async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      const { messageId } = req.params;
+      const { emoji } = req.body;
+
+      if (!emoji) {
+        return res.status(400).json({ error: "Emoji is required" });
+      }
+
+      console.log(`😊 User reacting to message ${messageId} with ${emoji}`);
+
+      // Get message to find conversation
+      const message = await storage.getMessage(messageId);
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      // ✅ ADD: Debug the message
+    console.log(`📋 Message details:`, {
+      id: message.id,
+      sender: message.sender,
+      content: message.content.substring(0, 50) + '...',
+      metadata: message.metadata,
+    });
+
+      // Get conversation and lead details
+      const conversation = await storage.getConversation(
+        message.conversationId
+      );
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+
+      const lead = await storage.getLead(conversation.leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      console.log(`👤 Lead details:`, {
+      id: lead.id,
+      name: `${lead.firstName} ${lead.lastName}`,
+      phone: lead.phone,
+    });
+
+      // Add reaction to database
+      await storage.addReaction(messageId, {
+        emoji,
+        userId: req.user.id,
+        userName: `${req.user.firstName} ${req.user.lastName}`,
+      });
+
+      console.log(`✅ Reaction saved to database`);
+
+      // ✅ Type assert metadata
+      const metadata = message.metadata as {
+        whatsappMessageId?: string;
+      } | null;
+
+      // ✅ ADD: Debug condition checks
+    console.log(`🔍 Checking WhatsApp send conditions:`);
+    console.log(`  - message.sender === "lead": ${message.sender === "lead"}`);
+    console.log(`  - metadata exists: ${!!metadata}`);
+    console.log(`  - metadata.whatsappMessageId: ${metadata?.whatsappMessageId}`);
+    console.log(`  - lead.phone exists: ${!!lead.phone}`);
+
+      // ✅ Send reaction to WhatsApp if message was from lead
+      if (
+        message.sender === "lead" &&
+        metadata?.whatsappMessageId &&
+        lead.phone
+      ) {
+        console.log(`📤 Sending reaction to WhatsApp...`);
+        console.log(`  - WhatsApp Message ID: ${metadata.whatsappMessageId}`);
+        console.log(`  - Lead Phone: ${lead.phone}`);
+        console.log(`  - Emoji: ${emoji}`);
+
+        const sent = await whatsappService.sendReaction(
+          lead.phone,
+          metadata.whatsappMessageId,
+          emoji
+        );
+
+        if (sent) {
+          console.log(`✅ Reaction sent to WhatsApp successfully`);
+        } else {
+          console.log(`⚠️ Failed to send reaction to WhatsApp`);
+        }
+      }
+      else {
+        console.log(`⚠️ NOT sending reaction to WhatsApp because:`);
+      if (message.sender !== "lead") {
+        console.log(`   ❌ Message is not from lead (sender: ${message.sender})`);
+      }
+      if (!metadata?.whatsappMessageId) {
+        console.log(`   ❌ No WhatsApp message ID in metadata`);
+      }
+      if (!lead.phone) {
+        console.log(`   ❌ Lead has no phone number`);
+      }
+      }
+
+      // Get updated message with reactions
+      const updatedMessage = await storage.getMessage(messageId);
+
+      // Broadcast to WebSocket
+      broadcastUpdate({
+        type: "message_reacted",
+        messageId,
+        reactions: updatedMessage?.reactions,
+        conversationId: message.conversationId,
+      });
+
+      res.json({ success: true, reactions: updatedMessage?.reactions });
+    } catch (error) {
+      console.error("Error adding reaction:", error);
+      res.status(500).json({ error: "Failed to add reaction" });
+    }
+  });
+
+  // Remove reaction from message
+  app.delete("/api/messages/:messageId/react", async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      const { messageId } = req.params;
+      const { emoji } = req.body;
+
+      if (!emoji) {
+        return res.status(400).json({ error: "Emoji is required" });
+      }
+
+      // Get message to find conversation
+      const message = await storage.getMessage(messageId);
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      // Remove reaction from database
+      await storage.removeReaction(messageId, req.user.id, emoji);
+
+      // Get updated message with reactions
+      const updatedMessage = await storage.getMessage(messageId);
+
+      // Broadcast to WebSocket
+      broadcastUpdate({
+        type: "message_reacted",
+        messageId,
+        reactions: updatedMessage?.reactions,
+        conversationId: message.conversationId,
+      });
+
+      res.json({ success: true, reactions: updatedMessage?.reactions });
+    } catch (error) {
+      console.error("Error removing reaction:", error);
+      res.status(500).json({ error: "Failed to remove reaction" });
+    }
+  });
 
   // ==================== QUICKREPLIES/TEMPLATES ROUTES  ==========================
 

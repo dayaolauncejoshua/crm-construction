@@ -14,6 +14,7 @@ import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
+import { spamPatternLearning } from "./services/spamPatternLearning";
 
 const { Pool } = pg;
 config();
@@ -144,6 +145,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // ✅ INITIALIZE SERVICES BEFORE STARTING SERVER
+  console.log("🚀 Initializing services...");
+
+  try {
+    await spamPatternLearning.initialize();
+    console.log("✅ Spam pattern learning initialized");
+  } catch (error) {
+    console.error("❌ Failed to initialize spam pattern learning:", error);
+    // Continue anyway - service will initialize on first use
+  }
+
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -171,5 +184,6 @@ app.use((req, res, next) => {
     log(`🚀 Server running on port ${PORT}`);
     log(`📱 Environment: ${app.get("env")}`);
     log(`🔐 Session store: PostgreSQL`);
+    log(`🧠 AI Pattern Learning: Active`);
   });
 })();
