@@ -1,5 +1,7 @@
 // server/services/whatsapp.ts
 
+import { stat } from "fs";
+
 export interface WhatsAppMessage {
   to: string;
   type: string;
@@ -235,19 +237,19 @@ export class WhatsAppService {
     messageId: string;
     timestamp: number;
   };
+  typing?: {
+    isTyping: boolean;
+  }
 } | null {
   try {
     const entry = payload.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
 
-    // ✅ CHECK FOR READ RECEIPTS FIRST
-    if (value?.statuses && value.statuses.length > 0) {
+    if(value?.statuses && value.statuses.length > 0){
       const status = value.statuses[0];
-      
-      if (status.status === "read") {
-        console.log("📖 Received read receipt for message:", status.id);
-        
+
+      if (status.status === "read"){
         return {
           from: status.recipient_id || "",
           message: "",
@@ -260,14 +262,11 @@ export class WhatsAppService {
           },
         };
       }
-      
-      // Handle other statuses (delivered, sent, failed)
-      console.log(`📬 Message status update: ${status.status} for ${status.id}`);
-      return null; // Ignore other status updates for now
+
+      return null;
     }
 
     const messages = value?.messages?.[0];
-
     if (!messages) return null;
 
     console.log("🔍 Parsing webhook, message ID:", messages.id);

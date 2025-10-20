@@ -52,6 +52,7 @@ import {
   Target,
   XCircle,
   Check,
+  Eye,
 } from "lucide-react";
 import { space } from "postcss/lib/list";
 import {
@@ -137,6 +138,188 @@ const DateDivider = ({ date }: { date: string }) => {
   );
 };
 
+// Message Info Modal Component
+const MessageInfoModal = ({
+  message,
+  isOpen,
+  onClose,
+}: {
+  message: any;
+  isOpen: boolean;
+  onClose: () => void;
+}) => {
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleEscape);
+      return () => window.removeEventListener("keydown", handleEscape);
+    }
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const formatDetailedTime = (date: Date | string | null) => {
+    if (!date) return "Not available";
+    const d = new Date(date);
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Info className="w-5 h-5 text-blue-600" />
+              Message Info
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-4 space-y-6">
+            {/* Message Preview */}
+            <div>
+              <p className="text-xs text-slate-500 font-medium mb-1">Message</p>
+              <p className="text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 line-clamp-3">
+                {message.content}
+              </p>
+            </div>
+
+            {/* Timestamps */}
+            <div className="space-y-4">
+              {/* Sent */}
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Send className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900">Sent</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {formatDetailedTime(message.sentAt)}
+                  </p>
+                </div>
+                <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+              </div>
+
+              {/* Delivered */}
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    message.deliveredAt ? "bg-green-50" : "bg-slate-50"
+                  }`}
+                >
+                  <CheckCircle
+                    className={`w-5 h-5 ${
+                      message.deliveredAt ? "text-green-600" : "text-slate-400"
+                    }`}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900">
+                    Delivered
+                  </p>
+                  <p
+                    className={`text-xs mt-0.5 ${
+                      message.deliveredAt ? "text-slate-600" : "text-slate-400"
+                    }`}
+                  >
+                    {formatDetailedTime(message.deliveredAt)}
+                  </p>
+                </div>
+                {message.deliveredAt && (
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                )}
+              </div>
+
+              {/* Read */}
+              {message.sender !== "lead" && (
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      message.readAt ? "bg-blue-50" : "bg-slate-50"
+                    }`}
+                  >
+                    <Eye
+                      className={`w-5 h-5 ${
+                        message.readAt ? "text-blue-600" : "text-slate-400"
+                      }`}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900">Read</p>
+                    <p
+                      className={`text-xs mt-0.5 ${
+                        message.readAt ? "text-slate-600" : "text-slate-400"
+                      }`}
+                    >
+                      {formatDetailedTime(message.readAt)}
+                    </p>
+                  </div>
+                  {message.readAt && (
+                    <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Status Summary */}
+            <div className="pt-4 border-t border-slate-200">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  {message.readAt
+                    ? `Read ${Math.floor(
+                        (new Date(message.readAt).getTime() -
+                          new Date(message.sentAt).getTime()) /
+                          1000
+                      )}s after sending`
+                    : message.deliveredAt
+                    ? `Delivered ${Math.floor(
+                        (new Date(message.deliveredAt).getTime() -
+                          new Date(message.sentAt).getTime()) /
+                          1000
+                      )}s after sending`
+                    : "Sending..."}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-xl">
+            <Button onClick={onClose} className="w-full" variant="outline">
+              Close
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
 export default function Conversations() {
   usePageTitle("Conversations");
 
@@ -195,14 +378,19 @@ export default function Conversations() {
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const { data: templates } = useQuery({
     queryKey: ["/api/quick-replies", selectedClientId],
     enabled: !!selectedClientId,
   });
 
   const [typingIndicators, setTypingIndicators] = useState<
-    Record<string, { isTyping: boolean; sender: string }>
+    Record<string, { isTyping: boolean; sender: string; leadName?: string }>
   >({});
+
+  const [showMessageInfo, setShowMessageInfo] = useState<string | null>(null);
 
   // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
@@ -309,6 +497,42 @@ export default function Conversations() {
       });
     },
   });
+
+  // Add this function to handle typing
+  const handleTyping = () => {
+    if (!selectedConversation) return;
+
+    // If not already typing, send "started typing"
+    if (!isTyping) {
+      setIsTyping(true);
+      fetch(`/api/conversations/${selectedConversation.id}/typing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ isTyping: true }),
+      }).catch((err) => console.error("Failed to send typing indicator:", err));
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set timeout to stop typing after 3 seconds of no activity
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+      if (selectedConversation) {
+        fetch(`/api/conversations/${selectedConversation.id}/typing`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ isTyping: false }),
+        }).catch((err) =>
+          console.error("Failed to stop typing indicator:", err)
+        );
+      }
+    }, 3000);
+  };
 
   // React to message mutation
   const reactToMessageMutation = useMutation({
@@ -655,14 +879,35 @@ export default function Conversations() {
 
     switch (wsData.type) {
       case "typing_indicator":
-        // Update typing state
+        console.log("⌨️ Typing indicator received:", wsData);
+
         setTypingIndicators((prev) => ({
           ...prev,
           [wsData.conversationId]: {
             isTyping: wsData.isTyping,
             sender: wsData.sender,
+            leadName: wsData.leadName, // ✅ ADD THIS
           },
         }));
+
+        // Auto-clear after 5 seconds if still showing
+        if (wsData.isTyping) {
+          setTimeout(() => {
+            setTypingIndicators((prev) => {
+              const current = prev[wsData.conversationId];
+              if (current && current.isTyping) {
+                return {
+                  ...prev,
+                  [wsData.conversationId]: {
+                    ...current,
+                    isTyping: false,
+                  },
+                };
+              }
+              return prev;
+            });
+          }, 5000);
+        }
         break;
 
       case "conversation_updated":
@@ -1522,6 +1767,25 @@ export default function Conversations() {
                                     </button>
                                   )}
 
+                                  {/* Message Info Button - NEW */}
+                                  {!message.isStatusMessage &&
+                                    message.sender !== "lead" && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShowMessageInfo(message.id);
+                                        }}
+                                        className={`absolute top-1 ${
+                                          message.sender === "lead"
+                                            ? "-right-14"
+                                            : "-left-14"
+                                        } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 rounded-full p-1 shadow-sm z-20`}
+                                        title="Message Info"
+                                      >
+                                        <Info className="w-3 h-3 text-slate-600" />
+                                      </button>
+                                    )}
+
                                   {/* Reaction Picker */}
                                   {showReactionPicker === message.id && (
                                     <>
@@ -1589,30 +1853,64 @@ export default function Conversations() {
                     })()
                   )}
 
-                  {/* Typing Indicator */}
+                  {/* Message Info Modal */}
+                  {showMessageInfo &&
+                    (() => {
+                      const selectedMessage = messages?.find(
+                        (m: any) => m.id === showMessageInfo
+                      );
+                      return selectedMessage ? (
+                        <MessageInfoModal
+                          message={selectedMessage}
+                          isOpen={!!showMessageInfo}
+                          onClose={() => setShowMessageInfo(null)}
+                        />
+                      ) : null;
+                    })()}
+
+                  {/* Typing Indicator - IMPROVED VERSION */}
                   {typingIndicators[selectedConversation?.id]?.isTyping && (
-                    <div className="flex justify-start">
-                      <div className="bg-blue-50 px-4 py-3 rounded-lg border border-blue-200 shadow-sm">
+                    <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-200">
+                      <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
                         <div className="flex items-center space-x-3">
-                          <Bot className="w-4 h-4 text-blue-600" />
+                          {/* Icon based on sender */}
+                          {typingIndicators[selectedConversation.id].sender ===
+                          "ai" ? (
+                            <Bot className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <UserCheck className="w-4 h-4 text-green-600" />
+                          )}
+
+                          {/* Animated dots */}
                           <div className="flex space-x-1">
                             <div
-                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
-                              style={{ animationDelay: "0ms" }}
+                              className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                              style={{
+                                animationDelay: "0ms",
+                                animationDuration: "1s",
+                              }}
                             ></div>
                             <div
-                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
-                              style={{ animationDelay: "150ms" }}
+                              className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                              style={{
+                                animationDelay: "150ms",
+                                animationDuration: "1s",
+                              }}
                             ></div>
                             <div
-                              className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
-                              style={{ animationDelay: "300ms" }}
+                              className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                              style={{
+                                animationDelay: "300ms",
+                                animationDuration: "1s",
+                              }}
                             ></div>
                           </div>
-                          <span className="text-sm text-blue-700 font-medium">
+
+                          {/* Text - Updated to remove "Lead is typing" */}
+                          <span className="text-sm text-slate-600 font-medium">
                             {typingIndicators[selectedConversation.id]
                               .sender === "ai"
-                              ? "AI is responding..."
+                              ? "AI is typing..."
                               : "Agent is typing..."}
                           </span>
                         </div>
@@ -1670,7 +1968,10 @@ export default function Conversations() {
                   <Input
                     placeholder="Type your message..."
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleTyping(); // ✅ Call typing indicator
+                    }}
                     onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                     disabled={sendMessageMutation.isPending}
                     className="flex-1"

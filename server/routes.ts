@@ -927,6 +927,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+// Typing indicator endpoint - Internal only (WebSocket broadcast)
+app.post("/api/conversations/:conversationId/typing", async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { isTyping } = req.body;
+
+    const conversation = await storage.getConversation(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    // ✅ Only broadcast to other agents via WebSocket
+    // Note: WhatsApp Business API doesn't support sending typing indicators to users
+    broadcastUpdate({
+      type: "typing_indicator",
+      conversationId,
+      isTyping,
+      sender: "human",
+      userId: req.user?.id, // Track which agent is typing
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error broadcasting typing indicator:", error);
+    res.status(500).json({ message: "Failed to broadcast typing indicator" });
+  }
+});
+
   // ==================== MESSAGE REACTION ROUTES ====================
 
   // Add reaction to message
