@@ -1,3 +1,5 @@
+// server/services/whatsapp.ts
+
 export interface WhatsAppMessage {
   to: string;
   type: string;
@@ -169,6 +171,44 @@ export class WhatsAppService {
     }
   }
 
+  async markMessageAsRead(messageId: string): Promise<boolean> {
+  try {
+    console.log("📬 Marking WhatsApp message as read:", messageId);
+
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          status: "read",
+          message_id: messageId,
+        }),
+      }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ WhatsApp mark as read error:", {
+        status: response.status,
+        data: responseData,
+      });
+      return false;
+    }
+
+    console.log("✅ WhatsApp message marked as read:", messageId);
+    return true;
+  } catch (error) {
+    console.error("❌ Error marking WhatsApp message as read:", error);
+    return false;
+  }
+}
+
   async sendAuditResult(
     to: string,
     firstName: string,
@@ -181,55 +221,85 @@ export class WhatsAppService {
     return await this.sendTextMessage(to, message);
   }
 
-  parseWebhook(payload: any): {
-    from: string;
-    message: string;
+ parseWebhook(payload: any): {
+  from: string;
+  message: string;
+  timestamp: number;
+  phoneNumberId: string;
+  messageId?: string;
+  reaction?: {
+    messageId: string;
+    emoji: string;
+  };
+  readReceipt?: {
+    messageId: string;
     timestamp: number;
-    phoneNumberId: string;
-    messageId?: string;
-    reaction?: {
-      messageId: string;
-      emoji: string;
-    };
-  } | null {
-    try {
-      const entry = payload.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const messages = value?.messages?.[0];
+  };
+} | null {
+  try {
+    const entry = payload.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
 
-      if (!messages) return null;
-
-      console.log("🔍 Parsing webhook, message ID:", messages.id);
-
-      // Check if it's a reaction
-      if (messages.type === "reaction") {
+    // ✅ CHECK FOR READ RECEIPTS FIRST
+    if (value?.statuses && value.statuses.length > 0) {
+      const status = value.statuses[0];
+      
+      if (status.status === "read") {
+        console.log("📖 Received read receipt for message:", status.id);
+        
         return {
-          from: messages.from,
+          from: status.recipient_id || "",
           message: "",
-          timestamp: parseInt(messages.timestamp),
+          timestamp: parseInt(status.timestamp),
           phoneNumberId: value.metadata.phone_number_id,
-          messageId: messages.id,
-          reaction: {
-            messageId: messages.reaction.message_id,
-            emoji: messages.reaction.emoji,
+          messageId: status.id,
+          readReceipt: {
+            messageId: status.id,
+            timestamp: parseInt(status.timestamp),
           },
         };
       }
+      
+      // Handle other statuses (delivered, sent, failed)
+      console.log(`📬 Message status update: ${status.status} for ${status.id}`);
+      return null; // Ignore other status updates for now
+    }
 
-      // Regular text message
+    const messages = value?.messages?.[0];
+
+    if (!messages) return null;
+
+    console.log("🔍 Parsing webhook, message ID:", messages.id);
+
+    // Check if it's a reaction
+    if (messages.type === "reaction") {
       return {
         from: messages.from,
-        message: messages.text?.body || "",
+        message: "",
         timestamp: parseInt(messages.timestamp),
         phoneNumberId: value.metadata.phone_number_id,
         messageId: messages.id,
+        reaction: {
+          messageId: messages.reaction.message_id,
+          emoji: messages.reaction.emoji,
+        },
       };
-    } catch (error) {
-      console.error("Error parsing WhatsApp webhook:", error);
-      return null;
     }
+
+    // Regular text message
+    return {
+      from: messages.from,
+      message: messages.text?.body || "",
+      timestamp: parseInt(messages.timestamp),
+      phoneNumberId: value.metadata.phone_number_id,
+      messageId: messages.id,
+    };
+  } catch (error) {
+    console.error("Error parsing WhatsApp webhook:", error);
+    return null;
   }
+}
 }
 
 export const whatsappService = new WhatsAppService();

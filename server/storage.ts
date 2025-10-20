@@ -745,30 +745,28 @@ export class DatabaseStorage implements IStorage {
 
     const currentReactions = (message.reactions as any[]) || [];
 
-    // Check if user already reacted with this emoji
-    const existingReactionIndex = currentReactions.findIndex(
-      (r: any) => r.userId === reaction.userId && r.emoji === reaction.emoji
+    // ✅ FIX: Remove any existing reaction from this user first
+    const filteredReactions = currentReactions.filter(
+      (r: any) => r.userId !== reaction.userId
     );
 
-    if (existingReactionIndex === -1) {
-      // Add new reaction
-      const newReactions = [
-        ...currentReactions,
-        {
-          ...reaction,
-          timestamp: new Date().toISOString(),
-        },
-      ];
+    // ✅ Add the new reaction (replacing old one if it existed)
+    const newReactions = [
+      ...filteredReactions,
+      {
+        ...reaction,
+        timestamp: new Date().toISOString(),
+      },
+    ];
 
-      await db
-        .update(messages)
-        .set({ reactions: newReactions as any })
-        .where(eq(messages.id, messageId));
+    await db
+      .update(messages)
+      .set({ reactions: newReactions as any })
+      .where(eq(messages.id, messageId));
 
-      console.log(
-        `✅ Added reaction ${reaction.emoji} to message ${messageId}`
-      );
-    }
+    console.log(
+      `✅ Added/replaced reaction ${reaction.emoji} for user ${reaction.userId} on message ${messageId}`
+    );
   }
 
   async removeReaction(
@@ -781,17 +779,48 @@ export class DatabaseStorage implements IStorage {
 
     const currentReactions = (message.reactions as any[]) || [];
 
-    // Remove the reaction
-    const newReactions = currentReactions.filter(
-      (r: any) => !(r.userId === userId && r.emoji === emoji)
-    );
+    // ✅ FIX: If emoji is empty, remove ALL reactions from this user
+    const newReactions =
+      !emoji || emoji.trim() === ""
+        ? currentReactions.filter((r: any) => r.userId !== userId)
+        : currentReactions.filter(
+            (r: any) => !(r.userId === userId && r.emoji === emoji)
+          );
 
     await db
       .update(messages)
       .set({ reactions: newReactions as any })
       .where(eq(messages.id, messageId));
 
-    console.log(`✅ Removed reaction ${emoji} from message ${messageId}`);
+    console.log(
+      emoji
+        ? `✅ Removed reaction ${emoji} from user ${userId} on message ${messageId}`
+        : `✅ Removed all reactions from user ${userId} on message ${messageId}`
+    );
+  }
+
+  async removeAllReactionsFromUser(messageId: string, userId: string) {
+    const message = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+
+    if (!message[0]) return null;
+
+    const currentReactions = (message[0].reactions as any[]) || [];
+
+    // Remove all reactions from this user
+    const updatedReactions = currentReactions.filter(
+      (r: any) => r.userId !== userId
+    );
+
+    await db
+      .update(messages)
+      .set({ reactions: updatedReactions })
+      .where(eq(messages.id, messageId));
+
+    return this.getMessage(messageId);
   }
 
   // Quick Reply Templates
