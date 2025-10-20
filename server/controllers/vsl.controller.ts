@@ -3,7 +3,7 @@ import { vslGenerator } from "server/services/vsl-generator";
 import { storage } from "server/storage";
 
 // fetch clientID
-export const getClientId = async (req, res) => {
+export const getClientId = async (req: any, res: any) => {
   try {
     const { clientId } = req.params;
 
@@ -17,7 +17,7 @@ export const getClientId = async (req, res) => {
 };
 
 // Create new VSL
-export const createVSL = async (req, res) => {
+export const createVSL = async (req: any, res: any) => {
   try {
     const {
       title,
@@ -72,7 +72,7 @@ export const createVSL = async (req, res) => {
 };
 
 // Get single VSL
-export const getSingleVSL = async (req, res) => {
+export const getSingleVSL = async (req: any, res: any) => {
   try {
     const { vslId } = req.params;
     const vsl = await storage.getVSL(vslId);
@@ -89,7 +89,7 @@ export const getSingleVSL = async (req, res) => {
 };
 
 // Update VSL
-export const updateVSL = async (req, res) => {
+export const updateVSL = async (req: any, res: any) => {
   try {
     const { vslId } = req.params;
     const updates = req.body;
@@ -103,7 +103,7 @@ export const updateVSL = async (req, res) => {
 };
 
 // Delete VSL
-export const deleteVSL = async (req, res) => {
+export const deleteVSL = async (req: any, res: any) => {
   try {
     const { vslId } = req.params;
     await storage.deleteVSL(vslId);
@@ -115,7 +115,7 @@ export const deleteVSL = async (req, res) => {
 };
 
 //Track VSL view
-export const trackVSLView = async (req, res) => {
+export const trackVSLView = async (req: any, res: any) => {
   try {
     const { vslId } = req.params;
     await storage.incrementVSLViews(vslId);
@@ -140,8 +140,8 @@ async function generateVideoAsync(
       {
         script,
         title,
-        niche, // ✅ make sure niche is passed
-        clientId: vslId, // you can change this to actual clientId if you want
+        niche,
+        clientId: vslId,
       }
     );
 

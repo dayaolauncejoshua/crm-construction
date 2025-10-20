@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { queryClient } from "@/lib/queryClient";
 import { useEffect } from "react";
+import TranscriptModal from "@/components/TranscriptModal";
+
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -68,6 +70,7 @@ export default function Leads() {
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
@@ -567,6 +570,19 @@ export default function Leads() {
                           <Separator />
 
                           {/* Actions */}
+                          {/* <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openConversation(lead.id);
+                            }}
+                          >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Open Conversation
+                          </Button> */}
+                          {/* Actions */}
                           <Button
                             variant="default"
                             size="sm"
@@ -580,11 +596,30 @@ export default function Leads() {
                             Open Conversation
                           </Button>
 
+                          {/* 🔽 New button right below */}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="w-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (lead.callId) setSelectedCallId(lead.callId);
+                              else
+                                alert(
+                                  "No call transcript available for this lead."
+                                );
+                            }}
+                          >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            View Transcript
+                          </Button>
+
                           {/* Created Date */}
                           <div className="text-xs text-slate-400 text-center">
                             Created{" "}
                             {new Date(lead.createdAt).toLocaleDateString()}
                           </div>
+                          {/* 🆕 Transcript Modal goes here */}
                         </CardContent>
                       </Card>
                     ))}
@@ -595,6 +630,11 @@ export default function Leads() {
           )}
         </Tabs>
       </main>
+
+      <TranscriptModal
+        callId={selectedCallId}
+        onClose={() => setSelectedCallId(null)}
+      />
     </div>
   );
 }

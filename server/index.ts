@@ -15,6 +15,9 @@ import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
+import transferRouter from "./routes/transfer.route";
+import leadsRouter from "./routes/leads.route";
+import transcriptsRouter from "./routes/transcripts.route";
 
 const { Pool } = pg;
 config();
@@ -81,6 +84,10 @@ const PgSession = connectPgSimple(session);
 const isProduction = process.env.NODE_ENV === "production";
 app.use("/api/twilioCall-webhook", express.raw({ type: "application/json" }));
 app.use("/api/twilioCall-webhook", voice_AI_CallRouter);
+app.use("/api/transfer-to-human", transferRouter);
+app.use("/api/leads", leadsRouter);
+app.use("/api/transcripts", transcriptsRouter);
+
 app.use(
   session({
     store: new PgSession({
