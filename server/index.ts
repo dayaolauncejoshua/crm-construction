@@ -15,9 +15,14 @@ import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
+
 import transferRouter from "./routes/transfer.route";
 import leadsRouter from "./routes/leads.route";
 import transcriptsRouter from "./routes/transcripts.route";
+
+import queueRouter from "./routes/queue.route";
+import callsRouter from "./routes/calls.route";
+import twilioRouter from "./routes/twilio.route";
 
 const { Pool } = pg;
 config();
@@ -82,6 +87,7 @@ app.use("/api/notion-sops", notionSOPsRouter);
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
 const isProduction = process.env.NODE_ENV === "production";
+
 app.use("/api/twilioCall-webhook", express.raw({ type: "application/json" }));
 app.use("/api/twilioCall-webhook", voice_AI_CallRouter);
 app.use("/api/transfer-to-human", transferRouter);
