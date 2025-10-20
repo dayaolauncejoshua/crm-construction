@@ -512,7 +512,6 @@ YOUR EXPERTISE:
 - 10+ years in commercial & residential construction
 - Experience with projects from ₱2M to ₱50M+
 - Specialties: Commercial buildings, residential developments, fit-outs
-- Serving Central Luzon, Northern Luzon (La Union, Ilocos, Pangasinan)
 
 CONVERSATION SO FAR:
 ${conversationText}${lastAIMessageText}
@@ -525,12 +524,22 @@ RESPONSE STRATEGY:
 **If they provided details:**
 → Acknowledge EVERY specific detail they shared (budget, location, timeline, type)
 → Show relevant experience: "We've done similar projects in [location]"
-→ Offer site visit with specific days/times
+→ Offer site visit with specific days/times (e.g., "Are you available Thursday or Friday this week?")
 
-**If they confirmed meeting:**
-→ Confirm the day/time they chose
-→ Ask for address or offer to send calendar invite
+**If they said "this week" or "next week" without specific day:**
+→ "Great! Which day works best for you? I have availability on [specific days]."
+→ DO NOT ask other questions until day is confirmed
+→ DO NOT say "I'll send a calendar invite" until day is confirmed
+
+**If they confirmed a specific day (e.g., "Thursday", "Friday", "November 1"):**
+→ Confirm: "Perfect! Let's schedule for [day]. What time works for you - morning or afternoon?"
+→ Then ask for address
+→ Mention what you'll discuss
+
+**If they confirmed meeting with all details (day + time + location):**
+→ "Excellent! I'll send you a calendar invite for [day] at [time] at [location]."
 → ONE sentence about what you'll discuss
+→ DO NOT ask any more questions
 
 **If they're hesitant or shopping around:**
 → Provide value: mention similar project timelines/outcomes
@@ -584,6 +593,109 @@ Respond naturally and move the conversation forward:`;
   } catch (error) {
     console.error("Error generating AI response:", error);
     return "Thank you for your message. A team member will respond shortly.";
+  }
+}
+
+export interface BookingIntent {
+  wantsToBook: boolean;
+  confidence: number;
+  proposedDateTime?: {
+    date?: string;
+    time?: string;
+    isFlexible: boolean;
+  };
+  location?: string;
+  meetingType?: "site-visit" | "consultation" | "follow-up";
+  reasoning: string;
+}
+
+export async function detectBookingIntent(
+  conversationHistory: any[],
+  leadData: any
+): Promise<BookingIntent> {
+  try {
+    const conversationText = conversationHistory
+      .map((msg) => `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`)
+      .join("\n");
+
+    const prompt = `You are a booking intent detector for a construction company.
+
+CONVERSATION:
+${conversationText}
+
+**TASK:** Detect if the customer wants to schedule a meeting AND has provided a specific date/day.
+
+**HIGH CONFIDENCE BOOKING (wantsToBook: true, confidence > 0.8):**
+✅ Specific day mentioned: "Thursday", "Friday", "November 1", "next Monday"
+✅ Accepts specific day from agent: Agent: "How about Thursday?" → Lead: "Yes, Thursday works"
+✅ Provides exact date: "October 21", "21st", "the 25th"
+
+**MEDIUM CONFIDENCE (wantsToBook: true, confidence 0.5-0.7):**
+⚠️ Vague timing: "this week", "next week", "soon", "in a few days"
+⚠️ Shows interest but no commitment: "I'd like to meet sometime"
+⚠️ Asks when agent is available without committing to a day
+
+**LOW CONFIDENCE (wantsToBook: false):**
+❌ Just asking questions about services
+❌ Vague interest: "maybe later", "I'll think about it"
+❌ Still gathering information
+
+**CRITICAL RULES:**
+1. If lead says "this week" or "next week" WITHOUT a specific day → confidence 0.5-0.6 MAX
+2. If lead says "I'm available Thursday" or "Let's meet Friday" → confidence 0.85+
+3. If lead accepts agent's suggested day ("Yes, Thursday works") → confidence 0.90+
+4. Don't mark high confidence unless a SPECIFIC day is mentioned
+
+**EXTRACT IF MENTIONED:**
+- Specific date/day ("Thursday", "Friday", "March 15", "21st", "next Monday")
+- Specific time ("2PM", "afternoon", "morning", "10 AM")
+- Location/address
+- Meeting type (site visit vs office consultation)
+
+Respond with JSON only:
+{
+  "wantsToBook": true/false,
+  "confidence": 0.85,
+  "proposedDateTime": {
+    "date": "Thursday" or null if not specific,
+    "time": "2PM" or null,
+    "isFlexible": true/false
+  },
+  "meetingType": "site-visit" or "consultation" or null,
+  "location": "site address" or null,
+  "reasoning": "Brief explanation - WHY this confidence level?"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a booking intent analyzer. Respond only with valid JSON.",
+        },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    return {
+      wantsToBook: result.wantsToBook ?? false,
+      confidence: result.confidence ?? 0,
+      proposedDateTime: result.proposedDateTime,
+      location: result.location,
+      meetingType: result.meetingType || "consultation",
+      reasoning: result.reasoning || "Unable to determine booking intent",
+    };
+  } catch (error) {
+    console.error("Error detecting booking intent:", error);
+    return {
+      wantsToBook: false,
+      confidence: 0,
+      reasoning: "Error analyzing booking intent",
+    };
   }
 }
 

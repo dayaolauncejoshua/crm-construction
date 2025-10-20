@@ -54,6 +54,7 @@ import {
   Check,
   Eye,
 } from "lucide-react";
+import { BookingApprovalNotification } from "@/components/BookingApprovalNotification";
 import { space } from "postcss/lib/list";
 import {
   Dialog,
@@ -434,6 +435,18 @@ export default function Conversations() {
       return response.json();
     },
     enabled: !!selectedClientId,
+  });
+
+  const { data: pendingBookings = [] } = useQuery({
+    queryKey: ["/api/bookings", selectedClientId, "pending"],
+    queryFn: async () => {
+      const response = await fetch(`/api/bookings/${selectedClientId}/pending`, {
+        credentials: "include",
+      });
+      return response.json();
+    },
+    enabled: !!selectedClientId,
+    refetchInterval: 5000, // Check every 5 seconds
   });
 
   // Mark as read mutation
@@ -1430,6 +1443,20 @@ export default function Conversations() {
         <div className="flex-1 flex flex-col">
           {selectedConversation ? (
             <>
+            {/* Pending Booking Notifications */}
+            {pendingBookings.length > 0 && (
+                <div className="p-4 space-y-3 bg-amber-50/50 border-b border-amber-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-semibold text-amber-900">
+                      {pendingBookings.length} Booking{pendingBookings.length > 1 ? "s" : ""} Awaiting Approval
+                    </span>
+                  </div>
+                  {pendingBookings.map((booking: any) => (
+                    <BookingApprovalNotification key={booking.id} booking={booking} />
+                  ))}
+                </div>
+              )}
               <div className="bg-white border-b border-slate-200 p-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -1522,7 +1549,7 @@ export default function Conversations() {
                                 {/* YOUR EXISTING MESSAGE CODE - DON'T CHANGE THIS */}
                                 <div className="relative max-w-xs lg:max-w-md group">
                                   <div
-                                    className={`px-4 py-2 rounded-lg ${
+                                    className={`px-3 py-1.5 rounded-lg ${
                                       message.sender === "lead"
                                         ? "bg-slate-100 text-slate-900"
                                         : message.sender === "ai"
@@ -1532,14 +1559,9 @@ export default function Conversations() {
                                       message.isStatusMessage
                                         ? "opacity-60 italic text-xs"
                                         : ""
-                                    } ${
-                                      message.reactions &&
-                                      message.reactions.length > 0
-                                        ? "mb-5"
-                                        : ""
                                     }`}
                                   >
-                                    <div className="flex items-center space-x-2 mb-1">
+                                    <div className="flex items-center space-x-1.5 mb-0.5">
                                       {message.sender === "ai" && (
                                         <Bot className="w-3 h-3" />
                                       )}
@@ -1562,37 +1584,168 @@ export default function Conversations() {
                                       {message.content}
                                     </p>
 
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <span
-                                        className={`text-xs font-medium ${
-                                          message.sender === "human"
-                                            ? "text-white/90"
-                                            : message.sender === "ai"
-                                            ? "text-blue-800/80"
-                                            : "text-slate-600"
-                                        }`}
-                                      >
-                                        {formatTime(message.sentAt)}
-                                      </span>
+                                    {/* ✅ NEW TIMESTAMP + REACTIONS SECTION */}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {/* ✅ FOR LEAD: Reactions FIRST, then timestamp */}
+                                      {/* ✅ FOR LEAD: Reactions FIRST, then timestamp */}
+                                      {message.sender === "lead" ? (
+                                        <>
+                                          {/* Reactions first */}
+                                          {message.reactions &&
+                                            message.reactions.length > 0 && (
+                                              <div className="flex items-center gap-1">
+                                                {(() => {
+                                                  const reactionCounts =
+                                                    message.reactions.reduce(
+                                                      (acc: any, r: any) => {
+                                                        if (
+                                                          !r.emoji ||
+                                                          r.emoji.trim() === ""
+                                                        )
+                                                          return acc;
+                                                        acc[r.emoji] =
+                                                          (acc[r.emoji] || 0) +
+                                                          1;
+                                                        return acc;
+                                                      },
+                                                      {}
+                                                    );
 
-                                      {message.sender !== "lead" && (
-                                        <div
-                                          className="flex items-center transition-all duration-200"
-                                          title={
-                                            !message.deliveredAt
-                                              ? "Sending..."
-                                              : message.readAt
-                                              ? `Read at ${new Date(
-                                                  message.readAt
-                                                ).toLocaleTimeString([], {
-                                                  hour: "2-digit",
-                                                  minute: "2-digit",
-                                                })}`
-                                              : "Delivered"
-                                          }
-                                        >
-                                          {!message.deliveredAt ? (
-                                            <div className="flex items-center">
+                                                  return Object.entries(
+                                                    reactionCounts
+                                                  )
+                                                    .filter(
+                                                      ([emoji]) =>
+                                                        emoji &&
+                                                        emoji.trim() !== ""
+                                                    )
+                                                    .map(
+                                                      ([emoji, count]: any) => {
+                                                        const userReacted =
+                                                          message.reactions.some(
+                                                            (r: any) =>
+                                                              r.emoji ===
+                                                                emoji &&
+                                                              r.userId ===
+                                                                user?.id
+                                                          );
+
+                                                        return (
+                                                          <button
+                                                            key={emoji}
+                                                            className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
+                                                              userReacted
+                                                                ? "bg-blue-100 ring-1 ring-blue-300"
+                                                                : "bg-slate-100 hover:bg-slate-200"
+                                                            }`}
+                                                            style={{
+                                                              width: "24px",
+                                                              height: "24px",
+                                                              borderRadius:
+                                                                "50%",
+                                                              padding: "0",
+                                                              minWidth: "24px",
+                                                              minHeight: "24px",
+                                                            }}
+                                                            title={message.reactions
+                                                              .filter(
+                                                                (r: any) =>
+                                                                  r.emoji ===
+                                                                  emoji
+                                                              )
+                                                              .map(
+                                                                (r: any) =>
+                                                                  r.userName
+                                                              )
+                                                              .join(", ")}
+                                                            onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              if (userReacted) {
+                                                                removeReactionMutation.mutate(
+                                                                  {
+                                                                    messageId:
+                                                                      message.id,
+                                                                    emoji,
+                                                                  }
+                                                                );
+                                                              } else {
+                                                                reactToMessageMutation.mutate(
+                                                                  {
+                                                                    messageId:
+                                                                      message.id,
+                                                                    emoji,
+                                                                  }
+                                                                );
+                                                              }
+                                                            }}
+                                                          >
+                                                            <span
+                                                              className="text-xs leading-none block"
+                                                              style={{
+                                                                lineHeight: "1",
+                                                              }}
+                                                            >
+                                                              {emoji}
+                                                            </span>
+                                                            {count > 1 && (
+                                                              <span
+                                                                className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                style={{
+                                                                  width: "12px",
+                                                                  height:
+                                                                    "12px",
+                                                                  borderRadius:
+                                                                    "50%",
+                                                                  lineHeight:
+                                                                    "1",
+                                                                }}
+                                                              >
+                                                                {count}
+                                                              </span>
+                                                            )}
+                                                          </button>
+                                                        );
+                                                      }
+                                                    );
+                                                })()}
+                                              </div>
+                                            )}
+
+                                          {/* Timestamp after */}
+                                          <span className="text-xs font-medium text-slate-600">
+                                            {formatTime(message.sentAt)}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {/* FOR AI/HUMAN: Timestamp first */}
+                                          <span
+                                            className={`text-xs font-medium ${
+                                              message.sender === "human"
+                                                ? "text-white/90"
+                                                : "text-blue-800/80"
+                                            }`}
+                                          >
+                                            {formatTime(message.sentAt)}
+                                          </span>
+
+                                          {/* Read receipts */}
+                                          <div
+                                            className="flex items-center transition-all duration-200"
+                                            title={
+                                              !message.deliveredAt
+                                                ? "Sending..."
+                                                : message.readAt
+                                                ? `Read at ${new Date(
+                                                    message.readAt
+                                                  ).toLocaleTimeString([], {
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
+                                                  })}`
+                                                : "Delivered"
+                                            }
+                                          >
+                                            {!message.deliveredAt ? (
                                               <Check
                                                 className={`w-3.5 h-3.5 animate-pulse ${
                                                   message.sender === "human"
@@ -1601,147 +1754,177 @@ export default function Conversations() {
                                                 }`}
                                                 strokeWidth={2}
                                               />
-                                            </div>
-                                          ) : message.readAt ? (
-                                            <div className="flex items-center -space-x-1 animate-in fade-in duration-200">
-                                              <Check
-                                                className={`w-3.5 h-3.5 ${
-                                                  message.sender === "human"
-                                                    ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
-                                                    : message.sender === "ai"
-                                                    ? "text-blue-700"
-                                                    : "text-blue-600"
-                                                }`}
-                                                strokeWidth={3}
-                                              />
-                                              <Check
-                                                className={`w-3.5 h-3.5 ${
-                                                  message.sender === "human"
-                                                    ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
-                                                    : message.sender === "ai"
-                                                    ? "text-blue-700"
-                                                    : "text-blue-600"
-                                                }`}
-                                                strokeWidth={3}
-                                              />
-                                            </div>
-                                          ) : (
-                                            <div className="flex items-center -space-x-1 animate-in fade-in duration-200">
-                                              <Check
-                                                className={`w-3.5 h-3.5 ${
-                                                  message.sender === "human"
-                                                    ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
-                                                    : message.sender === "ai"
-                                                    ? "text-blue-600/70"
-                                                    : "text-slate-500"
-                                                }`}
-                                                strokeWidth={2.5}
-                                              />
-                                              <Check
-                                                className={`w-3.5 h-3.5 ${
-                                                  message.sender === "human"
-                                                    ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
-                                                    : message.sender === "ai"
-                                                    ? "text-blue-600/70"
-                                                    : "text-slate-500"
-                                                }`}
-                                                strokeWidth={2.5}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
+                                            ) : message.readAt ? (
+                                              <div className="flex items-center -space-x-1">
+                                                <Check
+                                                  className={`w-3.5 h-3.5 ${
+                                                    message.sender === "human"
+                                                      ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
+                                                      : "text-blue-700"
+                                                  }`}
+                                                  strokeWidth={3}
+                                                />
+                                                <Check
+                                                  className={`w-3.5 h-3.5 ${
+                                                    message.sender === "human"
+                                                      ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
+                                                      : "text-blue-700"
+                                                  }`}
+                                                  strokeWidth={3}
+                                                />
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center -space-x-1">
+                                                <Check
+                                                  className={`w-3.5 h-3.5 ${
+                                                    message.sender === "human"
+                                                      ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                                                      : "text-blue-600/70"
+                                                  }`}
+                                                  strokeWidth={2.5}
+                                                />
+                                                <Check
+                                                  className={`w-3.5 h-3.5 ${
+                                                    message.sender === "human"
+                                                      ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                                                      : "text-blue-600/70"
+                                                  }`}
+                                                  strokeWidth={2.5}
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Reactions after */}
+                                          {message.reactions &&
+                                            message.reactions.length > 0 && (
+                                              <div className="flex items-center gap-1 ml-1">
+                                                {(() => {
+                                                  const reactionCounts =
+                                                    message.reactions.reduce(
+                                                      (acc: any, r: any) => {
+                                                        if (
+                                                          !r.emoji ||
+                                                          r.emoji.trim() === ""
+                                                        )
+                                                          return acc;
+                                                        acc[r.emoji] =
+                                                          (acc[r.emoji] || 0) +
+                                                          1;
+                                                        return acc;
+                                                      },
+                                                      {}
+                                                    );
+
+                                                  return Object.entries(
+                                                    reactionCounts
+                                                  )
+                                                    .filter(
+                                                      ([emoji]) =>
+                                                        emoji &&
+                                                        emoji.trim() !== ""
+                                                    )
+                                                    .map(
+                                                      ([emoji, count]: any) => {
+                                                        const userReacted =
+                                                          message.reactions.some(
+                                                            (r: any) =>
+                                                              r.emoji ===
+                                                                emoji &&
+                                                              r.userId ===
+                                                                user?.id
+                                                          );
+
+                                                        return (
+                                                          <button
+                                                            key={emoji}
+                                                            className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
+                                                              userReacted
+                                                                ? message.sender ===
+                                                                  "human"
+                                                                  ? "bg-white/30 backdrop-blur-sm ring-1 ring-white/50"
+                                                                  : "bg-blue-200 ring-1 ring-blue-400"
+                                                                : message.sender ===
+                                                                  "human"
+                                                                ? "bg-white/20 backdrop-blur-sm hover:bg-white/30"
+                                                                : "bg-blue-100 hover:bg-blue-200"
+                                                            }`}
+                                                            style={{
+                                                              width: "24px",
+                                                              height: "24px",
+                                                              borderRadius:
+                                                                "50%",
+                                                              padding: "0",
+                                                              minWidth: "24px",
+                                                              minHeight: "24px",
+                                                            }}
+                                                            title={message.reactions
+                                                              .filter(
+                                                                (r: any) =>
+                                                                  r.emoji ===
+                                                                  emoji
+                                                              )
+                                                              .map(
+                                                                (r: any) =>
+                                                                  r.userName
+                                                              )
+                                                              .join(", ")}
+                                                            onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              if (userReacted) {
+                                                                removeReactionMutation.mutate(
+                                                                  {
+                                                                    messageId:
+                                                                      message.id,
+                                                                    emoji,
+                                                                  }
+                                                                );
+                                                              } else {
+                                                                reactToMessageMutation.mutate(
+                                                                  {
+                                                                    messageId:
+                                                                      message.id,
+                                                                    emoji,
+                                                                  }
+                                                                );
+                                                              }
+                                                            }}
+                                                          >
+                                                            <span
+                                                              className="text-xs leading-none block"
+                                                              style={{
+                                                                lineHeight: "1",
+                                                              }}
+                                                            >
+                                                              {emoji}
+                                                            </span>
+                                                            {count > 1 && (
+                                                              <span
+                                                                className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                style={{
+                                                                  width: "12px",
+                                                                  height:
+                                                                    "12px",
+                                                                  borderRadius:
+                                                                    "50%",
+                                                                  lineHeight:
+                                                                    "1",
+                                                                }}
+                                                              >
+                                                                {count}
+                                                              </span>
+                                                            )}
+                                                          </button>
+                                                        );
+                                                      }
+                                                    );
+                                                })()}
+                                              </div>
+                                            )}
+                                        </>
                                       )}
                                     </div>
                                   </div>
-
-                                  {/* Reactions */}
-                                  {message.reactions &&
-                                    message.reactions.length > 0 && (
-                                      <div
-                                        className={`absolute -bottom-4 ${
-                                          message.sender === "lead"
-                                            ? "left-2"
-                                            : "right-2"
-                                        } flex items-center gap-1`}
-                                      >
-                                        {(() => {
-                                          const reactionCounts =
-                                            message.reactions.reduce(
-                                              (acc: any, r: any) => {
-                                                if (
-                                                  !r.emoji ||
-                                                  r.emoji.trim() === ""
-                                                ) {
-                                                  return acc;
-                                                }
-                                                acc[r.emoji] =
-                                                  (acc[r.emoji] || 0) + 1;
-                                                return acc;
-                                              },
-                                              {}
-                                            );
-
-                                          return Object.entries(reactionCounts)
-                                            .filter(
-                                              ([emoji]) =>
-                                                emoji && emoji.trim() !== ""
-                                            )
-                                            .map(([emoji, count]: any) => {
-                                              const userReacted =
-                                                message.reactions.some(
-                                                  (r: any) =>
-                                                    r.emoji === emoji &&
-                                                    r.userId === user?.id
-                                                );
-
-                                              return (
-                                                <button
-                                                  key={emoji}
-                                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full transition-all duration-100 hover:scale-110 active:scale-95 ${
-                                                    userReacted
-                                                      ? "bg-blue-50 shadow-sm"
-                                                      : "bg-white shadow-sm hover:bg-slate-50"
-                                                  }`}
-                                                  title={message.reactions
-                                                    .filter(
-                                                      (r: any) =>
-                                                        r.emoji === emoji
-                                                    )
-                                                    .map((r: any) => r.userName)
-                                                    .join(", ")}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (userReacted) {
-                                                      removeReactionMutation.mutate(
-                                                        {
-                                                          messageId: message.id,
-                                                          emoji,
-                                                        }
-                                                      );
-                                                    } else {
-                                                      reactToMessageMutation.mutate(
-                                                        {
-                                                          messageId: message.id,
-                                                          emoji,
-                                                        }
-                                                      );
-                                                    }
-                                                  }}
-                                                >
-                                                  <span className="text-sm leading-none">
-                                                    {emoji}
-                                                  </span>
-                                                  {count > 1 && (
-                                                    <span className="text-[10px] text-slate-600 font-medium leading-none">
-                                                      {count}
-                                                    </span>
-                                                  )}
-                                                </button>
-                                              );
-                                            });
-                                        })()}
-                                      </div>
-                                    )}
 
                                   {/* React Button */}
                                   {!message.isStatusMessage && (
@@ -1754,14 +1937,25 @@ export default function Conversations() {
                                             : message.id
                                         );
                                       }}
-                                      className={`absolute top-1 ${
+                                      className={`absolute top-1/2 -translate-y-1/2 ${
                                         message.sender === "lead"
-                                          ? "-right-7"
-                                          : "-left-7"
-                                      } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 rounded-full p-0.5 shadow-sm z-20`}
+                                          ? "-right-8"
+                                          : "-left-8"
+                                      } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
+                                      style={{
+                                        width: "28px",
+                                        height: "28px",
+                                        borderRadius: "50%",
+                                        padding: "0",
+                                        minWidth: "28px",
+                                        minHeight: "28px",
+                                      }}
                                       title="React"
                                     >
-                                      <span className="text-sm leading-none block">
+                                      <span
+                                        className="text-sm leading-none block"
+                                        style={{ lineHeight: "1" }}
+                                      >
                                         😊
                                       </span>
                                     </button>
@@ -1775,11 +1969,19 @@ export default function Conversations() {
                                           e.stopPropagation();
                                           setShowMessageInfo(message.id);
                                         }}
-                                        className={`absolute top-1 ${
+                                        className={`absolute top-1/2 -translate-y-1/2 ${
                                           message.sender === "lead"
-                                            ? "-right-14"
-                                            : "-left-14"
-                                        } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 rounded-full p-1 shadow-sm z-20`}
+                                            ? "-right-16"
+                                            : "-left-16"
+                                        } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
+                                        style={{
+                                          width: "28px",
+                                          height: "28px",
+                                          borderRadius: "50%",
+                                          padding: "0",
+                                          minWidth: "28px",
+                                          minHeight: "28px",
+                                        }}
                                         title="Message Info"
                                       >
                                         <Info className="w-3 h-3 text-slate-600" />
@@ -1826,16 +2028,45 @@ export default function Conversations() {
                                                 });
                                                 setShowReactionPicker(null);
                                               }}
-                                              className={`relative hover:scale-125 active:scale-100 transition-transform duration-100 text-base w-7 h-7 flex items-center justify-center rounded-full ${
+                                              className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-125 active:scale-100 ${
                                                 isCurrentReaction
                                                   ? "bg-blue-50 ring-1 ring-blue-400"
                                                   : "hover:bg-slate-50"
                                               }`}
+                                              style={{
+                                                width: "28px",
+                                                height: "28px",
+                                                borderRadius: "50%",
+                                                padding: "0",
+                                                minWidth: "28px",
+                                                minHeight: "28px",
+                                              }}
                                             >
-                                              {emoji}
+                                              <span
+                                                className="text-base leading-none block"
+                                                style={{ lineHeight: "1" }}
+                                              >
+                                                {emoji}
+                                              </span>
                                               {isCurrentReaction && (
-                                                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-blue-600 rounded-full flex items-center justify-center">
-                                                  <span className="w-1 h-1 bg-white rounded-full"></span>
+                                                <span
+                                                  className="absolute bg-blue-600 flex items-center justify-center"
+                                                  style={{
+                                                    width: "10px",
+                                                    height: "10px",
+                                                    borderRadius: "50%",
+                                                    top: "-2px",
+                                                    right: "-2px",
+                                                  }}
+                                                >
+                                                  <span
+                                                    className="bg-white"
+                                                    style={{
+                                                      width: "4px",
+                                                      height: "4px",
+                                                      borderRadius: "50%",
+                                                    }}
+                                                  ></span>
                                                 </span>
                                               )}
                                             </button>

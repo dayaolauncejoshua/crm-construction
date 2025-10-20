@@ -219,6 +219,7 @@ export const clients = pgTable("clients", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   whatsappPhoneNumberId: text("whatsapp_phone_number_id"), // New field for WhatsApp Business API
+  
 });
 
 // Leads table
@@ -422,6 +423,12 @@ export const bookings = pgTable("bookings", {
   reminder1hSent: boolean("reminder_1h_sent").default(false),
   reminder24hSentAt: timestamp("reminder_24h_sent_at"),
   reminder1hSentAt: timestamp("reminder_1h_sent_at"),
+
+  proposedBy: varchar("proposed_by"), // 'ai' or 'human'
+  aiConfidence: decimal("ai_confidence", { precision: 3, scale: 2 }), // 0.0-1.0
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  rejectedReason: text("rejected_reason"),
 
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

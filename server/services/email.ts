@@ -1,3 +1,4 @@
+// server/services/email.ts
 import nodemailer from "nodemailer";
 
 class EmailService {

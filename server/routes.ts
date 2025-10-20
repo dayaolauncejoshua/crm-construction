@@ -2218,6 +2218,152 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
+  // Approve pending booking (agent one-click)
+app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    console.log("✅ Agent approving booking:", bookingId);
+
+    const booking = await storage.getBooking(bookingId);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    if (booking.status !== "pending_approval") {
+      return res.status(400).json({ error: "Booking is not pending" });
+    }
+
+    const lead = await storage.getLead(booking.leadId);
+    const client = await storage.getClient(booking.clientId);
+
+    if (!lead || !client) {
+      return res.status(404).json({ error: "Lead or client not found" });
+    }
+
+    // Approve booking
+    const updatedBooking = await storage.approveBooking(bookingId, req.user!.id);
+
+    console.log("✅ Booking approved, sending confirmations...");
+
+    // Send email with calendar invite
+    if (lead.email) {
+      const startTime = new Date(booking.scheduledFor);
+      const endTime = new Date(startTime.getTime() + booking.duration! * 60000);
+
+      const icsContent = emailService.generateICS({
+        title: booking.title,
+        description: booking.notes || `Meeting with ${client.name}`,
+        location: booking.location || "TBD",
+        startTime,
+        endTime,
+        organizerEmail: process.env.EMAIL_USER || "noreply@aileadsystem.com",
+        organizerName: client.name,
+        attendeeEmail: lead.email,
+        attendeeName: `${lead.firstName} ${lead.lastName}`,
+      });
+
+      const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #2563eb;">✅ Meeting Confirmed!</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>Your meeting has been confirmed.</p>
+          
+          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">📅 Meeting Details</h3>
+            <p><strong>Date:</strong> ${startTime.toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}</p>
+            <p><strong>Time:</strong> ${startTime.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}</p>
+            <p><strong>Duration:</strong> ${booking.duration} minutes</p>
+            <p><strong>Location:</strong> ${booking.location || "TBD"}</p>
+          </div>
+          
+          <p>The meeting has been added to your calendar. See you then!</p>
+          
+          <p style="margin-top: 30px;">Best regards,<br>${client.name}</p>
+        </div>
+      `;
+
+      await emailService.sendCalendarInvite({
+        to: lead.email,
+        toName: `${lead.firstName} ${lead.lastName}`,
+        subject: `Meeting Confirmed - ${startTime.toLocaleDateString()}`,
+        htmlBody: emailBody,
+        icsContent,
+        icsFilename: "meeting.ics",
+      });
+    }
+
+    // Send WhatsApp confirmation
+    if (lead.phone) {
+      const startTime = new Date(booking.scheduledFor);
+      const whatsappMsg = `✅ Meeting Confirmed!
+
+📅 ${startTime.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })}
+🕐 ${startTime.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}
+⏱️ ${booking.duration} minutes
+📍 ${booking.location || "TBD"}
+
+Check your email for the calendar invite. See you then!`;
+
+      await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+    }
+
+    res.json({ success: true, booking: updatedBooking });
+  } catch (error: any) {
+    console.error("❌ Error approving booking:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reject pending booking
+app.post("/api/bookings/:bookingId/reject", requireAuth, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { reason } = req.body;
+
+    console.log("❌ Agent rejecting booking:", bookingId);
+
+    const booking = await storage.getBooking(bookingId);
+    if (!booking) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    await storage.rejectBooking(bookingId, reason);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("❌ Error rejecting booking:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get pending bookings
+app.get("/api/bookings/:clientId/pending", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const pendingBookings = await storage.getPendingBookings(clientId);
+    res.json(pendingBookings);
+  } catch (error: any) {
+    console.error("❌ Error fetching pending bookings:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
   // =========================== USER TRIAL MANAGEMENT ROUTES  ====================================
 
   // Get user trial status

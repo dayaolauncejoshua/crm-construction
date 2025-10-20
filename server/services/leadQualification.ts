@@ -5,6 +5,7 @@ import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
 import { spamPatternLearning } from "./spamPatternLearning";
+import { detectBookingIntent } from "./openai";
 
 export class LeadQualificationService {
   private wss: WebSocketServer | null = null;
@@ -75,22 +76,22 @@ export class LeadQualificationService {
   }
 
   async queueIncomingMessage(
-  from: string,
-  message: string,
-  timestamp: number,
-  phoneNumberId?: string,
-  messageId?: string // ✅ ADD THIS
-): Promise<void> {
-  console.log(`📨 Queueing message from ${from}, messageId: ${messageId}`);
-  await messageQueue.enqueueMessage(
-    from,
-    message,
-    timestamp,
-    this.handleIncomingMessage.bind(this),
-    phoneNumberId,
-    messageId // ✅ ADD THIS
-  );
-}
+    from: string,
+    message: string,
+    timestamp: number,
+    phoneNumberId?: string,
+    messageId?: string // ✅ ADD THIS
+  ): Promise<void> {
+    console.log(`📨 Queueing message from ${from}, messageId: ${messageId}`);
+    await messageQueue.enqueueMessage(
+      from,
+      message,
+      timestamp,
+      this.handleIncomingMessage.bind(this),
+      phoneNumberId,
+      messageId // ✅ ADD THIS
+    );
+  }
 
   private async handleIncomingMessage(
     from: string,
@@ -278,7 +279,10 @@ export class LeadQualificationService {
         metadata: messageId ? { whatsappMessageId: messageId } : undefined,
       });
 
-      console.log(`✅ Incoming message saved with metadata:`, savedMessage.metadata);
+      console.log(
+        `✅ Incoming message saved with metadata:`,
+        savedMessage.metadata
+      );
 
       await storage.markPreviousMessagesAsRead(conversation.id);
       await storage.incrementUnreadCount(conversation.id);
@@ -573,6 +577,111 @@ export class LeadQualificationService {
           });
 
           console.log("✅ AI response sent");
+
+          // ✅ NEW: Check for booking intent after AI responds to construction inquiry
+          console.log("🔍 Checking for booking intent...");
+
+          const bookingIntent = await detectBookingIntent(messages, lead);
+
+          console.log("📅 Booking Intent:", bookingIntent);
+
+          // ✅ STRICT VALIDATION: Only create booking if BOTH conditions met
+          if (
+            bookingIntent.wantsToBook &&
+            bookingIntent.confidence > 0.75 &&
+            bookingIntent.proposedDateTime?.date // ← MUST have specific date
+          ) {
+            console.log("✅ High booking intent detected with specific date!");
+
+            // Create pending booking
+            try {
+              // ✅ IMPROVED: Parse the date more intelligently
+              let scheduledFor: Date;
+
+              if (
+                bookingIntent.proposedDateTime.date &&
+                bookingIntent.proposedDateTime.time
+              ) {
+                // Has both date and time
+                scheduledFor = new Date(
+                  `${bookingIntent.proposedDateTime.date} ${bookingIntent.proposedDateTime.time}`
+                );
+              } else if (bookingIntent.proposedDateTime.date) {
+                // Has date but no time - default to 10 AM
+                scheduledFor = new Date(
+                  `${bookingIntent.proposedDateTime.date} 10:00 AM`
+                );
+              } else {
+                // ❌ CRITICAL: No specific date - DON'T create booking
+                console.log(
+                  "⚠️ Booking intent detected but no specific date provided. Not creating booking."
+                );
+                return; // ← STOP HERE
+              }
+
+              // Validate the date is in the future
+              if (scheduledFor < new Date()) {
+                console.log(
+                  "⚠️ Proposed date is in the past. Not creating booking."
+                );
+                return;
+              }
+
+              const pendingBooking = await storage.createBooking({
+                leadId: lead.id,
+                clientId: lead.clientId,
+                title: `${
+                  bookingIntent.meetingType === "site-visit"
+                    ? "Site Visit"
+                    : "Consultation"
+                } - ${lead.firstName} ${lead.lastName}`,
+                scheduledFor,
+                scheduledAt: scheduledFor,
+                duration: 60,
+                status: "pending_approval",
+                attendeeEmail: lead.email,
+                attendeeName: `${lead.firstName} ${lead.lastName}`,
+                attendeePhone: lead.phone,
+                meetingType: bookingIntent.meetingType,
+                location: bookingIntent.location || "TBD",
+                notes: `AI-proposed booking. Confidence: ${(
+                  bookingIntent.confidence * 100
+                ).toFixed(0)}%. Reasoning: ${
+                  bookingIntent.reasoning
+                }. Proposed date: ${bookingIntent.proposedDateTime.date}`,
+                proposedBy: "ai",
+                aiConfidence: bookingIntent.confidence.toString(),
+              });
+
+              console.log("✅ Pending booking created:", pendingBooking.id);
+
+              // Broadcast to agents for approval
+              this.broadcastUpdate({
+                type: "booking_approval_needed",
+                booking: {
+                  ...pendingBooking,
+                  lead: {
+                    firstName: lead.firstName,
+                    lastName: lead.lastName,
+                    company: lead.company,
+                    phone: lead.phone,
+                  },
+                },
+              });
+
+              console.log("📢 Booking approval notification sent to agents");
+            } catch (error) {
+              console.error("❌ Error creating pending booking:", error);
+            }
+          } else if (
+            bookingIntent.wantsToBook &&
+            bookingIntent.confidence > 0.5
+          ) {
+            // ✅ NEW: Medium confidence or no specific date - just log it
+            console.log(
+              `ℹ️ Booking interest detected (confidence: ${bookingIntent.confidence}) but no specific date yet. Waiting for lead to specify day.`
+            );
+          }
         }
 
         // Broadcast final message update

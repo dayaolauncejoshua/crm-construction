@@ -1462,6 +1462,47 @@ export class DatabaseStorage implements IStorage {
     return booking;
   }
 
+  // Add this method around line 800 (near other booking methods)
+async getPendingBookings(clientId: string) {
+  return db
+    .select()
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.clientId, clientId),
+        eq(bookings.status, "pending_approval")
+      )
+    )
+    .orderBy(desc(bookings.createdAt));
+}
+
+async approveBooking(bookingId: string, userId: string) {
+  const [booking] = await db
+    .update(bookings)
+    .set({
+      status: "scheduled",
+      approvedBy: userId,
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, bookingId))
+    .returning();
+  return booking;
+}
+
+async rejectBooking(bookingId: string, reason?: string) {
+  const [booking] = await db
+    .update(bookings)
+    .set({
+      status: "cancelled",
+      rejectedReason: reason,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, bookingId))
+    .returning();
+  return booking;
+}
+
   async updateBooking(bookingId: string, updates: Partial<InsertBooking>) {
     const [booking] = await db
       .update(bookings)
