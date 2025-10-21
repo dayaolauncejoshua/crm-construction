@@ -6,6 +6,25 @@ import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
 import { spamPatternLearning } from "./spamPatternLearning";
 import { detectBookingIntent } from "./openai";
+import type {InsertBooking} from "../../shared/schema";
+
+function normalizeTimeString(timeStr: string): string {
+  if (!timeStr) return "10:00 AM"; // Default if time is missing
+
+  const upperTime = timeStr.toUpperCase().replace(/\s/g, "");
+
+  if (upperTime.includes(":")) {
+    return upperTime.replace(/([AP]M)/, " $1");
+  }
+  const match = upperTime.match(/(\d+)([AP]M)/);
+  if (match) {
+    const hour = match[1];
+    const period = match[2];
+    return `${hour}:00 ${period}`;
+  }
+
+  return "10:00 AM";
+}
 
 export class LeadQualificationService {
   private wss: WebSocketServer | null = null;
@@ -588,46 +607,46 @@ export class LeadQualificationService {
           // ✅ STRICT VALIDATION: Only create booking if BOTH conditions met
           if (
             bookingIntent.wantsToBook &&
-            bookingIntent.confidence > 0.75 &&
+            bookingIntent.isConfirmed &&
+            bookingIntent.confidence > 0.8 &&
             bookingIntent.proposedDateTime?.date // ← MUST have specific date
           ) {
             console.log("✅ High booking intent detected with specific date!");
 
+            let scheduledFor: Date;
+          const currentYear = new Date().getFullYear();
+
+          if (
+            bookingIntent.proposedDateTime.date &&
+            bookingIntent.proposedDateTime.time
+          ) {
+            const normalizedTime = normalizeTimeString(bookingIntent.proposedDateTime.time);
+            const dateString = `${bookingIntent.proposedDateTime.date}, ${currentYear} ${normalizedTime}`;
+            console.log(`[DEBUG] Parsing normalized date string: "${dateString}"`);
+            scheduledFor = new Date(dateString);
+          } else if (bookingIntent.proposedDateTime.date) {
+            const normalizedTime = normalizeTimeString("10am"); // Default time
+            const dateString = `${bookingIntent.proposedDateTime.date}, ${currentYear} ${normalizedTime}`;
+             console.log(`[DEBUG] Parsing normalized date string with default time: "${dateString}"`);
+            scheduledFor = new Date(dateString);
+          } else {
+             console.error("❌ Booking intent confirmed but date is missing. Aborting.");
+             return; // Exit if date is somehow missing
+          }
+          
+          // Validate the parsed date
+          if (isNaN(scheduledFor.getTime())) {
+              console.error("❌ Failed to parse date. Aborting booking creation.", { bookingIntent });
+              return;
+          }
+
             // Create pending booking
             try {
-              // ✅ IMPROVED: Parse the date more intelligently
-              let scheduledFor: Date;
+              // Check for an existing pending booking for this lead
+              const existingPendingBooking =
+                await storage.findPendingBookingByLeadId(lead.id);
 
-              if (
-                bookingIntent.proposedDateTime.date &&
-                bookingIntent.proposedDateTime.time
-              ) {
-                // Has both date and time
-                scheduledFor = new Date(
-                  `${bookingIntent.proposedDateTime.date} ${bookingIntent.proposedDateTime.time}`
-                );
-              } else if (bookingIntent.proposedDateTime.date) {
-                // Has date but no time - default to 10 AM
-                scheduledFor = new Date(
-                  `${bookingIntent.proposedDateTime.date} 10:00 AM`
-                );
-              } else {
-                // ❌ CRITICAL: No specific date - DON'T create booking
-                console.log(
-                  "⚠️ Booking intent detected but no specific date provided. Not creating booking."
-                );
-                return; // ← STOP HERE
-              }
-
-              // Validate the date is in the future
-              if (scheduledFor < new Date()) {
-                console.log(
-                  "⚠️ Proposed date is in the past. Not creating booking."
-                );
-                return;
-              }
-
-              const pendingBooking = await storage.createBooking({
+              const bookingDetails: InsertBooking = {
                 leadId: lead.id,
                 clientId: lead.clientId,
                 title: `${
@@ -646,20 +665,37 @@ export class LeadQualificationService {
                 location: bookingIntent.location || "TBD",
                 notes: `AI-proposed booking. Confidence: ${(
                   bookingIntent.confidence * 100
-                ).toFixed(0)}%. Reasoning: ${
-                  bookingIntent.reasoning
-                }. Proposed date: ${bookingIntent.proposedDateTime.date}`,
+                ).toFixed(0)}%. Reasoning: ${bookingIntent.reasoning}.`,
                 proposedBy: "ai",
                 aiConfidence: bookingIntent.confidence.toString(),
-              });
+              };
 
-              console.log("✅ Pending booking created:", pendingBooking.id);
+              let savedBooking;
+              let eventType = "booking_approval_needed";
 
-              // Broadcast to agents for approval
+              if (existingPendingBooking) {
+                console.log(
+                  `🔄 Updating existing pending booking: ${existingPendingBooking.id}`
+                );
+                // We remove status from the update object as we don't want to change it from pending_approval here
+                const { status, ...updateDetails } = bookingDetails;
+                savedBooking = await storage.updateBooking(
+                  existingPendingBooking.id,
+                  updateDetails
+                );
+                eventType = "booking_updated"; // Use a different event for updates on the frontend
+              } else {
+                console.log("✅ Creating new pending booking...");
+                savedBooking = await storage.createBooking(bookingDetails);
+              }
+
+              console.log("✅ Pending booking saved:", savedBooking.id);
+
+              // Broadcast to agents for approval using the correct event type
               this.broadcastUpdate({
-                type: "booking_approval_needed",
+                type: eventType,
                 booking: {
-                  ...pendingBooking,
+                  ...savedBooking,
                   lead: {
                     firstName: lead.firstName,
                     lastName: lead.lastName,
@@ -669,9 +705,14 @@ export class LeadQualificationService {
                 },
               });
 
-              console.log("📢 Booking approval notification sent to agents");
+              console.log(
+                `📢 Booking ${eventType} notification sent to agents`
+              );
             } catch (error) {
-              console.error("❌ Error creating pending booking:", error);
+              console.error(
+                "❌ Error creating/updating pending booking:",
+                error
+              );
             }
           } else if (
             bookingIntent.wantsToBook &&

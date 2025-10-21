@@ -598,6 +598,7 @@ Respond naturally and move the conversation forward:`;
 
 export interface BookingIntent {
   wantsToBook: boolean;
+  isConfirmed: boolean;
   confidence: number;
   proposedDateTime?: {
     date?: string;
@@ -640,11 +641,15 @@ ${conversationText}
 ❌ Vague interest: "maybe later", "I'll think about it"
 ❌ Still gathering information
 
+**TASK:** Detect if the customer wants to schedule a meeting AND if a FINAL, SPECIFIC date and time have been agreed upon.
+
+...
 **CRITICAL RULES:**
-1. If lead says "this week" or "next week" WITHOUT a specific day → confidence 0.5-0.6 MAX
-2. If lead says "I'm available Thursday" or "Let's meet Friday" → confidence 0.85+
-3. If lead accepts agent's suggested day ("Yes, Thursday works") → confidence 0.90+
-4. Don't mark high confidence unless a SPECIFIC day is mentioned
+1. If the agent has just asked for a time (e.g., "morning or afternoon?") and the lead hasn't responded, it is NOT confirmed. Set "isConfirmed": false.
+2. If the lead suggests a date AND a specific time (e.g., "November 2 at 2PM"), set "isConfirmed": true.
+3. If the agent suggests a full date/time and the lead agrees ("Yes, that works"), set "isConfirmed": true.
+4. If the lead is vague ("this week", "soon"), set "isConfirmed": false.
+5. Only set "isConfirmed" to true when there is NO ambiguity left about the exact date and time.
 
 **EXTRACT IF MENTIONED:**
 - Specific date/day ("Thursday", "Friday", "March 15", "21st", "next Monday")
@@ -655,6 +660,7 @@ ${conversationText}
 Respond with JSON only:
 {
   "wantsToBook": true/false,
+  "isConfirmed": true/false,
   "confidence": 0.85,
   "proposedDateTime": {
     "date": "Thursday" or null if not specific,
@@ -683,6 +689,7 @@ Respond with JSON only:
 
     return {
       wantsToBook: result.wantsToBook ?? false,
+      isConfirmed: result.isConfirmed ?? false,
       confidence: result.confidence ?? 0,
       proposedDateTime: result.proposedDateTime,
       location: result.location,
@@ -693,6 +700,7 @@ Respond with JSON only:
     console.error("Error detecting booking intent:", error);
     return {
       wantsToBook: false,
+      isConfirmed: false,
       confidence: 0,
       reasoning: "Error analyzing booking intent",
     };

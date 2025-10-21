@@ -1525,6 +1525,22 @@ async rejectBooking(bookingId: string, reason?: string) {
       .orderBy(desc(bookings.scheduledFor));
   }
 
+  // Find Pending Booking
+  async findPendingBookingByLeadId(leadId: string): Promise<Booking | null> {
+    const [booking] = await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.leadId, leadId),
+          eq(bookings.status, "pending_approval")
+        )
+      )
+      .limit(1);
+
+    return booking || null;
+  }
+
   // Delete lead
   async deleteLead(id: string): Promise<void> {
     await db.delete(leads).where(eq(leads.id, id));
