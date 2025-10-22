@@ -633,16 +633,93 @@ export const insertNotionSOPSchema = createInsertSchema(notionSOPs).omit({
 });
 
 export const spamPatterns = pgTable("spam_patterns", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   pattern: varchar("pattern").notNull().unique(), // ✅ ADD .unique()
   category: varchar("category").notNull(), // food, retail, service, test, other
   detectionCount: integer("detection_count").default(0).notNull(), // ✅ ADD .notNull()
   falsePositiveCount: integer("false_positive_count").default(0).notNull(), // ✅ ADD .notNull()
-  confidence: decimal("confidence", { precision: 3, scale: 2 }).default("0.50").notNull(), // ✅ ADD .notNull()
+  confidence: decimal("confidence", { precision: 3, scale: 2 })
+    .default("0.50")
+    .notNull(), // ✅ ADD .notNull()
   lastDetected: timestamp("last_detected").defaultNow().notNull(), // ✅ ADD .notNull()
   createdAt: timestamp("created_at").defaultNow().notNull(), // ✅ ADD .notNull()
   updatedAt: timestamp("updated_at").defaultNow().notNull(), // ✅ ADD .notNull()
 });
+
+// Add at the end of schema.ts
+
+// Call Recordings table
+export const callRecordings = pgTable("call_recordings", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  callId: varchar("call_id").notNull().unique(),
+  leadId: varchar("lead_id").references(() => leads.id),
+  clientId: varchar("client_id")
+    .references(() => clients.id)
+    .notNull(),
+  twilioCallSid: varchar("twilio_call_sid"),
+
+  recordingUrl: varchar("recording_url"),
+  duration: integer("duration"),
+  fileSize: integer("file_size"),
+  format: varchar("format").default("mp3"),
+
+  callStatus: varchar("call_status").default("completed"),
+  wasTransferred: boolean("was_transferred").default(false),
+  transferredAt: timestamp("transferred_at"),
+  transferredTo: varchar("transferred_to"),
+
+  recordingConsent: boolean("recording_consent").default(false),
+  consentGivenAt: timestamp("consent_given_at"),
+
+  transcript: text("transcript"),
+  transcriptStatus: varchar("transcript_status").default("pending"),
+
+  aiSummary: text("ai_summary"),
+  sentiment: varchar("sentiment"),
+  keyTopics: jsonb("key_topics").default(sql`'[]'::jsonb`),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Call Events table
+export const callEvents = pgTable("call_events", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  callId: varchar("call_id").notNull(),
+  eventType: varchar("event_type").notNull(),
+  eventData: jsonb("event_data"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+// Lead Scoring table
+export const leadScoring = pgTable("lead_scoring", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id")
+    .references(() => leads.id)
+    .notNull(),
+  score: integer("score").notNull(),
+  features: jsonb("features"),
+  modelVersion: varchar("model_version"),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }),
+  predictions: jsonb("predictions"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Type exports
+export type CallRecording = typeof callRecordings.$inferSelect;
+export type InsertCallRecording = typeof callRecordings.$inferInsert;
+export type CallEvent = typeof callEvents.$inferSelect;
+export type InsertCallEvent = typeof callEvents.$inferInsert;
+export type LeadScoring = typeof leadScoring.$inferSelect;
+export type InsertLeadScoring = typeof leadScoring.$inferInsert;
 
 // Insert schema
 export const insertSpamPatternSchema = createInsertSchema(spamPatterns).omit({
