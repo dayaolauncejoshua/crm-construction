@@ -49,12 +49,9 @@ import {
   XCircle,
   Check,
   Eye,
-  MapPin,
-  Menu,
-  X,
-  ArrowLeft,
-  ChevronRight,
+  MapPin
 } from "lucide-react";
+import { BookingApprovalNotification } from "@/components/BookingApprovalNotification";
 import {
   Dialog,
   DialogContent,
@@ -72,23 +69,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 
 // Date formatting helpers
 const formatDateDivider = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+
   today.setHours(0, 0, 0, 0);
   yesterday.setHours(0, 0, 0, 0);
+
   const messageDate = new Date(date);
   messageDate.setHours(0, 0, 0, 0);
+
   if (messageDate.getTime() === today.getTime()) {
     return "Today";
   } else if (messageDate.getTime() === yesterday.getTime()) {
@@ -111,9 +104,11 @@ const formatDateDivider = (date: Date): string => {
 
 const groupMessagesByDate = (messages: any[]) => {
   const groups: { date: string; messages: any[] }[] = [];
+
   messages.forEach((message) => {
     const messageDate = new Date(message.sentAt);
     const dateKey = messageDate.toDateString();
+
     let group = groups.find((g) => g.date === dateKey);
     if (!group) {
       group = { date: dateKey, messages: [] };
@@ -121,12 +116,14 @@ const groupMessagesByDate = (messages: any[]) => {
     }
     group.messages.push(message);
   });
+
   return groups;
 };
 
 // Date Divider Component
 const DateDivider = ({ date }: { date: string }) => {
   const formattedDate = formatDateDivider(new Date(date));
+
   return (
     <div className="flex items-center justify-center my-6">
       <div className="px-2 py-1 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200/60">
@@ -188,18 +185,20 @@ const MessageInfoModal = ({
             </h3>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors touch-target"
+              className="text-slate-400 hover:text-slate-600 transition-colors"
             >
               <XCircle className="w-5 h-5" />
             </button>
           </div>
-          <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto">
+
+          <div className="px-6 py-4 space-y-6">
             <div>
               <p className="text-xs text-slate-500 font-medium mb-1">Message</p>
               <p className="text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 line-clamp-3">
                 {message.content}
               </p>
             </div>
+
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center flex-shrink-0">
@@ -213,6 +212,7 @@ const MessageInfoModal = ({
                 </div>
                 <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
               </div>
+
               <div className="flex items-start gap-3">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -241,6 +241,7 @@ const MessageInfoModal = ({
                   <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                 )}
               </div>
+
               {message.sender !== "lead" && (
                 <div className="flex items-start gap-3">
                   <div
@@ -270,6 +271,7 @@ const MessageInfoModal = ({
                 </div>
               )}
             </div>
+
             <div className="pt-4 border-t border-slate-200">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Clock className="w-3.5 h-3.5" />
@@ -291,12 +293,9 @@ const MessageInfoModal = ({
               </div>
             </div>
           </div>
+
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-xl">
-            <Button
-              onClick={onClose}
-              className="w-full touch-target"
-              variant="outline"
-            >
+            <Button onClick={onClose} className="w-full" variant="outline">
               Close
             </Button>
           </div>
@@ -310,16 +309,16 @@ export default function Conversations() {
   usePageTitle("Conversations");
   const { user } = useAuth();
   const { selectedClientId } = useClient();
+
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
   const leadIdFromCalendar = new URLSearchParams(window.location.search).get(
     "leadId"
   );
 
-  // 🆕 Mobile state management
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLeadDetails, setShowLeadDetails] = useState(false);
   const [showManualControls, setShowManualControls] = useState(false);
   const [manualScore, setManualScore] = useState(0);
@@ -353,15 +352,10 @@ export default function Conversations() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [approvingBookingId, setApprovingBookingId] = useState<string | null>(
-    null
-  );
-  const [decliningBookingId, setDecliningBookingId] = useState<string | null>(
-    null
-  );
-  const [showDeclineConfirm, setShowDeclineConfirm] = useState<string | null>(
-    null
-  );
+
+  const [approvingBookingId, setApprovingBookingId] = useState<string | null>(null);
+const [decliningBookingId, setDecliningBookingId] = useState<string | null>(null);
+const [showDeclineConfirm, setShowDeclineConfirm] = useState<string | null>(null);
 
   const { data: templates } = useQuery({
     queryKey: ["/api/quick-replies", selectedClientId],
@@ -371,6 +365,7 @@ export default function Conversations() {
   const [typingIndicators, setTypingIndicators] = useState<
     Record<string, { isTyping: boolean; sender: string; leadName?: string }>
   >({});
+
   const [showMessageInfo, setShowMessageInfo] = useState<string | null>(null);
 
   const { data: wsData, isConnected } = useWebSocket();
@@ -488,6 +483,7 @@ export default function Conversations() {
 
   const handleTyping = () => {
     if (!selectedConversation) return;
+
     if (!isTyping) {
       setIsTyping(true);
       fetch(`/api/conversations/${selectedConversation.id}/typing`, {
@@ -497,9 +493,11 @@ export default function Conversations() {
         body: JSON.stringify({ isTyping: true }),
       }).catch((err) => console.error("Failed to send typing indicator:", err));
     }
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       if (selectedConversation) {
@@ -707,9 +705,11 @@ export default function Conversations() {
       });
       return;
     }
+
     const [hours, minutes] = bookingTime.split(":");
     const scheduledFor = new Date(bookingDate);
     scheduledFor.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
     bookMeetingMutation.mutate({
       leadId: selectedConversation.lead.id,
       clientId: selectedConversation.clientId,
@@ -769,6 +769,7 @@ export default function Conversations() {
       conv.lead?.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lead?.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "hot" &&
@@ -776,6 +777,7 @@ export default function Conversations() {
       (filterStatus === "ai" && conv.isAiHandled === true) ||
       (filterStatus === "human" && conv.isAiHandled === false) ||
       (filterStatus === "not-lead" && conv.lead?.status === "not-a-lead");
+
     return matchesSearch && matchesStatus;
   });
 
@@ -791,6 +793,7 @@ export default function Conversations() {
 
   useEffect(() => {
     if (!wsData) return;
+
     switch (wsData.type) {
       case "typing_indicator":
         setTypingIndicators((prev) => ({
@@ -975,36 +978,34 @@ export default function Conversations() {
     const status = conversation.lead?.status;
     const tags = conversation.lead?.tags || [];
     const isAiHandled = conversation.isAiHandled;
+
     const isReopened = tags.includes("reopened");
     const wasTerminated = tags.includes("terminated");
+
     if (isReopened && !isAiHandled) {
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 text-xs">
-          🔄 Reopened
+        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
+          🔄 Reopened - Review Needed
         </Badge>
       );
     }
     if (status === "spam" || wasTerminated) {
       return (
-        <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-xs">
+        <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
           🚫 Terminated
         </Badge>
       );
     }
     if (status === "not-a-lead") {
-      return (
-        <Badge className="bg-gray-100 text-gray-800 text-xs">
-          🚫 Not a Lead
-        </Badge>
-      );
+      return <Badge className="bg-gray-100 text-gray-800">🚫 Not a Lead</Badge>;
     }
     if (
       temperature === "hot" ||
       parseFloat(conversation.qualificationScore || "0") >= 0.7
     ) {
       return (
-        <Badge className="bg-red-100 text-red-800 border border-red-300 text-xs">
-          🔥 Hot
+        <Badge className="bg-red-100 text-red-800 border border-red-300">
+          🔥 Hot Lead
         </Badge>
       );
     }
@@ -1013,14 +1014,16 @@ export default function Conversations() {
       parseFloat(conversation.qualificationScore || "0") >= 0.4
     ) {
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 text-xs">😐 Warm</Badge>
+        <Badge className="bg-yellow-100 text-yellow-800">😐 Warm Lead</Badge>
       );
     }
     if (isAiHandled) {
-      return <Badge className="bg-blue-100 text-blue-800 text-xs">❄️ AI</Badge>;
+      return (
+        <Badge className="bg-blue-100 text-blue-800">❄️ AI Handling</Badge>
+      );
     } else {
       return (
-        <Badge className="bg-green-100 text-green-800 text-xs">👤 Human</Badge>
+        <Badge className="bg-green-100 text-green-800">👤 Human Active</Badge>
       );
     }
   };
@@ -1083,614 +1086,133 @@ export default function Conversations() {
     (c: any) => c.lead?.status === "not-a-lead"
   ).length;
 
-  const handleApproveBooking = async (bookingId: string) => {
-    setApprovingBookingId(bookingId);
+const handleApproveBooking = async (bookingId: string) => {
+  setApprovingBookingId(bookingId);
+  
+  try {
+    const response = await fetch(`/api/bookings/${bookingId}/approve`, {
+      method: "POST",
+      credentials: "include",
+    });
 
-    try {
-      const response = await fetch(`/api/bookings/${bookingId}/approve`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to approve");
+    if (!response.ok) throw new Error("Failed to approve");
+    
+    const approvedBooking = await response.json();
 
-      const approvedBooking = await response.json();
-      queryClient.setQueryData(
-        ["/api/bookings", selectedClientId, "pending"],
-        (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ["/api/bookings", selectedClientId, "pending"],
-      });
+    // Optimistic update - remove from pending
+    queryClient.setQueryData(
+      ["/api/bookings", selectedClientId, "pending"],
+      (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
+    );
 
-      await queryClient.invalidateQueries({
-        queryKey: ["/api/bookings", selectedClientId],
-      });
+    // Refetch to ensure consistency
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId, "pending"],
+    });
+    
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId],
+    });
+    
+    // Refetch messages to show the confirmation sent
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+    });
 
-      await queryClient.invalidateQueries({
-        queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
-      });
-
-      toast({
-        title: "✅ Booking Approved & Sent!",
-        description: (
-          <div className="space-y-1 text-sm">
-            <p className="font-medium">Confirmation sent to lead via:</p>
-            <div className="flex flex-col gap-0.5 text-xs">
-              <span>📧 Email: Calendar invite</span>
-              <span>💬 WhatsApp: Meeting details</span>
-            </div>
+    // Success notification with details
+    toast({
+      title: "✅ Booking Approved & Sent!",
+      description: (
+        <div className="space-y-1 text-sm">
+          <p className="font-medium">Confirmation sent to lead via:</p>
+          <div className="flex flex-col gap-0.5 text-xs">
+            <span>📧 Email: Calendar invite</span>
+            <span>💬 WhatsApp: Meeting details</span>
           </div>
-        ),
-        duration: 6000,
-      });
+        </div>
+      ),
+      duration: 6000,
+    });
 
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 500);
-    } catch (error) {
-      toast({
-        title: "❌ Approval Failed",
-        description: "Could not approve booking. Please try again.",
-        variant: "destructive",
-        action: (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleApproveBooking(bookingId)}
-          >
-            Retry
-          </Button>
-        ),
-      });
-    } finally {
-      setApprovingBookingId(null);
-    }
-  };
+    // Smooth scroll to see the sent message
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 500);
+    
+  } catch (error) {
+    toast({
+      title: "❌ Approval Failed",
+      description: "Could not approve booking. Please try again.",
+      variant: "destructive",
+      action: (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleApproveBooking(bookingId)}
+        >
+          Retry
+        </Button>
+      ),
+    });
+  } finally {
+    setApprovingBookingId(null);
+  }
+};
 
-  const handleDeclineBooking = async (bookingId: string) => {
-    setDecliningBookingId(bookingId);
+const handleDeclineBooking = async (bookingId: string) => {
+  setDecliningBookingId(bookingId);
+  
+  try {
+    const response = await fetch(`/api/bookings/${bookingId}/decline`, {
+      method: "POST",
+      credentials: "include",
+    });
 
-    try {
-      const response = await fetch(`/api/bookings/${bookingId}/decline`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("Failed to decline");
+    if (!response.ok) throw new Error("Failed to decline");
 
-      queryClient.setQueryData(
-        ["/api/bookings", selectedClientId, "pending"],
-        (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ["/api/bookings", selectedClientId, "pending"],
-      });
+    // Optimistic update
+    queryClient.setQueryData(
+      ["/api/bookings", selectedClientId, "pending"],
+      (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
+    );
 
-      await queryClient.invalidateQueries({
-        queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
-      });
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId, "pending"],
+    });
+    
+    // Refetch messages to show the decline message sent
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+    });
 
-      toast({
-        title: "Booking Declined",
-        description: "The lead has been notified and can propose a new time.",
-        duration: 5000,
-      });
-
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 500);
-    } catch (error) {
-      toast({
-        title: "❌ Decline Failed",
-        description: "Could not decline booking. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setDecliningBookingId(null);
-      setShowDeclineConfirm(null);
-    }
-  };
-
-  // 🆕 Close mobile menu when conversation selected
-  useEffect(() => {
-    if (selectedConversation) {
-      setIsMobileMenuOpen(false);
-    }
-  }, [selectedConversation]);
+    toast({
+      title: "Booking Declined",
+      description: "The lead has been notified and can propose a new time.",
+      duration: 5000,
+    });
+    
+    // Smooth scroll
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 500);
+    
+  } catch (error) {
+    toast({
+      title: "❌ Decline Failed",
+      description: "Could not decline booking. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setDecliningBookingId(null);
+    setShowDeclineConfirm(null);
+  }
+};
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
-      {/* 🆕 Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-3 bg-white border-b border-slate-200">
-        <div className="flex items-center gap-3">
-          {selectedConversation && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSelectedConversation(null)}
-              className="touch-target"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          )}
-          {!selectedConversation && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="touch-target"
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-          )}
-          <h1 className="text-lg font-semibold text-slate-900">
-            {selectedConversation
-              ? `${selectedConversation.lead?.firstName} ${selectedConversation.lead?.lastName}`
-              : "Conversations"}
-          </h1>
-        </div>
-        {selectedConversation && (
-          <Sheet open={showLeadDetails} onOpenChange={setShowLeadDetails}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="touch-target">
-                <Info className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="right"
-              className="w-full sm:max-w-md p-0 overflow-y-auto"
-            >
-              <SheetHeader className="p-4 border-b border-slate-200">
-                <SheetTitle>Lead Details</SheetTitle>
-              </SheetHeader>
-              {/* Lead Details Content - Same as desktop right sidebar */}
-              <div className="p-4 space-y-4">
-                {parseFloat(
-                  selectedConversation.lead?.manualScore ||
-                    selectedConversation.lead?.qualificationScore ||
-                    selectedConversation.qualificationScore ||
-                    "0"
-                ) >= 0.7 && (
-                  <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-semibold text-red-800">
-                      🔥 HOT LEAD
-                    </span>
-                  </div>
-                )}
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-xs">Phone</span>
-                    <span className="text-slate-900 font-medium text-sm">
-                      {selectedConversation.lead?.phone || "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-xs">Email</span>
-                    <span className="text-slate-900 text-xs truncate ml-2">
-                      {selectedConversation.lead?.email || "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-xs">Company</span>
-                    <span className="text-slate-900 font-medium text-sm">
-                      {selectedConversation.lead?.company || "—"}
-                    </span>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Temperature</span>
-                    <Badge
-                      className={`text-xs ${
-                        selectedConversation.lead?.temperature === "hot"
-                          ? "bg-red-100 text-red-800"
-                          : selectedConversation.lead?.temperature === "warm"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
-                    >
-                      {selectedConversation.lead?.temperature === "hot" &&
-                        "🔥 Hot"}
-                      {selectedConversation.lead?.temperature === "warm" &&
-                        "😐 Warm"}
-                      {selectedConversation.lead?.temperature === "cold" &&
-                        "❄️ Cold"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Status</span>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {selectedConversation.lead?.status || "new"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Score</span>
-                    <Badge
-                      className={`text-xs ${
-                        parseFloat(
-                          selectedConversation.lead?.manualScore ||
-                            selectedConversation.lead?.qualificationScore ||
-                            selectedConversation.qualificationScore ||
-                            "0"
-                        ) >= 0.7
-                          ? "bg-red-100 text-red-800"
-                          : parseFloat(
-                              selectedConversation.lead?.manualScore ||
-                                selectedConversation.lead?.qualificationScore ||
-                                selectedConversation.qualificationScore ||
-                                "0"
-                            ) >= 0.4
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-green-100 text-green-800"
-                      }`}
-                    >
-                      {(
-                        parseFloat(
-                          selectedConversation.lead?.manualScore ||
-                            selectedConversation.lead?.qualificationScore ||
-                            selectedConversation.qualificationScore ||
-                            "0"
-                        ) * 100
-                      ).toFixed(0)}
-                      %
-                    </Badge>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Manual Controls */}
-                <div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowManualControls(!showManualControls)}
-                    className="w-full justify-between p-2 h-auto hover:bg-slate-50 touch-target"
-                  >
-                    <span className="text-xs font-semibold text-slate-700">
-                      Manual Controls
-                    </span>
-                    <Target
-                      className={`w-3 h-3 transition-transform ${
-                        showManualControls ? "rotate-90" : ""
-                      }`}
-                    />
-                  </Button>
-                  {showManualControls && (
-                    <div className="mt-3 space-y-3">
-                      {/* Score Slider */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-slate-500">
-                            Override Score
-                          </span>
-                          <span className="text-xs font-semibold text-slate-900">
-                            {(
-                              parseFloat(
-                                selectedConversation.lead?.manualScore ||
-                                  selectedConversation.qualificationScore ||
-                                  "0"
-                              ) * 100
-                            ).toFixed(0)}
-                            %
-                          </span>
-                        </div>
-                        <Slider
-                          value={[
-                            parseFloat(
-                              selectedConversation.lead?.manualScore ||
-                                selectedConversation.qualificationScore ||
-                                "0"
-                            ) * 100,
-                          ]}
-                          onValueChange={(value) => updateScore(value[0])}
-                          max={100}
-                          step={1}
-                          className="w-full touch-target"
-                        />
-                      </div>
-
-                      {/* Temperature */}
-                      <div>
-                        <span className="text-xs text-slate-500 block mb-1">
-                          Temperature
-                        </span>
-                        <Select
-                          value={
-                            selectedConversation.lead?.temperature || "cold"
-                          }
-                          onValueChange={(temp) =>
-                            updateLeadMutation.mutate({ temperature: temp })
-                          }
-                        >
-                          <SelectTrigger className="w-full h-11 text-sm touch-target">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cold">❄️ Cold</SelectItem>
-                            <SelectItem value="warm">😐 Warm</SelectItem>
-                            <SelectItem value="hot">🔥 Hot</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Status */}
-                      <div>
-                        <span className="text-xs text-slate-500 block mb-1">
-                          Sales Stage
-                        </span>
-                        <Select
-                          value={selectedConversation.lead?.status || "new"}
-                          onValueChange={updateStatus}
-                        >
-                          <SelectTrigger className="w-full h-11 text-sm touch-target">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="new">🆕 New</SelectItem>
-                            <SelectItem value="contacted">
-                              📞 Contacted
-                            </SelectItem>
-                            <SelectItem value="qualified">
-                              ✅ Qualified
-                            </SelectItem>
-                            <SelectItem value="proposal-sent">
-                              📄 Proposal Sent
-                            </SelectItem>
-                            <SelectItem value="negotiation">
-                              🤝 Negotiation
-                            </SelectItem>
-                            <SelectItem value="converted">
-                              💰 Converted
-                            </SelectItem>
-                            <SelectItem value="lost">❌ Lost</SelectItem>
-                            <SelectItem value="on-hold">⏸️ On Hold</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Tags */}
-                      <div>
-                        <span className="text-xs text-slate-500 block mb-1">
-                          Tags
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {availableTags?.slice(0, 6).map((tag: any) => {
-                            const isSelected =
-                              selectedConversation.lead?.tags?.includes(
-                                tag.name
-                              );
-                            return (
-                              <button
-                                key={tag.id}
-                                onClick={() => toggleTag(tag.name)}
-                                className={`px-3 py-2 rounded-full text-xs font-medium transition-all touch-target ${
-                                  isSelected
-                                    ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                }`}
-                              >
-                                {tag.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                {/* Quick Actions */}
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start h-11 text-sm touch-target"
-                    onClick={() => {
-                      updateLeadMutation.mutate({
-                        tags: [
-                          ...(selectedConversation.lead?.tags || []),
-                          "Hot Lead",
-                        ],
-                        manualScore: "0.9",
-                        isManualOverride: true,
-                      });
-                    }}
-                  >
-                    <Star className="w-4 h-4 mr-2" />
-                    Mark Hot Lead
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start h-11 text-sm touch-target"
-                    onClick={() => updateStatus("converted")}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Mark Converted
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start h-11 text-sm text-red-600 touch-target"
-                    onClick={() => updateStatus("lost")}
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    Mark Lost
-                  </Button>
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-        )}
-      </div>
-
+    <div className="h-screen flex flex-col">
       <div className="flex-1 flex overflow-hidden">
-        {/* 🆕 Mobile Conversations Sidebar (Drawer) */}
-        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-          <SheetContent side="left" className="w-full sm:max-w-md p-0">
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-slate-200">
-                <Breadcrumb className="mb-3">
-                  <BreadcrumbList>
-                    <BreadcrumbItem>
-                      <BreadcrumbLink
-                        onClick={() => (window.location.href = "/dashboard")}
-                        className="cursor-pointer"
-                      >
-                        Dashboard
-                      </BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      <BreadcrumbPage>Conversations</BreadcrumbPage>
-                    </BreadcrumbItem>
-                  </BreadcrumbList>
-                </Breadcrumb>
-
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Conversations
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => refetch()}
-                    disabled={isLoading}
-                    className="touch-target"
-                  >
-                    <RefreshCw
-                      className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
-                    />
-                  </Button>
-                </div>
-
-                <div
-                  className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg mb-4 ${
-                    isConnected
-                      ? "bg-green-50 text-green-700"
-                      : "bg-red-50 text-red-700"
-                  }`}
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      isConnected ? "bg-green-500" : "bg-red-500"
-                    }`}
-                  ></div>
-                  <span>{isConnected ? "Connected" : "Disconnected"}</span>
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
-                  <Input
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 h-11 touch-target"
-                  />
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-full sm:w-[140px] h-11 touch-target">
-                      <SelectValue placeholder="Filter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        All ({conversations.length})
-                      </SelectItem>
-                      <SelectItem value="hot">Hot ({hotCount})</SelectItem>
-                      <SelectItem value="ai">AI ({aiHandlingCount})</SelectItem>
-                      <SelectItem value="human">
-                        Human ({humanHandlingCount})
-                      </SelectItem>
-                      <SelectItem value="not-lead">
-                        Not Lead ({notLeadCount})
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-3">
-                <div className="space-y-3">
-                  {filteredConversations.length === 0 ? (
-                    <div className="text-center py-8">
-                      <MessageCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                      <p className="text-sm text-slate-600">
-                        {searchQuery || filterStatus !== "all"
-                          ? "No conversations match"
-                          : "No conversations"}
-                      </p>
-                    </div>
-                  ) : (
-                    filteredConversations.map((conversation: any) => (
-                      <Card
-                        key={conversation.id}
-                        className={`cursor-pointer transition-colors hover:bg-slate-50 active:bg-slate-100 ${
-                          selectedConversation?.id === conversation.id
-                            ? "ring-2 ring-primary"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          setSelectedConversation(conversation);
-                          markAsReadMutation.mutate(conversation.id);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <CardContent className="p-4 touch-target">
-                          <div className="flex items-start space-x-3">
-                            <div className="relative">
-                              <Avatar className="h-12 w-12">
-                                <AvatarFallback className="text-base">
-                                  {(conversation.lead?.firstName?.[0] || "U") +
-                                    (conversation.lead?.lastName?.[0] || "")}
-                                </AvatarFallback>
-                              </Avatar>
-                              {conversation.unreadCount > 0 && (
-                                <div className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center px-1">
-                                  <span className="text-xs font-bold text-white">
-                                    {conversation.unreadCount}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <h4
-                                  className={`text-sm font-medium truncate ${
-                                    conversation.unreadCount > 0
-                                      ? "text-slate-900 font-semibold"
-                                      : "text-slate-900"
-                                  }`}
-                                >
-                                  {conversation.lead?.firstName}{" "}
-                                  {conversation.lead?.lastName}
-                                </h4>
-                                <span className="text-xs text-slate-500">
-                                  {formatTime(conversation.lastMessageAt)}
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-600 mb-2 truncate">
-                                {conversation.lead?.company}
-                              </p>
-                              {getStatusBadge(conversation)}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        {/* Left: Desktop Conversations List */}
-        <div className="hidden lg:block w-80 bg-white border-r border-slate-200 flex-col">
+        {/* Left: Conversations List */}
+        <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
           <div className="p-3 border-b border-slate-200 flex-shrink-0">
             <Breadcrumb className="mb-3">
               <BreadcrumbList>
@@ -1862,54 +1384,53 @@ export default function Conversations() {
         <div className="flex-1 flex flex-col">
           {selectedConversation ? (
             <>
-              {/* Desktop Header */}
-              <div className="hidden lg:flex bg-white border-b border-slate-200 p-4 flex-shrink-0 items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback>
-                      {(selectedConversation.lead?.firstName?.[0] || "U") +
-                        (selectedConversation.lead?.lastName?.[0] || "")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      {selectedConversation.lead?.firstName}{" "}
-                      {selectedConversation.lead?.lastName}
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      {selectedConversation.lead?.company}
-                    </p>
+              <div className="bg-white border-b border-slate-200 p-4 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback>
+                        {(selectedConversation.lead?.firstName?.[0] || "U") +
+                          (selectedConversation.lead?.lastName?.[0] || "")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        {selectedConversation.lead?.firstName}{" "}
+                        {selectedConversation.lead?.lastName}
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        {selectedConversation.lead?.company}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getStatusBadge(selectedConversation)}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowLeadDetails(!showLeadDetails)}
-                    className={`p-2 ${showLeadDetails ? "bg-slate-100" : ""}`}
-                    title="Lead Details"
-                  >
-                    <Info className="w-6 h-6 text-slate-600" />
-                  </Button>
-                  {selectedConversation.isAiHandled && (
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(selectedConversation)}
                     <Button
-                      onClick={() => handleTakeover(selectedConversation.id)}
-                      disabled={takeoverMutation.isPending}
+                      variant="ghost"
                       size="sm"
+                      onClick={() => setShowLeadDetails(!showLeadDetails)}
+                      className={`p-2 ${showLeadDetails ? "bg-slate-100" : ""}`}
+                      title="Lead Details"
                     >
-                      <UserCheck className="w-4 h-4 mr-2" />
-                      {takeoverMutation.isPending
-                        ? "Taking over..."
-                        : "Take Over"}
+                      <Info className="w-6 h-6 text-slate-600" />
                     </Button>
-                  )}
+                    {selectedConversation.isAiHandled && (
+                      <Button
+                        onClick={() => handleTakeover(selectedConversation.id)}
+                        disabled={takeoverMutation.isPending}
+                      >
+                        <UserCheck className="w-4 h-4 mr-2" />
+                        {takeoverMutation.isPending
+                          ? "Taking over..."
+                          : "Take Over"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Messages Area */}
-              <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50">
-                <div className="space-y-2 max-w mx-auto">
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+                <div className="space-y-2">
                   {messages?.length === 0 ? (
                     <div className="text-center py-8">
                       <MessageCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
@@ -1928,6 +1449,7 @@ export default function Conversations() {
                         );
                       }
 
+                      // ✅ NEW: Find last AI message index
                       const lastAiMessageIndex = messages
                         .map((m: any, idx: number) =>
                           m.sender === "ai" ? idx : -1
@@ -1936,14 +1458,14 @@ export default function Conversations() {
                         .pop();
 
                       const messageGroups = groupMessagesByDate(messages);
-                      let globalIndex = -1;
+                      let globalIndex = -1; // Track global message index across groups
 
                       return messageGroups.map((group) => (
                         <div key={group.date}>
                           <DateDivider date={group.date} />
                           <div className="space-y-4">
                             {group.messages.map((message: any) => {
-                              globalIndex++;
+                              globalIndex++; // Increment for each message
                               const isLastAiMessage =
                                 globalIndex === lastAiMessageIndex;
 
@@ -1958,7 +1480,7 @@ export default function Conversations() {
                                   >
                                     <div className="relative max-w-xs lg:max-w-md group">
                                       <div
-                                        className={`px-3 py-2 rounded-lg ${
+                                        className={`px-3 py-1.5 rounded-lg ${
                                           message.sender === "lead"
                                             ? "bg-slate-100 text-slate-900"
                                             : message.sender === "ai"
@@ -1982,7 +1504,7 @@ export default function Conversations() {
                                           )}
                                           <span className="text-xs opacity-75">
                                             {message.sender === "ai"
-                                              ? "AI"
+                                              ? "AI Assistant"
                                               : message.sender === "lead"
                                               ? "Lead"
                                               : "You"}
@@ -1991,7 +1513,7 @@ export default function Conversations() {
                                         <p className="text-sm break-words">
                                           {message.content}
                                         </p>
-                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                        <div className="flex items-center gap-2 mt-1">
                                           {message.sender === "lead" ? (
                                             <>
                                               {message.reactions &&
@@ -2042,22 +1564,22 @@ export default function Conversations() {
                                                             return (
                                                               <button
                                                                 key={emoji}
-                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 ${
+                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
                                                                   userReacted
                                                                     ? "bg-blue-100 ring-1 ring-blue-300"
                                                                     : "bg-slate-100 hover:bg-slate-200"
                                                                 }`}
                                                                 style={{
-                                                                  width: "28px",
+                                                                  width: "24px",
                                                                   height:
-                                                                    "28px",
+                                                                    "24px",
                                                                   borderRadius:
                                                                     "50%",
                                                                   padding: "0",
                                                                   minWidth:
-                                                                    "28px",
+                                                                    "24px",
                                                                   minHeight:
-                                                                    "28px",
+                                                                    "24px",
                                                                 }}
                                                                 title={message.reactions
                                                                   .filter(
@@ -2096,7 +1618,7 @@ export default function Conversations() {
                                                                 }}
                                                               >
                                                                 <span
-                                                                  className="text-sm leading-none block"
+                                                                  className="text-xs leading-none block"
                                                                   style={{
                                                                     lineHeight:
                                                                       "1",
@@ -2149,7 +1671,12 @@ export default function Conversations() {
                                                   !message.deliveredAt
                                                     ? "Sending..."
                                                     : message.readAt
-                                                    ? `Read`
+                                                    ? `Read at ${new Date(
+                                                        message.readAt
+                                                      ).toLocaleTimeString([], {
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      })}`
                                                     : "Delivered"
                                                 }
                                               >
@@ -2168,7 +1695,7 @@ export default function Conversations() {
                                                       className={`w-3.5 h-3.5 ${
                                                         message.sender ===
                                                         "human"
-                                                          ? "text-white"
+                                                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
                                                           : "text-blue-700"
                                                       }`}
                                                       strokeWidth={3}
@@ -2177,7 +1704,7 @@ export default function Conversations() {
                                                       className={`w-3.5 h-3.5 ${
                                                         message.sender ===
                                                         "human"
-                                                          ? "text-white"
+                                                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
                                                           : "text-blue-700"
                                                       }`}
                                                       strokeWidth={3}
@@ -2189,7 +1716,7 @@ export default function Conversations() {
                                                       className={`w-3.5 h-3.5 ${
                                                         message.sender ===
                                                         "human"
-                                                          ? "text-white/70"
+                                                          ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
                                                           : "text-blue-600/70"
                                                       }`}
                                                       strokeWidth={2.5}
@@ -2198,7 +1725,7 @@ export default function Conversations() {
                                                       className={`w-3.5 h-3.5 ${
                                                         message.sender ===
                                                         "human"
-                                                          ? "text-white/70"
+                                                          ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
                                                           : "text-blue-600/70"
                                                       }`}
                                                       strokeWidth={2.5}
@@ -2254,7 +1781,7 @@ export default function Conversations() {
                                                             return (
                                                               <button
                                                                 key={emoji}
-                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform active:scale-95 ${
+                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
                                                                   userReacted
                                                                     ? message.sender ===
                                                                       "human"
@@ -2266,16 +1793,16 @@ export default function Conversations() {
                                                                     : "bg-blue-100 hover:bg-blue-200"
                                                                 }`}
                                                                 style={{
-                                                                  width: "28px",
+                                                                  width: "24px",
                                                                   height:
-                                                                    "28px",
+                                                                    "24px",
                                                                   borderRadius:
                                                                     "50%",
                                                                   padding: "0",
                                                                   minWidth:
-                                                                    "28px",
+                                                                    "24px",
                                                                   minHeight:
-                                                                    "28px",
+                                                                    "24px",
                                                                 }}
                                                                 title={message.reactions
                                                                   .filter(
@@ -2314,7 +1841,7 @@ export default function Conversations() {
                                                                 }}
                                                               >
                                                                 <span
-                                                                  className="text-sm leading-none block"
+                                                                  className="text-xs leading-none block"
                                                                   style={{
                                                                     lineHeight:
                                                                       "1",
@@ -2350,8 +1877,6 @@ export default function Conversations() {
                                           )}
                                         </div>
                                       </div>
-
-                                      {/* Reaction button - hidden on mobile for simplicity */}
                                       {!message.isStatusMessage && (
                                         <button
                                           onClick={(e) => {
@@ -2362,7 +1887,7 @@ export default function Conversations() {
                                                 : message.id
                                             );
                                           }}
-                                          className={`hidden sm:block absolute top-1/2 -translate-y-1/2 ${
+                                          className={`absolute top-1/2 -translate-y-1/2 ${
                                             message.sender === "lead"
                                               ? "-right-8"
                                               : "-left-8"
@@ -2385,8 +1910,6 @@ export default function Conversations() {
                                           </span>
                                         </button>
                                       )}
-
-                                      {/* Info button - hidden on mobile */}
                                       {!message.isStatusMessage &&
                                         message.sender !== "lead" && (
                                           <button
@@ -2412,8 +1935,6 @@ export default function Conversations() {
                                             <Info className="w-3 h-3 text-slate-600" />
                                           </button>
                                         )}
-
-                                      {/* Reaction Picker */}
                                       {showReactionPicker === message.id && (
                                         <>
                                           <div
@@ -2461,16 +1982,16 @@ export default function Conversations() {
                                                       : "hover:bg-slate-50"
                                                   }`}
                                                   style={{
-                                                    width: "32px",
-                                                    height: "32px",
+                                                    width: "28px",
+                                                    height: "28px",
                                                     borderRadius: "50%",
                                                     padding: "0",
-                                                    minWidth: "32px",
-                                                    minHeight: "32px",
+                                                    minWidth: "28px",
+                                                    minHeight: "28px",
                                                   }}
                                                 >
                                                   <span
-                                                    className="text-lg leading-none block"
+                                                    className="text-base leading-none block"
                                                     style={{ lineHeight: "1" }}
                                                   >
                                                     {emoji}
@@ -2505,10 +2026,10 @@ export default function Conversations() {
                                     </div>
                                   </div>
 
-                                  {/* AI Disclaimer */}
+                                  {/* ✅ NEW: AI DISCLAIMER AFTER LAST AI MESSAGE */}
                                   {isLastAiMessage && (
                                     <div className="flex justify-end mt-2">
-                                      <div className="max-w-xs lg:max-w-md bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                      <div className="max-w-xs lg:max-w-md w-full bg-slate-50 border border-slate-200 rounded-lg p-3">
                                         <div className="flex items-start gap-2">
                                           <AlertCircle className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
                                           <div className="flex-1 min-w-0">
@@ -2517,7 +2038,8 @@ export default function Conversations() {
                                                 AI can make mistakes.
                                               </span>{" "}
                                               Please double-check responses,
-                                              dates, times, and booking details.
+                                              dates, times, and booking details
+                                              before taking action.
                                             </p>
                                           </div>
                                         </div>
@@ -2532,7 +2054,6 @@ export default function Conversations() {
                       ));
                     })()
                   )}
-
                   {showMessageInfo &&
                     (() => {
                       const selectedMessage = messages?.find(
@@ -2546,8 +2067,6 @@ export default function Conversations() {
                         />
                       ) : null;
                     })()}
-
-                  {/* Typing Indicator */}
                   {typingIndicators[selectedConversation?.id]?.isTyping && (
                     <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-200">
                       <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
@@ -2592,407 +2111,301 @@ export default function Conversations() {
                     </div>
                   )}
 
-                  {/* 🆕 MOBILE-RESPONSIVE Booking Approval Cards */}
-                  {pendingBookings
-                    .filter(
-                      (b: any) => b.leadId === selectedConversation?.lead?.id
-                    )
-                    .map((booking: any) => {
-                      const isApproving = approvingBookingId === booking.id;
-                      const isDeclining = decliningBookingId === booking.id;
-                      const showConfirm = showDeclineConfirm === booking.id;
-                      const isProcessing = isApproving || isDeclining;
-                      const isExpired =
-                        new Date(booking.scheduledFor) < new Date();
+{/* Booking Approval - Compact & Wide */}
+{pendingBookings
+  .filter((b: any) => b.leadId === selectedConversation?.lead?.id)
+  .map((booking: any) => {
+    const isApproving = approvingBookingId === booking.id;
+    const isDeclining = decliningBookingId === booking.id;
+    const showConfirm = showDeclineConfirm === booking.id;
+    const isProcessing = isApproving || isDeclining;
+    const isExpired = new Date(booking.scheduledFor) < new Date();
+    
+    return (
+      <div
+        key={booking.id}
+        className="flex justify-center my-4 px-4"
+      >
+        <div className="max-w-4xl w-full">
+          {/* Compact White Card */}
+          <div className="bg-white rounded-lg border-l-4 border-amber-400 shadow-sm">
+            {/* Compact Header */}
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-md font-medium text-slate-900">
+                    Booking Pending Approval
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    AI-suggested based on conversation
+                  </p>
+                </div>
+              </div>
+              <Badge 
+                variant="outline" 
+                className="border-amber-500 text-amber-700 bg-amber-50 text-xs font-medium px-2.5 py-0.5"
+              >
+                Action Required
+              </Badge>
+            </div>
 
-                      return (
-                        <div
-                          key={booking.id}
-                          className="flex justify-center my-4 px-2 sm:px-4"
-                        >
-                          <div className="w-full max-w-4xl">
-                            {/* 🆕 Mobile & Desktop Card */}
-                            <div className="bg-white rounded-lg border-l-4 border-amber-400 shadow-sm overflow-hidden">
-                              {/* Header */}
-                              <div className="px-3 sm:px-4 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <svg
-                                      className="w-4 h-4 text-amber-600"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                                      />
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                      />
-                                    </svg>
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h3 className="text-sm sm:text-md font-medium text-slate-900 truncate">
-                                      Booking Pending Approval
-                                    </h3>
-                                    <p className="text-xs text-slate-500 hidden sm:block">
-                                      AI-suggested based on conversation
-                                    </p>
-                                  </div>
-                                </div>
-                                <Badge
-                                  variant="outline"
-                                  className="border-amber-500 text-amber-700 bg-amber-50 text-xs font-medium px-2 py-0.5 flex-shrink-0"
-                                >
-                                  Action
-                                </Badge>
-                              </div>
+            {/* Compact Content Grid - 2 Columns */}
+            <div className="px-4 py-3">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {/* Date */}
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(booking.scheduledFor).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </p>
+                    {isExpired && (
+                      <p className="text-xs text-red-600 mt-0.5 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Date passed
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-                              {/* Content Grid - Mobile Stack, Desktop 2 Columns */}
-                              <div className="px-3 sm:px-4 py-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {/* Date */}
-                                  <div className="flex items-start gap-2.5">
-                                    <CalendarIcon className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-slate-500 mb-0.5">
-                                        Date
-                                      </p>
-                                      <p className="text-sm font-medium text-slate-900">
-                                        {new Date(
-                                          booking.scheduledFor
-                                        ).toLocaleDateString("en-US", {
-                                          weekday: "short",
-                                          month: "short",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })}
-                                      </p>
-                                      {isExpired && (
-                                        <p className="text-xs text-red-600 mt-0.5 flex items-center gap-1">
-                                          <AlertCircle className="w-3 h-3" />
-                                          Passed
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
+                {/* Time & Duration */}
+                <div className="flex items-start gap-3">
+                  <Clock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Time & Duration</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(booking.scheduledFor).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      })} • {booking.duration} min
+                    </p>
+                  </div>
+                </div>
 
-                                  {/* Time & Duration */}
-                                  <div className="flex items-start gap-2.5">
-                                    <Clock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-slate-500 mb-0.5">
-                                        Time & Duration
-                                      </p>
-                                      <p className="text-sm font-medium text-slate-900">
-                                        {new Date(
-                                          booking.scheduledFor
-                                        ).toLocaleTimeString("en-US", {
-                                          hour: "numeric",
-                                          minute: "2-digit",
-                                          hour12: true,
-                                        })}{" "}
-                                        • {booking.duration} min
-                                      </p>
-                                    </div>
-                                  </div>
+                {/* Location */}
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Location</p>
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {booking.location || 'To be determined'}
+                    </p>
+                  </div>
+                </div>
 
-                                  {/* Location */}
-                                  <div className="flex items-start gap-2.5">
-                                    <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-slate-500 mb-0.5">
-                                        Location
-                                      </p>
-                                      <p className="text-sm font-medium text-slate-900 truncate">
-                                        {booking.location || "To be determined"}
-                                      </p>
-                                    </div>
-                                  </div>
+                {/* Type */}
+                <div className="flex items-start gap-3">
+                  <svg className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Type</p>
+                    <p className="text-sm font-medium text-slate-900 capitalize">
+                      {booking.meetingType || 'Consultation'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                                  {/* Type */}
-                                  <div className="flex items-start gap-2.5">
-                                    <svg
-                                      className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                      />
-                                    </svg>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-slate-500 mb-0.5">
-                                        Type
-                                      </p>
-                                      <p className="text-sm font-medium text-slate-900 capitalize">
-                                        {booking.meetingType || "Consultation"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
+            {/* Action Buttons */}
+            {!showConfirm && !isExpired && (
+              <div className="px-4 pb-3">
+                <div className="flex gap-2.5">
+                  <Button
+                    onClick={() => handleApproveBooking(booking.id)}
+                    disabled={isProcessing}
+                    className="flex-[2] bg-green-600 hover:bg-green-700 text-white h-9 text-sm font-medium rounded-lg shadow-sm transition-colors"
+                  >
+                    {isApproving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Approve & Send Invite
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => setShowDeclineConfirm(booking.id)}
+                    disabled={isProcessing}
+                    variant="outline"
+                    className="flex-1 h-9 text-sm font-medium rounded-lg border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <XCircle className="w-4 h-4 mr-1.5" />
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            )}
 
-                              {/* Action Buttons */}
-                              {!showConfirm && !isExpired && (
-                                <div className="px-3 sm:px-4 pb-3">
-                                  <div className="flex flex-col sm:flex-row gap-2">
-                                    <Button
-                                      onClick={() =>
-                                        handleApproveBooking(booking.id)
-                                      }
-                                      disabled={isProcessing}
-                                      className="flex-[2] bg-green-600 hover:bg-green-700 text-white h-11 text-sm font-medium rounded-lg shadow-sm transition-colors touch-target"
-                                    >
-                                      {isApproving ? (
-                                        <>
-                                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                                          Approving...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <CheckCircle className="w-4 h-4 mr-2" />
-                                          Approve & Send
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      onClick={() =>
-                                        setShowDeclineConfirm(booking.id)
-                                      }
-                                      disabled={isProcessing}
-                                      variant="outline"
-                                      className="flex-1 h-11 text-sm font-medium rounded-lg border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors touch-target"
-                                    >
-                                      <XCircle className="w-4 h-4 mr-2" />
-                                      Decline
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
+            {/* Decline Confirmation */}
+            {showConfirm && (
+              <div className="px-4 pb-3">
+                <div className="space-y-2.5">
+                  <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-900">
+                        Decline this booking?
+                      </p>
+                      <p className="text-xs text-red-700 mt-0.5">
+                        The lead will be notified and can reschedule.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <Button
+                      onClick={() => handleDeclineBooking(booking.id)}
+                      disabled={isDeclining}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white h-9 text-sm font-medium rounded-lg"
+                    >
+                      {isDeclining ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                          Declining...
+                        </>
+                      ) : (
+                        'Yes, Decline'
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => setShowDeclineConfirm(null)}
+                      variant="outline"
+                      className="flex-1 h-9 text-sm rounded-lg"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-                              {/* Decline Confirmation */}
-                              {showConfirm && (
-                                <div className="px-3 sm:px-4 pb-3">
-                                  <div className="space-y-2.5">
-                                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                                      <div className="flex-1">
-                                        <p className="text-sm font-medium text-red-900">
-                                          Decline this booking?
-                                        </p>
-                                        <p className="text-xs text-red-700 mt-0.5">
-                                          Lead will be notified and can
-                                          reschedule.
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                      <Button
-                                        onClick={() =>
-                                          handleDeclineBooking(booking.id)
-                                        }
-                                        disabled={isDeclining}
-                                        className="flex-1 bg-red-600 hover:bg-red-700 text-white h-11 text-sm font-medium rounded-lg touch-target"
-                                      >
-                                        {isDeclining ? (
-                                          <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                                            Declining...
-                                          </>
-                                        ) : (
-                                          "Yes, Decline"
-                                        )}
-                                      </Button>
-                                      <Button
-                                        onClick={() =>
-                                          setShowDeclineConfirm(null)
-                                        }
-                                        variant="outline"
-                                        className="flex-1 h-11 text-sm rounded-lg touch-target"
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+            {/* Expired State */}
+            {isExpired && (
+              <div className="px-4 pb-3">
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <p className="text-xs text-red-800">
+                      This booking time has passed. Decline to clear.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => handleDeclineBooking(booking.id)}
+                    disabled={isDeclining}
+                    variant="outline"
+                    className="w-full h-9 text-sm border-red-300 text-red-700 hover:bg-red-50 rounded-lg"
+                  >
+                    <XCircle className="w-4 h-4 mr-1.5" />
+                    Clear Expired Booking
+                  </Button>
+                </div>
+              </div>
+            )}
 
-                              {/* Expired State */}
-                              {isExpired && (
-                                <div className="px-3 sm:px-4 pb-3">
-                                  <div className="space-y-2.5">
-                                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                                      <p className="text-xs text-red-800">
-                                        This time has passed. Decline to clear.
-                                      </p>
-                                    </div>
-                                    <Button
-                                      onClick={() =>
-                                        handleDeclineBooking(booking.id)
-                                      }
-                                      disabled={isDeclining}
-                                      variant="outline"
-                                      className="w-full h-11 text-sm border-red-300 text-red-700 hover:bg-red-50 rounded-lg touch-target"
-                                    >
-                                      <XCircle className="w-4 h-4 mr-2" />
-                                      Clear Expired
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Footer */}
-                              <div className="px-3 sm:px-4 py-2.5 bg-blue-50 border-t border-blue-100 rounded-b-lg">
-                                <div className="flex items-start sm:items-center gap-2 text-xs text-blue-800">
-                                  <svg
-                                    className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5 sm:mt-0"
-                                    fill="currentColor"
-                                    viewBox="0 0 20 20"
-                                  >
-                                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                                  </svg>
-                                  <span className="font-medium leading-tight">
-                                    AI will send calendar invite and
-                                    confirmation automatically
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-
+            {/* Compact Footer Info */}
+            <div className="px-4 py-2.5 bg-blue-50 border-t border-blue-100 rounded-b-lg">
+              <div className="flex items-center gap-2 text-xs text-blue-800">
+                <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                </svg>
+                <span className="font-medium">
+                  AI will automatically send calendar invite and confirmation email
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  })}
                   <div ref={messagesEndRef} />
                 </div>
               </div>
 
-              {/* Message Input Area */}
-              <div className="bg-white border-t border-slate-200 p-3 sm:p-4 flex-shrink-0">
-                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                  {/* Mobile: Stacked buttons above input */}
-                  <div className="flex gap-2 sm:hidden">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowTemplates(!showTemplates)}
-                      className={`flex-1 h-11 touch-target ${
-                        showTemplates ? "bg-blue-50" : ""
-                      }`}
-                      title="Templates"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                    </Button>
-                    {(() => {
-                      const hasActiveBooking = allBookings.some(
-                        (booking: any) =>
-                          booking.leadId === selectedConversation?.lead?.id &&
-                          booking.status === "scheduled"
-                      );
-                      return (
+              <div className="bg-white border-t border-slate-200 p-4 flex-shrink-0">
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowTemplates(!showTemplates)}
+                    className={showTemplates ? "bg-blue-50" : ""}
+                    title="Quick Replies"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </Button>
+                  {(() => {
+                    const hasActiveBooking = allBookings.some(
+                      (booking: any) =>
+                        booking.leadId === selectedConversation?.lead?.id &&
+                        booking.status === "scheduled"
+                    );
+                    return (
+                      <>
+                        {hasActiveBooking && (
+                          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md">
+                            <AlertCircle className="w-3 h-3" />
+                            Active meeting scheduled
+                          </div>
+                        )}
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => setShowBookingModal(true)}
                           title="Book Meeting"
                           disabled={hasActiveBooking}
-                          className="flex-1 h-11 touch-target"
                         >
                           <CalendarIcon className="w-4 h-4" />
                         </Button>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Desktop: Side-by-side buttons */}
-                  <div className="hidden sm:flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowTemplates(!showTemplates)}
-                      className={`touch-target ${
-                        showTemplates ? "bg-blue-50" : ""
-                      }`}
-                      title="Quick Replies"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                    </Button>
-                    {(() => {
-                      const hasActiveBooking = allBookings.some(
-                        (booking: any) =>
-                          booking.leadId === selectedConversation?.lead?.id &&
-                          booking.status === "scheduled"
-                      );
-                      return (
-                        <>
-                          {hasActiveBooking && (
-                            <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-md">
-                              <AlertCircle className="w-3 h-3" />
-                              Active meeting
-                            </div>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setShowBookingModal(true)}
-                            title="Book Meeting"
-                            disabled={hasActiveBooking}
-                            className="touch-target"
-                          >
-                            <CalendarIcon className="w-4 h-4" />
-                          </Button>
-                        </>
-                      );
-                    })()}
-                  </div>
-
-                  <div className="flex gap-2 flex-1">
-                    <Input
-                      placeholder="Type message..."
-                      value={newMessage}
-                      onChange={(e) => {
-                        setNewMessage(e.target.value);
-                        handleTyping();
-                      }}
-                      onKeyPress={(e) =>
-                        e.key === "Enter" && !e.shiftKey && handleSendMessage()
-                      }
-                      disabled={sendMessageMutation.isPending}
-                      className="flex-1 h-11 touch-target"
-                    />
-                    <Button
-                      onClick={handleSendMessage}
-                      disabled={
-                        !newMessage.trim() || sendMessageMutation.isPending
-                      }
-                      className="bg-primary text-white hover:bg-primary/90 h-11 px-4 touch-target"
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
+                      </>
+                    );
+                  })()}
+                  <Input
+                    placeholder="Type your message..."
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleTyping();
+                    }}
+                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                    disabled={sendMessageMutation.isPending}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleSendMessage}
+                    disabled={
+                      !newMessage.trim() || sendMessageMutation.isPending
+                    }
+                    className="bg-primary text-white hover:bg-primary/90"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
                 </div>
-
-                {/* Templates Dropdown */}
                 {showTemplates && (
-                  <div className="mt-3 border border-slate-200 rounded-lg bg-white shadow-lg max-h-80 sm:max-h-96 overflow-hidden flex flex-col">
+                  <div className="mt-3 border border-slate-200 rounded-lg bg-white shadow-lg max-h-96 overflow-hidden flex flex-col">
                     <div className="p-3 border-b border-slate-200 space-y-2">
                       <Input
                         placeholder="Search templates..."
                         value={templateSearch}
                         onChange={(e) => setTemplateSearch(e.target.value)}
-                        className="w-full h-11 touch-target"
+                        className="w-full"
                       />
                       <div className="flex gap-2 flex-wrap">
                         {[
@@ -3010,7 +2423,7 @@ export default function Conversations() {
                             }
                             size="sm"
                             onClick={() => setSelectedCategory(cat)}
-                            className="capitalize h-9 touch-target text-xs"
+                            className="capitalize"
                           >
                             {cat}
                           </Button>
@@ -3028,7 +2441,7 @@ export default function Conversations() {
                             <button
                               key={template.id}
                               onClick={() => useTemplate(template)}
-                              className="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-slate-200 transition-colors touch-target"
+                              className="w-full text-left p-3 rounded-lg hover:bg-slate-50 border border-slate-200 transition-colors"
                             >
                               <div className="flex items-center justify-between mb-1">
                                 <span className="font-medium text-sm text-slate-900">
@@ -3059,33 +2472,23 @@ export default function Conversations() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-slate-50 p-4">
+            <div className="flex-1 flex items-center justify-center bg-slate-50">
               <div className="text-center">
                 <MessageCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-slate-900 mb-2">
                   Select a Conversation
                 </h3>
-                <p className="text-slate-600 text-sm px-4">
-                  Choose from the list to start chatting
+                <p className="text-slate-600">
+                  Choose a conversation from the list to start chatting
                 </p>
-                <Button
-                  onClick={() => setIsMobileMenuOpen(true)}
-                  className="mt-4 lg:hidden touch-target"
-                  variant="outline"
-                >
-                  <Menu className="w-4 h-4 mr-2" />
-                  View Conversations
-                </Button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Right: Desktop Lead Detail Sidebar */}
+        {/* Right: Lead Detail Sidebar - CLEANED UP */}
         {selectedConversation && showLeadDetails && (
-          <div className="hidden lg:block w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-            {/* ... Same content as mobile Sheet ... */}
-            {/* Copy the entire lead details content from the mobile Sheet above */}
+          <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-slate-200">
               <h3 className="text-sm font-semibold text-slate-900">
                 Lead Details
@@ -3104,7 +2507,6 @@ export default function Conversations() {
                 </div>
               )}
             </div>
-
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
@@ -3126,9 +2528,7 @@ export default function Conversations() {
                   </span>
                 </div>
               </div>
-
               <Separator />
-
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Temperature</span>
@@ -3194,10 +2594,7 @@ export default function Conversations() {
                   </span>
                 </div>
               </div>
-
               <Separator />
-
-              {/* Manual Controls */}
               <div>
                 <Button
                   variant="ghost"
@@ -3391,9 +2788,7 @@ export default function Conversations() {
                   </div>
                 )}
               </div>
-
               <Separator />
-
               <div className="space-y-1">
                 <Button
                   variant="outline"
@@ -3432,9 +2827,7 @@ export default function Conversations() {
                   Mark Lost
                 </Button>
               </div>
-
               <Separator />
-
               {showManualControls && activityLog && activityLog.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -3467,7 +2860,6 @@ export default function Conversations() {
                   </div>
                 </div>
               )}
-
               <div className="pt-2 border-t border-slate-200">
                 <div className="flex justify-between text-xs text-slate-500">
                   <span>Created</span>
@@ -3499,7 +2891,7 @@ export default function Conversations() {
           if (!open) setConflictError(null);
         }}
       >
-        <DialogContent className="max-w-full sm:max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Schedule Meeting</DialogTitle>
             <DialogDescription>
@@ -3507,9 +2899,8 @@ export default function Conversations() {
               {selectedConversation?.lead?.lastName}
             </DialogDescription>
           </DialogHeader>
-
           {conflictError && (
-            <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-3 sm:p-4">
+            <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -3520,7 +2911,7 @@ export default function Conversations() {
                     {conflictError.message}
                   </p>
                   <details className="text-xs">
-                    <summary className="cursor-pointer text-red-800 font-medium hover:text-red-900 touch-target">
+                    <summary className="cursor-pointer text-red-800 font-medium hover:text-red-900">
                       View conflicting meeting
                     </summary>
                     <div className="mt-2 p-2 bg-white rounded border border-red-200">
@@ -3547,12 +2938,11 @@ export default function Conversations() {
               </div>
             </div>
           )}
-
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="meeting-type">Meeting Type</Label>
               <Select value={bookingType} onValueChange={setBookingType}>
-                <SelectTrigger id="meeting-type" className="h-11 touch-target">
+                <SelectTrigger id="meeting-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -3562,7 +2952,6 @@ export default function Conversations() {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="meeting-date">Date</Label>
               <Popover>
@@ -3570,7 +2959,7 @@ export default function Conversations() {
                   <Button
                     id="meeting-date"
                     variant="outline"
-                    className={`w-full justify-start text-left font-normal h-11 touch-target ${
+                    className={`w-full justify-start text-left font-normal ${
                       !bookingDate && "text-muted-foreground"
                     }`}
                   >
@@ -3597,7 +2986,6 @@ export default function Conversations() {
                   />
                 </PopoverContent>
               </Popover>
-
               {bookingDate &&
                 allBookings.length > 0 &&
                 (() => {
@@ -3631,7 +3019,7 @@ export default function Conversations() {
                               className="flex items-center gap-2 text-blue-700"
                             >
                               <Clock className="w-3 h-3" />
-                              <span className="font-mono text-xs">
+                              <span className="font-mono">
                                 {start.toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -3642,7 +3030,7 @@ export default function Conversations() {
                                   minute: "2-digit",
                                 })}
                               </span>
-                              <span className="text-blue-600 text-xs truncate">
+                              <span className="text-blue-600">
                                 ({b.attendeeName})
                               </span>
                             </div>
@@ -3653,8 +3041,7 @@ export default function Conversations() {
                   );
                 })()}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="meeting-time">Time</Label>
                 <Input
@@ -3665,7 +3052,6 @@ export default function Conversations() {
                     setBookingTime(e.target.value);
                     setConflictError(null);
                   }}
-                  className="h-11 touch-target"
                 />
               </div>
               <div className="space-y-2">
@@ -3677,10 +3063,7 @@ export default function Conversations() {
                     setConflictError(null);
                   }}
                 >
-                  <SelectTrigger
-                    id="meeting-duration"
-                    className="h-11 touch-target"
-                  >
+                  <SelectTrigger id="meeting-duration">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -3693,7 +3076,6 @@ export default function Conversations() {
                 </Select>
               </div>
             </div>
-
             {bookingDate && bookingTime && (
               <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200">
                 <Clock className="w-3 h-3" />
@@ -3716,7 +3098,6 @@ export default function Conversations() {
                 </span>
               </div>
             )}
-
             <div className="space-y-2">
               <Label htmlFor="meeting-location">Location</Label>
               <Input
@@ -3724,10 +3105,8 @@ export default function Conversations() {
                 value={bookingLocation}
                 onChange={(e) => setBookingLocation(e.target.value)}
                 placeholder="Office, Site, Virtual, etc."
-                className="h-11 touch-target"
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="meeting-notes">Notes (Optional)</Label>
               <Textarea
@@ -3736,12 +3115,11 @@ export default function Conversations() {
                 onChange={(e) => setBookingNotes(e.target.value)}
                 placeholder="Any additional details..."
                 rows={3}
-                className="resize-none touch-target"
+                className="resize-none"
               />
             </div>
           </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          <div className="flex gap-3 pt-4">
             <Button
               type="button"
               variant="outline"
@@ -3749,7 +3127,7 @@ export default function Conversations() {
                 setShowBookingModal(false);
                 setConflictError(null);
               }}
-              className="flex-1 h-11 touch-target"
+              className="flex-1"
             >
               Cancel
             </Button>
@@ -3757,7 +3135,7 @@ export default function Conversations() {
               type="button"
               onClick={handleBookMeeting}
               disabled={!bookingDate || bookMeetingMutation.isPending}
-              className="flex-1 h-11 touch-target"
+              className="flex-1"
             >
               {bookMeetingMutation.isPending ? (
                 <>
