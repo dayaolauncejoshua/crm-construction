@@ -3,13 +3,12 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,14 +29,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import {
   MessageCircle,
   Send,
   Bot,
   User,
   Clock,
-  Phone,
   Star,
   AlertTriangle,
   AlertCircle,
@@ -46,23 +43,21 @@ import {
   RefreshCw,
   Info,
   Sparkles,
-  Tag,
   Edit3,
   History,
   Target,
   XCircle,
   Check,
   Eye,
+  MapPin
 } from "lucide-react";
 import { BookingApprovalNotification } from "@/components/BookingApprovalNotification";
-import { space } from "postcss/lib/list";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,7 +70,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-// Date formatting helpers - ADD THESE BEFORE export default function Conversations()
+// Date formatting helpers
 const formatDateDivider = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
@@ -83,6 +78,7 @@ const formatDateDivider = (date: Date): string => {
 
   today.setHours(0, 0, 0, 0);
   yesterday.setHours(0, 0, 0, 0);
+
   const messageDate = new Date(date);
   messageDate.setHours(0, 0, 0, 0);
 
@@ -124,7 +120,7 @@ const groupMessagesByDate = (messages: any[]) => {
   return groups;
 };
 
-// Minimal WhatsApp-Style Date Divider Component
+// Date Divider Component
 const DateDivider = ({ date }: { date: string }) => {
   const formattedDate = formatDateDivider(new Date(date));
 
@@ -176,16 +172,12 @@ const MessageInfoModal = ({
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
         onClick={onClose}
       />
-
-      {/* Modal */}
       <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-          {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
               <Info className="w-5 h-5 text-blue-600" />
@@ -199,9 +191,7 @@ const MessageInfoModal = ({
             </button>
           </div>
 
-          {/* Content */}
           <div className="px-6 py-4 space-y-6">
-            {/* Message Preview */}
             <div>
               <p className="text-xs text-slate-500 font-medium mb-1">Message</p>
               <p className="text-sm text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 line-clamp-3">
@@ -209,9 +199,7 @@ const MessageInfoModal = ({
               </p>
             </div>
 
-            {/* Timestamps */}
             <div className="space-y-4">
-              {/* Sent */}
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center flex-shrink-0">
                   <Send className="w-5 h-5 text-blue-600" />
@@ -225,7 +213,6 @@ const MessageInfoModal = ({
                 <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
               </div>
 
-              {/* Delivered */}
               <div className="flex items-start gap-3">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -255,7 +242,6 @@ const MessageInfoModal = ({
                 )}
               </div>
 
-              {/* Read */}
               {message.sender !== "lead" && (
                 <div className="flex items-start gap-3">
                   <div
@@ -286,7 +272,6 @@ const MessageInfoModal = ({
               )}
             </div>
 
-            {/* Status Summary */}
             <div className="pt-4 border-t border-slate-200">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Clock className="w-3.5 h-3.5" />
@@ -309,7 +294,6 @@ const MessageInfoModal = ({
             </div>
           </div>
 
-          {/* Footer */}
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-xl">
             <Button onClick={onClose} className="w-full" variant="outline">
               Close
@@ -323,21 +307,14 @@ const MessageInfoModal = ({
 
 export default function Conversations() {
   usePageTitle("Conversations");
-
   const { user } = useAuth();
   const { selectedClientId } = useClient();
-
-  console.log("=== USER DEBUG ===");
-  console.log("User object:", user);
-  console.log("User ID:", user?.id);
-  console.log("User email:", user?.email);
 
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Get leadId from URL query parameter
   const leadIdFromCalendar = new URLSearchParams(window.location.search).get(
     "leadId"
   );
@@ -345,9 +322,7 @@ export default function Conversations() {
   const [showLeadDetails, setShowLeadDetails] = useState(false);
   const [showManualControls, setShowManualControls] = useState(false);
   const [manualScore, setManualScore] = useState(0);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [internalNote, setInternalNote] = useState("");
-
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingDate, setBookingDate] = useState<Date>();
   const [bookingTime, setBookingTime] = useState("10:00");
@@ -356,7 +331,6 @@ export default function Conversations() {
   const [bookingLocation, setBookingLocation] = useState("Office");
   const [bookingNotes, setBookingNotes] = useState("");
   const [conflictError, setConflictError] = useState<any>(null);
-
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
     null
   );
@@ -366,21 +340,22 @@ export default function Conversations() {
     enabled: !!selectedClientId,
   });
 
-  // Fetch activity log for selected lead
   const { data: activityLog } = useQuery<any[]>({
     queryKey: ["/api/leads", selectedConversation?.lead?.id, "activity"],
     enabled: !!selectedConversation?.lead?.id,
   });
 
-  const [searchQuery, setSearchQuery] = useState(""); // ADD THIS
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [approvingBookingId, setApprovingBookingId] = useState<string | null>(null);
+const [decliningBookingId, setDecliningBookingId] = useState<string | null>(null);
+const [showDeclineConfirm, setShowDeclineConfirm] = useState<string | null>(null);
 
   const { data: templates } = useQuery({
     queryKey: ["/api/quick-replies", selectedClientId],
@@ -393,10 +368,8 @@ export default function Conversations() {
 
   const [showMessageInfo, setShowMessageInfo] = useState<string | null>(null);
 
-  // WebSocket for real-time updates
   const { data: wsData, isConnected } = useWebSocket();
 
-  // Fetch conversations
   const {
     data: dashboardData,
     isLoading,
@@ -413,7 +386,6 @@ export default function Conversations() {
     enabled: !!selectedClientId,
   });
 
-  // Fetch messages for selected conversation
   const { data: messages } = useQuery({
     queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
     enabled: !!selectedConversation?.id,
@@ -422,12 +394,10 @@ export default function Conversations() {
         `/api/conversations/${selectedConversation.id}/messages`
       );
       const data = await response.json();
-      // Reverse to show oldest first (top) to newest (bottom)
       return data.reverse();
     },
   });
 
-  // Fetch bookings for booking prevention
   const { data: allBookings = [] } = useQuery({
     queryKey: ["/api/bookings", selectedClientId],
     queryFn: async () => {
@@ -440,16 +410,18 @@ export default function Conversations() {
   const { data: pendingBookings = [] } = useQuery({
     queryKey: ["/api/bookings", selectedClientId, "pending"],
     queryFn: async () => {
-      const response = await fetch(`/api/bookings/${selectedClientId}/pending`, {
-        credentials: "include",
-      });
+      const response = await fetch(
+        `/api/bookings/${selectedClientId}/pending`,
+        {
+          credentials: "include",
+        }
+      );
       return response.json();
     },
     enabled: !!selectedClientId,
-    refetchInterval: 5000, // Check every 5 seconds
+    refetchInterval: 5000,
   });
 
-  // Mark as read mutation
   const markAsReadMutation = useMutation({
     mutationFn: async (conversationId: string) => {
       const response = await fetch(
@@ -469,7 +441,6 @@ export default function Conversations() {
     },
   });
 
-  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({
       conversationId,
@@ -493,7 +464,6 @@ export default function Conversations() {
       queryClient.invalidateQueries({
         queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
       });
-      // Force scroll to bottom after sending
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -511,11 +481,9 @@ export default function Conversations() {
     },
   });
 
-  // Add this function to handle typing
   const handleTyping = () => {
     if (!selectedConversation) return;
 
-    // If not already typing, send "started typing"
     if (!isTyping) {
       setIsTyping(true);
       fetch(`/api/conversations/${selectedConversation.id}/typing`, {
@@ -526,12 +494,10 @@ export default function Conversations() {
       }).catch((err) => console.error("Failed to send typing indicator:", err));
     }
 
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Set timeout to stop typing after 3 seconds of no activity
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       if (selectedConversation) {
@@ -547,7 +513,6 @@ export default function Conversations() {
     }, 3000);
   };
 
-  // React to message mutation
   const reactToMessageMutation = useMutation({
     mutationFn: async ({
       messageId,
@@ -564,7 +529,6 @@ export default function Conversations() {
       return response.json();
     },
     onSuccess: (data, variables) => {
-      // Refresh messages to show new reaction
       queryClient.invalidateQueries({
         queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
       });
@@ -575,7 +539,6 @@ export default function Conversations() {
     },
   });
 
-  // Helper to get user's current reaction for a message
   const getUserReaction = (message: any): string | null => {
     if (!message.reactions || !user?.id) return null;
     const userReaction = message.reactions.find(
@@ -584,7 +547,6 @@ export default function Conversations() {
     return userReaction?.emoji || null;
   };
 
-  // Remove reaction mutation
   const removeReactionMutation = useMutation({
     mutationFn: async ({
       messageId,
@@ -611,7 +573,6 @@ export default function Conversations() {
     },
   });
 
-  // Take over conversation mutation
   const takeoverMutation = useMutation({
     mutationFn: async (conversationId: string) => {
       const response = await apiRequest(
@@ -631,9 +592,7 @@ export default function Conversations() {
   });
 
   const conversations = dashboardData?.conversations || [];
-  const hotLeads = dashboardData?.hotLeads || [];
 
-  // Update lead manually
   const updateLeadMutation = useMutation({
     mutationFn: async (updates: any) => {
       const response = await apiRequest(
@@ -644,20 +603,15 @@ export default function Conversations() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Update the selected conversation with new data
       setSelectedConversation((prev: any) => ({
         ...prev,
         lead: { ...prev.lead, ...data },
         qualificationScore: data.manualScore || prev.qualificationScore,
       }));
-
-      // Refetch dashboard data
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
-
       refetch();
-
       toast({
         title: "Lead updated",
         description: "Changes saved successfully",
@@ -665,7 +619,6 @@ export default function Conversations() {
     },
   });
 
-  // Update lead score
   const updateScore = (score: number) => {
     updateLeadMutation.mutate({
       manualScore: (score / 100).toString(),
@@ -673,23 +626,18 @@ export default function Conversations() {
     });
   };
 
-  // Update lead status
   const updateStatus = (status: string) => {
     updateLeadMutation.mutate({ status });
   };
 
-  // Toggle tag
   const toggleTag = (tagName: string) => {
     const currentTags = selectedConversation?.lead?.tags || [];
     const newTags = currentTags.includes(tagName)
       ? currentTags.filter((t: string) => t !== tagName)
       : [...currentTags, tagName];
-
     updateLeadMutation.mutate({ tags: newTags });
-    setSelectedTags(newTags);
   };
 
-  // Book meeting mutation
   const bookMeetingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const response = await fetch("/api/bookings/schedule", {
@@ -698,11 +646,8 @@ export default function Conversations() {
         credentials: "include",
         body: JSON.stringify(bookingData),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
-        // Throw the full error data including status code
         const error: any = new Error(
           data.message || "Failed to create booking"
         );
@@ -712,34 +657,27 @@ export default function Conversations() {
         error.fullData = data;
         throw error;
       }
-
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["/api/bookings", selectedClientId],
       });
-
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
-
       toast({
         title: "Meeting Scheduled!",
         description: "Calendar invite sent to lead via email and WhatsApp.",
       });
-
       setShowBookingModal(false);
       setConflictError(null);
-
       setBookingDate(undefined);
       setBookingTime("10:00");
       setBookingDuration("60");
       setBookingNotes("");
     },
     onError: (error: any) => {
-      console.log("❌ Booking error:", error);
-
       if (error.status === 409 || error.code === "Booking conflict detected") {
         setConflictError(
           error.fullData || {
@@ -748,12 +686,7 @@ export default function Conversations() {
             conflictingBooking: error.conflictingBooking,
           }
         );
-
-        // Only show toast if modal is not open
-        // Since modal is open, we don't show toast to avoid overlap
-        // The in-modal alert is sufficient
       } else {
-        // For non-conflict errors, show toast
         toast({
           title: "Error",
           description: error.message || "Failed to create booking",
@@ -763,7 +696,6 @@ export default function Conversations() {
     },
   });
 
-  // Handle booking submission
   const handleBookMeeting = () => {
     if (!bookingDate || !selectedConversation) {
       toast({
@@ -774,7 +706,6 @@ export default function Conversations() {
       return;
     }
 
-    // Combine date and time
     const [hours, minutes] = bookingTime.split(":");
     const scheduledFor = new Date(bookingDate);
     scheduledFor.setHours(parseInt(hours), parseInt(minutes), 0, 0);
@@ -790,44 +721,35 @@ export default function Conversations() {
     });
   };
 
-  // Save internal note
   const saveNote = () => {
     if (!internalNote.trim()) return;
-
     updateLeadMutation.mutate({
       internalNotes: internalNote,
     });
     setInternalNote("");
   };
 
-  // Set follow-up reminder
   const setFollowUpReminder = (days: number) => {
     const followUpDate = new Date();
     followUpDate.setDate(followUpDate.getDate() + days);
-
     updateLeadMutation.mutate({
       nextFollowUpAt: followUpDate,
     });
   };
 
-  // ADD THIS: Auto-select conversation from URL query parameter
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const conversationId = urlParams.get("id");
-
     if (conversationId && conversations.length > 0) {
       const conversation = conversations.find((c) => c.id === conversationId);
       if (conversation) {
         setSelectedConversation(conversation);
         markAsReadMutation.mutate(conversationId);
-
-        // Clear URL parameter after selecting
         window.history.replaceState({}, "", "/conversations");
       }
     }
-  }, [conversations]); // Run when conversations load
+  }, [conversations]);
 
-  // Auto-select conversation when coming from calendar
   useEffect(() => {
     if (leadIdFromCalendar && conversations.length > 0) {
       const targetConversation = conversations.find(
@@ -836,22 +758,18 @@ export default function Conversations() {
       if (targetConversation) {
         setSelectedConversation(targetConversation);
         markAsReadMutation.mutate(targetConversation.id);
-
-        // Clear URL parameter after selecting
         window.history.replaceState({}, "", "/conversations");
       }
     }
   }, [leadIdFromCalendar, conversations]);
 
   const filteredConversations = conversations.filter((conv: any) => {
-    // Search filter
     const matchesSearch =
       searchQuery === "" ||
       conv.lead?.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lead?.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       conv.lead?.company?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Status filter
     const matchesStatus =
       filterStatus === "all" ||
       (filterStatus === "hot" &&
@@ -863,7 +781,6 @@ export default function Conversations() {
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate counts for badges
   const hotCount = conversations.filter(
     (c: any) => parseFloat(c.qualificationScore || "0") >= 0.7
   ).length;
@@ -874,36 +791,19 @@ export default function Conversations() {
     (c: any) => c.isAiHandled === false
   ).length;
 
-  console.log("Hot leads from dashboard:", dashboardData?.hotLeads);
-  console.log(
-    "Hot leads client IDs:",
-    dashboardData?.hotLeads?.map((h) => h.clientId)
-  );
-  // Handle WebSocket messages
   useEffect(() => {
     if (!wsData) return;
 
-    console.log("=== WEBSOCKET EVENT ===");
-    console.log("Type:", wsData.type);
-    console.log("Full data:", wsData);
-    console.log("Current conversations count:", conversations.length);
-
-    console.log("WebSocket update received:", wsData);
-
     switch (wsData.type) {
       case "typing_indicator":
-        console.log("⌨️ Typing indicator received:", wsData);
-
         setTypingIndicators((prev) => ({
           ...prev,
           [wsData.conversationId]: {
             isTyping: wsData.isTyping,
             sender: wsData.sender,
-            leadName: wsData.leadName, // ✅ ADD THIS
+            leadName: wsData.leadName,
           },
         }));
-
-        // Auto-clear after 5 seconds if still showing
         if (wsData.isTyping) {
           setTimeout(() => {
             setTypingIndicators((prev) => {
@@ -922,13 +822,7 @@ export default function Conversations() {
           }, 5000);
         }
         break;
-
       case "conversation_updated":
-        queryClient.invalidateQueries({
-          queryKey: [`/api/dashboard/${selectedClientId}`],
-        });
-        break;
-
       case "new_message":
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", wsData.conversationId, "messages"],
@@ -937,24 +831,18 @@ export default function Conversations() {
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
         break;
-
       case "message_read":
-        console.log("Message read receipt received:", wsData);
-
-        // Refresh messages if it's the current conversation
         if (wsData.conversationId === selectedConversation?.id) {
           queryClient.invalidateQueries({
             queryKey: ["/api/conversations", wsData.conversationId, "messages"],
           });
         }
         break;
-
       case "new_conversation":
       case "hot_lead_alert":
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
-
         if (wsData.type === "hot_lead_alert") {
           toast({
             title: "Hot Lead Alert!",
@@ -963,23 +851,18 @@ export default function Conversations() {
           });
         }
         break;
-
       case "lead_updated":
-        console.log("🔄 Lead updated via WebSocket:", wsData.lead);
-
-        // Update conversations list with new lead data
         queryClient.setQueryData(
           [`/api/dashboard/${selectedClientId}`],
           (oldData: any) => {
             if (!oldData) return oldData;
-
             return {
               ...oldData,
               conversations: oldData.conversations.map((conv: any) => {
                 if (conv.id === wsData.conversationId) {
                   return {
                     ...conv,
-                    lead: wsData.lead, // Update with fresh lead data
+                    lead: wsData.lead,
                   };
                 }
                 return conv;
@@ -987,8 +870,6 @@ export default function Conversations() {
             };
           }
         );
-
-        // If this is the selected conversation, update it too
         if (selectedConversation?.id === wsData.conversationId) {
           setSelectedConversation((prev: any) => {
             if (!prev) return prev;
@@ -998,8 +879,6 @@ export default function Conversations() {
             };
           });
         }
-
-        // Show toast notification if temperature changed to hot
         if (wsData.lead.temperature === "hot") {
           toast({
             title: "🔥 Lead is now HOT!",
@@ -1012,48 +891,32 @@ export default function Conversations() {
           });
         }
         break;
-
       case "conversation_reopened":
-
       case "message_reacted":
-        console.log("😊 Message reacted:", wsData);
-
-        // Refresh messages if it's the current conversation
         if (wsData.conversationId === selectedConversation?.id) {
           queryClient.invalidateQueries({
             queryKey: ["/api/conversations", wsData.conversationId, "messages"],
           });
         }
-        break;
-
-        console.log("🔄 Conversation reopened:", wsData);
-
-        // Refresh conversations list
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
-
-        // Show alert to agent
         toast({
           title: "⚠️ Conversation Reopened",
           description: `${
             wsData.lead?.firstName || "Lead"
           } messaged again after termination. Please review.`,
           variant: "default",
-          duration: 10000, // Show for 10 seconds
+          duration: 10000,
         });
         break;
-
       default:
-        console.log("⚠️ Unknown event type, calling refetch");
         refetch();
     }
   }, [wsData, selectedClientId, queryClient, toast, refetch]);
 
   useEffect(() => {
-    // Scroll to bottom when messages load or conversation changes
     if (messages && messages.length > 0) {
-      // Use timeout to ensure DOM has updated
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -1061,7 +924,6 @@ export default function Conversations() {
   }, [messages, selectedConversation?.id]);
 
   useEffect(() => {
-    // Scroll to bottom when selecting a conversation
     if (selectedConversation) {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1069,16 +931,12 @@ export default function Conversations() {
     }
   }, [selectedConversation?.id]);
 
-  // Mark messages as read when conversation is selected
   useEffect(() => {
     if (selectedConversation && messages && messages.length > 0) {
       const unreadMessages = messages.filter(
         (m: any) => m.sender === "lead" && !m.readAt
       );
-
       if (unreadMessages.length > 0) {
-        console.log(`Marking ${unreadMessages.length} messages as read`);
-
         fetch(`/api/conversations/${selectedConversation.id}/messages/read`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1091,13 +949,11 @@ export default function Conversations() {
     }
   }, [selectedConversation, messages]);
 
-  // Mark lead as viewed when conversation is selected
   useEffect(() => {
     if (
       selectedConversation?.lead?.id &&
       selectedConversation.lead.viewedAt === null
     ) {
-      // Mark lead as viewed
       fetch(`/api/leads/${selectedConversation.lead.id}/view`, {
         method: "POST",
         credentials: "include",
@@ -1107,7 +963,6 @@ export default function Conversations() {
 
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
-
     sendMessageMutation.mutate({
       conversationId: selectedConversation.id,
       content: newMessage,
@@ -1124,11 +979,9 @@ export default function Conversations() {
     const tags = conversation.lead?.tags || [];
     const isAiHandled = conversation.isAiHandled;
 
-    // A reopened conversation is one where AI was disabled after spam termination
     const isReopened = tags.includes("reopened");
     const wasTerminated = tags.includes("terminated");
 
-    // Show reopened badge for flagged conversations
     if (isReopened && !isAiHandled) {
       return (
         <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
@@ -1136,7 +989,6 @@ export default function Conversations() {
         </Badge>
       );
     }
-
     if (status === "spam" || wasTerminated) {
       return (
         <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
@@ -1144,12 +996,9 @@ export default function Conversations() {
         </Badge>
       );
     }
-
     if (status === "not-a-lead") {
       return <Badge className="bg-gray-100 text-gray-800">🚫 Not a Lead</Badge>;
     }
-
-    // Show temperature badge
     if (
       temperature === "hot" ||
       parseFloat(conversation.qualificationScore || "0") >= 0.7
@@ -1160,8 +1009,6 @@ export default function Conversations() {
         </Badge>
       );
     }
-
-    // ✅ PRIORITY 5: Warm leads
     if (
       temperature === "warm" ||
       parseFloat(conversation.qualificationScore || "0") >= 0.4
@@ -1170,8 +1017,6 @@ export default function Conversations() {
         <Badge className="bg-yellow-100 text-yellow-800">😐 Warm Lead</Badge>
       );
     }
-
-    // ✅ PRIORITY 6: AI vs Human handling (for cold leads)
     if (isAiHandled) {
       return (
         <Badge className="bg-blue-100 text-blue-800">❄️ AI Handling</Badge>
@@ -1201,7 +1046,6 @@ export default function Conversations() {
     );
   }
 
-  // Replace variables in template
   const replaceVariables = (content: string, lead: any) => {
     return content
       .replace(/{firstName}/g, lead?.firstName || "[First Name]")
@@ -1214,35 +1058,27 @@ export default function Conversations() {
       .replace(/{location}/g, "[Location]");
   };
 
-  // Use template
   const useTemplate = async (template: any) => {
     if (!selectedConversation) return;
-
     const replacedContent = replaceVariables(
       template.content,
       selectedConversation.lead
     );
-
     setNewMessage(replacedContent);
     setShowTemplates(false);
-
-    // Track usage
     await fetch(`/api/quick-replies/${template.id}/use`, {
       method: "POST",
       credentials: "include",
     });
   };
 
-  // Filter templates
   const filteredTemplates = ((templates as any[]) || []).filter((t: any) => {
     const matchesSearch =
       templateSearch === "" ||
       t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
       t.content.toLowerCase().includes(templateSearch.toLowerCase());
-
     const matchesCategory =
       selectedCategory === "all" || t.category === selectedCategory;
-
     return matchesSearch && matchesCategory;
   });
 
@@ -1250,12 +1086,133 @@ export default function Conversations() {
     (c: any) => c.lead?.status === "not-a-lead"
   ).length;
 
+const handleApproveBooking = async (bookingId: string) => {
+  setApprovingBookingId(bookingId);
+  
+  try {
+    const response = await fetch(`/api/bookings/${bookingId}/approve`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    if (!response.ok) throw new Error("Failed to approve");
+    
+    const approvedBooking = await response.json();
+
+    // Optimistic update - remove from pending
+    queryClient.setQueryData(
+      ["/api/bookings", selectedClientId, "pending"],
+      (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
+    );
+
+    // Refetch to ensure consistency
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId, "pending"],
+    });
+    
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId],
+    });
+    
+    // Refetch messages to show the confirmation sent
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+    });
+
+    // Success notification with details
+    toast({
+      title: "✅ Booking Approved & Sent!",
+      description: (
+        <div className="space-y-1 text-sm">
+          <p className="font-medium">Confirmation sent to lead via:</p>
+          <div className="flex flex-col gap-0.5 text-xs">
+            <span>📧 Email: Calendar invite</span>
+            <span>💬 WhatsApp: Meeting details</span>
+          </div>
+        </div>
+      ),
+      duration: 6000,
+    });
+
+    // Smooth scroll to see the sent message
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 500);
+    
+  } catch (error) {
+    toast({
+      title: "❌ Approval Failed",
+      description: "Could not approve booking. Please try again.",
+      variant: "destructive",
+      action: (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleApproveBooking(bookingId)}
+        >
+          Retry
+        </Button>
+      ),
+    });
+  } finally {
+    setApprovingBookingId(null);
+  }
+};
+
+const handleDeclineBooking = async (bookingId: string) => {
+  setDecliningBookingId(bookingId);
+  
+  try {
+    const response = await fetch(`/api/bookings/${bookingId}/decline`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    if (!response.ok) throw new Error("Failed to decline");
+
+    // Optimistic update
+    queryClient.setQueryData(
+      ["/api/bookings", selectedClientId, "pending"],
+      (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
+    );
+
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/bookings", selectedClientId, "pending"],
+    });
+    
+    // Refetch messages to show the decline message sent
+    await queryClient.invalidateQueries({
+      queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
+    });
+
+    toast({
+      title: "Booking Declined",
+      description: "The lead has been notified and can propose a new time.",
+      duration: 5000,
+    });
+    
+    // Smooth scroll
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 500);
+    
+  } catch (error) {
+    toast({
+      title: "❌ Decline Failed",
+      description: "Could not decline booking. Please try again.",
+      variant: "destructive",
+    });
+  } finally {
+    setDecliningBookingId(null);
+    setShowDeclineConfirm(null);
+  }
+};
+
   return (
     <div className="h-screen flex flex-col">
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Conversations List */}
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-          {/* Header */}
           <div className="p-3 border-b border-slate-200 flex-shrink-0">
             <Breadcrumb className="mb-3">
               <BreadcrumbList>
@@ -1288,8 +1245,6 @@ export default function Conversations() {
                 />
               </Button>
             </div>
-
-            {/* Connection Status */}
             <div
               className={`flex items-center space-x-2 text-sm px-3 py-2 rounded-lg mb-4 ${
                 isConnected
@@ -1304,19 +1259,13 @@ export default function Conversations() {
               ></div>
               <span>{isConnected ? "Connected" : "Disconnected"}</span>
             </div>
-
-            {/* Search Bar */}
-            {/* Search and Filter - Inline */}
             <div className="flex gap-1.5 mb-3">
-              {/* Search Input */}
               <Input
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-2"
               />
-
-              {/* Filter Dropdown */}
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Filter" />
@@ -1339,8 +1288,6 @@ export default function Conversations() {
               </Select>
             </div>
           </div>
-
-          {/* Scrollable conversation list */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-3 space-y-3">
               {filteredConversations.length === 0 ? (
@@ -1388,8 +1335,6 @@ export default function Conversations() {
                                 (conversation.lead?.lastName?.[0] || "")}
                             </AvatarFallback>
                           </Avatar>
-
-                          {/* Unread badge with count */}
                           {conversation.unreadCount > 0 && (
                             <div className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center px-1">
                               <span className="text-xs font-bold text-white">
@@ -1398,7 +1343,6 @@ export default function Conversations() {
                             </div>
                           )}
                         </div>
-
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <h4
@@ -1415,13 +1359,10 @@ export default function Conversations() {
                               {formatTime(conversation.lastMessageAt)}
                             </span>
                           </div>
-
                           <p className="text-xs text-slate-600 mb-2 truncate">
                             {conversation.lead?.company}
                           </p>
-
                           {getStatusBadge(conversation)}
-
                           {parseFloat(conversation.qualificationScore || "0") >=
                             0.7 && (
                             <div className="flex items-center space-x-1 mt-2 text-xs text-red-600">
@@ -1443,20 +1384,6 @@ export default function Conversations() {
         <div className="flex-1 flex flex-col">
           {selectedConversation ? (
             <>
-            {/* Pending Booking Notifications */}
-            {pendingBookings.length > 0 && (
-                <div className="p-4 space-y-3 bg-amber-50/50 border-b border-amber-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-semibold text-amber-900">
-                      {pendingBookings.length} Booking{pendingBookings.length > 1 ? "s" : ""} Awaiting Approval
-                    </span>
-                  </div>
-                  {pendingBookings.map((booking: any) => (
-                    <BookingApprovalNotification key={booking.id} booking={booking} />
-                  ))}
-                </div>
-              )}
               <div className="bg-white border-b border-slate-200 p-4 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -1476,25 +1403,20 @@ export default function Conversations() {
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center">
+                  <div className="flex items-center gap-2">
                     {getStatusBadge(selectedConversation)}
-
-                    {/* Icon-only button with hover tooltip */}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowLeadDetails(!showLeadDetails)}
                       className={`p-2 ${showLeadDetails ? "bg-slate-100" : ""}`}
-                      title="Lead Details" // This shows tooltip on hover
+                      title="Lead Details"
                     >
                       <Info className="w-6 h-6 text-slate-600" />
                     </Button>
-
                     {selectedConversation.isAiHandled && (
                       <Button
                         onClick={() => handleTakeover(selectedConversation.id)}
-                        className=""
                         disabled={takeoverMutation.isPending}
                       >
                         <UserCheck className="w-4 h-4 mr-2" />
@@ -1516,7 +1438,6 @@ export default function Conversations() {
                     </div>
                   ) : (
                     (() => {
-                      // ✅ Safety check: ensure messages exists
                       if (!messages || messages.length === 0) {
                         return (
                           <div className="text-center py-8">
@@ -1528,563 +1449,611 @@ export default function Conversations() {
                         );
                       }
 
+                      // ✅ NEW: Find last AI message index
+                      const lastAiMessageIndex = messages
+                        .map((m: any, idx: number) =>
+                          m.sender === "ai" ? idx : -1
+                        )
+                        .filter((idx: number) => idx !== -1)
+                        .pop();
+
                       const messageGroups = groupMessagesByDate(messages);
+                      let globalIndex = -1; // Track global message index across groups
 
                       return messageGroups.map((group) => (
                         <div key={group.date}>
-                          {/* Date Divider */}
                           <DateDivider date={group.date} />
-
-                          {/* Messages for this date */}
                           <div className="space-y-4">
-                            {group.messages.map((message: any) => (
-                              <div
-                                key={message.id}
-                                className={`flex ${
-                                  message.sender === "lead"
-                                    ? "justify-start"
-                                    : "justify-end"
-                                }`}
-                              >
-                                {/* YOUR EXISTING MESSAGE CODE - DON'T CHANGE THIS */}
-                                <div className="relative max-w-xs lg:max-w-md group">
+                            {group.messages.map((message: any) => {
+                              globalIndex++; // Increment for each message
+                              const isLastAiMessage =
+                                globalIndex === lastAiMessageIndex;
+
+                              return (
+                                <div key={message.id}>
                                   <div
-                                    className={`px-3 py-1.5 rounded-lg ${
+                                    className={`flex ${
                                       message.sender === "lead"
-                                        ? "bg-slate-100 text-slate-900"
-                                        : message.sender === "ai"
-                                        ? "bg-blue-100 text-blue-900"
-                                        : "bg-primary text-white"
-                                    } ${
-                                      message.isStatusMessage
-                                        ? "opacity-60 italic text-xs"
-                                        : ""
+                                        ? "justify-start"
+                                        : "justify-end"
                                     }`}
                                   >
-                                    <div className="flex items-center space-x-1.5 mb-0.5">
-                                      {message.sender === "ai" && (
-                                        <Bot className="w-3 h-3" />
-                                      )}
-                                      {message.sender === "lead" && (
-                                        <User className="w-3 h-3" />
-                                      )}
-                                      {message.sender === "human" && (
-                                        <UserCheck className="w-3 h-3" />
-                                      )}
-                                      <span className="text-xs opacity-75">
-                                        {message.sender === "ai"
-                                          ? "AI Assistant"
-                                          : message.sender === "lead"
-                                          ? "Lead"
-                                          : "You"}
-                                      </span>
-                                    </div>
-
-                                    <p className="text-sm break-words">
-                                      {message.content}
-                                    </p>
-
-                                    {/* ✅ NEW TIMESTAMP + REACTIONS SECTION */}
-                                    <div className="flex items-center gap-2 mt-1">
-                                      {/* ✅ FOR LEAD: Reactions FIRST, then timestamp */}
-                                      {/* ✅ FOR LEAD: Reactions FIRST, then timestamp */}
-                                      {message.sender === "lead" ? (
-                                        <>
-                                          {/* Reactions first */}
-                                          {message.reactions &&
-                                            message.reactions.length > 0 && (
-                                              <div className="flex items-center gap-1">
-                                                {(() => {
-                                                  const reactionCounts =
-                                                    message.reactions.reduce(
-                                                      (acc: any, r: any) => {
-                                                        if (
-                                                          !r.emoji ||
-                                                          r.emoji.trim() === ""
+                                    <div className="relative max-w-xs lg:max-w-md group">
+                                      <div
+                                        className={`px-3 py-1.5 rounded-lg ${
+                                          message.sender === "lead"
+                                            ? "bg-slate-100 text-slate-900"
+                                            : message.sender === "ai"
+                                            ? "bg-blue-100 text-blue-900"
+                                            : "bg-primary text-white"
+                                        } ${
+                                          message.isStatusMessage
+                                            ? "opacity-60 italic text-xs"
+                                            : ""
+                                        }`}
+                                      >
+                                        <div className="flex items-center space-x-1.5 mb-0.5">
+                                          {message.sender === "ai" && (
+                                            <Bot className="w-3 h-3" />
+                                          )}
+                                          {message.sender === "lead" && (
+                                            <User className="w-3 h-3" />
+                                          )}
+                                          {message.sender === "human" && (
+                                            <UserCheck className="w-3 h-3" />
+                                          )}
+                                          <span className="text-xs opacity-75">
+                                            {message.sender === "ai"
+                                              ? "AI Assistant"
+                                              : message.sender === "lead"
+                                              ? "Lead"
+                                              : "You"}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm break-words">
+                                          {message.content}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          {message.sender === "lead" ? (
+                                            <>
+                                              {message.reactions &&
+                                                message.reactions.length >
+                                                  0 && (
+                                                  <div className="flex items-center gap-1">
+                                                    {(() => {
+                                                      const reactionCounts =
+                                                        message.reactions.reduce(
+                                                          (
+                                                            acc: any,
+                                                            r: any
+                                                          ) => {
+                                                            if (
+                                                              !r.emoji ||
+                                                              r.emoji.trim() ===
+                                                                ""
+                                                            )
+                                                              return acc;
+                                                            acc[r.emoji] =
+                                                              (acc[r.emoji] ||
+                                                                0) + 1;
+                                                            return acc;
+                                                          },
+                                                          {}
+                                                        );
+                                                      return Object.entries(
+                                                        reactionCounts
+                                                      )
+                                                        .filter(
+                                                          ([emoji]) =>
+                                                            emoji &&
+                                                            emoji.trim() !== ""
                                                         )
-                                                          return acc;
-                                                        acc[r.emoji] =
-                                                          (acc[r.emoji] || 0) +
-                                                          1;
-                                                        return acc;
-                                                      },
-                                                      {}
-                                                    );
-
-                                                  return Object.entries(
-                                                    reactionCounts
-                                                  )
-                                                    .filter(
-                                                      ([emoji]) =>
-                                                        emoji &&
-                                                        emoji.trim() !== ""
-                                                    )
-                                                    .map(
-                                                      ([emoji, count]: any) => {
-                                                        const userReacted =
-                                                          message.reactions.some(
-                                                            (r: any) =>
-                                                              r.emoji ===
-                                                                emoji &&
-                                                              r.userId ===
-                                                                user?.id
-                                                          );
-
-                                                        return (
-                                                          <button
-                                                            key={emoji}
-                                                            className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
-                                                              userReacted
-                                                                ? "bg-blue-100 ring-1 ring-blue-300"
-                                                                : "bg-slate-100 hover:bg-slate-200"
-                                                            }`}
-                                                            style={{
-                                                              width: "24px",
-                                                              height: "24px",
-                                                              borderRadius:
-                                                                "50%",
-                                                              padding: "0",
-                                                              minWidth: "24px",
-                                                              minHeight: "24px",
-                                                            }}
-                                                            title={message.reactions
-                                                              .filter(
+                                                        .map(
+                                                          ([
+                                                            emoji,
+                                                            count,
+                                                          ]: any) => {
+                                                            const userReacted =
+                                                              message.reactions.some(
                                                                 (r: any) =>
                                                                   r.emoji ===
-                                                                  emoji
-                                                              )
-                                                              .map(
-                                                                (r: any) =>
-                                                                  r.userName
-                                                              )
-                                                              .join(", ")}
-                                                            onClick={(e) => {
-                                                              e.stopPropagation();
-                                                              if (userReacted) {
-                                                                removeReactionMutation.mutate(
-                                                                  {
-                                                                    messageId:
-                                                                      message.id,
-                                                                    emoji,
-                                                                  }
-                                                                );
-                                                              } else {
-                                                                reactToMessageMutation.mutate(
-                                                                  {
-                                                                    messageId:
-                                                                      message.id,
-                                                                    emoji,
-                                                                  }
-                                                                );
-                                                              }
-                                                            }}
-                                                          >
-                                                            <span
-                                                              className="text-xs leading-none block"
-                                                              style={{
-                                                                lineHeight: "1",
-                                                              }}
-                                                            >
-                                                              {emoji}
-                                                            </span>
-                                                            {count > 1 && (
-                                                              <span
-                                                                className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                    emoji &&
+                                                                  r.userId ===
+                                                                    user?.id
+                                                              );
+                                                            return (
+                                                              <button
+                                                                key={emoji}
+                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
+                                                                  userReacted
+                                                                    ? "bg-blue-100 ring-1 ring-blue-300"
+                                                                    : "bg-slate-100 hover:bg-slate-200"
+                                                                }`}
                                                                 style={{
-                                                                  width: "12px",
+                                                                  width: "24px",
                                                                   height:
-                                                                    "12px",
+                                                                    "24px",
                                                                   borderRadius:
                                                                     "50%",
-                                                                  lineHeight:
-                                                                    "1",
+                                                                  padding: "0",
+                                                                  minWidth:
+                                                                    "24px",
+                                                                  minHeight:
+                                                                    "24px",
+                                                                }}
+                                                                title={message.reactions
+                                                                  .filter(
+                                                                    (r: any) =>
+                                                                      r.emoji ===
+                                                                      emoji
+                                                                  )
+                                                                  .map(
+                                                                    (r: any) =>
+                                                                      r.userName
+                                                                  )
+                                                                  .join(", ")}
+                                                                onClick={(
+                                                                  e
+                                                                ) => {
+                                                                  e.stopPropagation();
+                                                                  if (
+                                                                    userReacted
+                                                                  ) {
+                                                                    removeReactionMutation.mutate(
+                                                                      {
+                                                                        messageId:
+                                                                          message.id,
+                                                                        emoji,
+                                                                      }
+                                                                    );
+                                                                  } else {
+                                                                    reactToMessageMutation.mutate(
+                                                                      {
+                                                                        messageId:
+                                                                          message.id,
+                                                                        emoji,
+                                                                      }
+                                                                    );
+                                                                  }
                                                                 }}
                                                               >
-                                                                {count}
-                                                              </span>
-                                                            )}
-                                                          </button>
+                                                                <span
+                                                                  className="text-xs leading-none block"
+                                                                  style={{
+                                                                    lineHeight:
+                                                                      "1",
+                                                                  }}
+                                                                >
+                                                                  {emoji}
+                                                                </span>
+                                                                {count > 1 && (
+                                                                  <span
+                                                                    className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                    style={{
+                                                                      width:
+                                                                        "12px",
+                                                                      height:
+                                                                        "12px",
+                                                                      borderRadius:
+                                                                        "50%",
+                                                                      lineHeight:
+                                                                        "1",
+                                                                    }}
+                                                                  >
+                                                                    {count}
+                                                                  </span>
+                                                                )}
+                                                              </button>
+                                                            );
+                                                          }
                                                         );
-                                                      }
-                                                    );
-                                                })()}
-                                              </div>
-                                            )}
-
-                                          {/* Timestamp after */}
-                                          <span className="text-xs font-medium text-slate-600">
-                                            {formatTime(message.sentAt)}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          {/* FOR AI/HUMAN: Timestamp first */}
-                                          <span
-                                            className={`text-xs font-medium ${
-                                              message.sender === "human"
-                                                ? "text-white/90"
-                                                : "text-blue-800/80"
-                                            }`}
-                                          >
-                                            {formatTime(message.sentAt)}
-                                          </span>
-
-                                          {/* Read receipts */}
-                                          <div
-                                            className="flex items-center transition-all duration-200"
-                                            title={
-                                              !message.deliveredAt
-                                                ? "Sending..."
-                                                : message.readAt
-                                                ? `Read at ${new Date(
-                                                    message.readAt
-                                                  ).toLocaleTimeString([], {
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                  })}`
-                                                : "Delivered"
-                                            }
-                                          >
-                                            {!message.deliveredAt ? (
-                                              <Check
-                                                className={`w-3.5 h-3.5 animate-pulse ${
+                                                    })()}
+                                                  </div>
+                                                )}
+                                              <span className="text-xs font-medium text-slate-600">
+                                                {formatTime(message.sentAt)}
+                                              </span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span
+                                                className={`text-xs font-medium ${
                                                   message.sender === "human"
-                                                    ? "text-white/60"
-                                                    : "text-slate-400"
+                                                    ? "text-white/90"
+                                                    : "text-blue-800/80"
                                                 }`}
-                                                strokeWidth={2}
-                                              />
-                                            ) : message.readAt ? (
-                                              <div className="flex items-center -space-x-1">
-                                                <Check
-                                                  className={`w-3.5 h-3.5 ${
-                                                    message.sender === "human"
-                                                      ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
-                                                      : "text-blue-700"
-                                                  }`}
-                                                  strokeWidth={3}
-                                                />
-                                                <Check
-                                                  className={`w-3.5 h-3.5 ${
-                                                    message.sender === "human"
-                                                      ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
-                                                      : "text-blue-700"
-                                                  }`}
-                                                  strokeWidth={3}
-                                                />
+                                              >
+                                                {formatTime(message.sentAt)}
+                                              </span>
+                                              <div
+                                                className="flex items-center transition-all duration-200"
+                                                title={
+                                                  !message.deliveredAt
+                                                    ? "Sending..."
+                                                    : message.readAt
+                                                    ? `Read at ${new Date(
+                                                        message.readAt
+                                                      ).toLocaleTimeString([], {
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      })}`
+                                                    : "Delivered"
+                                                }
+                                              >
+                                                {!message.deliveredAt ? (
+                                                  <Check
+                                                    className={`w-3.5 h-3.5 animate-pulse ${
+                                                      message.sender === "human"
+                                                        ? "text-white/60"
+                                                        : "text-slate-400"
+                                                    }`}
+                                                    strokeWidth={2}
+                                                  />
+                                                ) : message.readAt ? (
+                                                  <div className="flex items-center -space-x-1">
+                                                    <Check
+                                                      className={`w-3.5 h-3.5 ${
+                                                        message.sender ===
+                                                        "human"
+                                                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
+                                                          : "text-blue-700"
+                                                      }`}
+                                                      strokeWidth={3}
+                                                    />
+                                                    <Check
+                                                      className={`w-3.5 h-3.5 ${
+                                                        message.sender ===
+                                                        "human"
+                                                          ? "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
+                                                          : "text-blue-700"
+                                                      }`}
+                                                      strokeWidth={3}
+                                                    />
+                                                  </div>
+                                                ) : (
+                                                  <div className="flex items-center -space-x-1">
+                                                    <Check
+                                                      className={`w-3.5 h-3.5 ${
+                                                        message.sender ===
+                                                        "human"
+                                                          ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                                                          : "text-blue-600/70"
+                                                      }`}
+                                                      strokeWidth={2.5}
+                                                    />
+                                                    <Check
+                                                      className={`w-3.5 h-3.5 ${
+                                                        message.sender ===
+                                                        "human"
+                                                          ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                                                          : "text-blue-600/70"
+                                                      }`}
+                                                      strokeWidth={2.5}
+                                                    />
+                                                  </div>
+                                                )}
                                               </div>
-                                            ) : (
-                                              <div className="flex items-center -space-x-1">
-                                                <Check
-                                                  className={`w-3.5 h-3.5 ${
-                                                    message.sender === "human"
-                                                      ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
-                                                      : "text-blue-600/70"
-                                                  }`}
-                                                  strokeWidth={2.5}
-                                                />
-                                                <Check
-                                                  className={`w-3.5 h-3.5 ${
-                                                    message.sender === "human"
-                                                      ? "text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
-                                                      : "text-blue-600/70"
-                                                  }`}
-                                                  strokeWidth={2.5}
-                                                />
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Reactions after */}
-                                          {message.reactions &&
-                                            message.reactions.length > 0 && (
-                                              <div className="flex items-center gap-1 ml-1">
-                                                {(() => {
-                                                  const reactionCounts =
-                                                    message.reactions.reduce(
-                                                      (acc: any, r: any) => {
-                                                        if (
-                                                          !r.emoji ||
-                                                          r.emoji.trim() === ""
+                                              {message.reactions &&
+                                                message.reactions.length >
+                                                  0 && (
+                                                  <div className="flex items-center gap-1 ml-1">
+                                                    {(() => {
+                                                      const reactionCounts =
+                                                        message.reactions.reduce(
+                                                          (
+                                                            acc: any,
+                                                            r: any
+                                                          ) => {
+                                                            if (
+                                                              !r.emoji ||
+                                                              r.emoji.trim() ===
+                                                                ""
+                                                            )
+                                                              return acc;
+                                                            acc[r.emoji] =
+                                                              (acc[r.emoji] ||
+                                                                0) + 1;
+                                                            return acc;
+                                                          },
+                                                          {}
+                                                        );
+                                                      return Object.entries(
+                                                        reactionCounts
+                                                      )
+                                                        .filter(
+                                                          ([emoji]) =>
+                                                            emoji &&
+                                                            emoji.trim() !== ""
                                                         )
-                                                          return acc;
-                                                        acc[r.emoji] =
-                                                          (acc[r.emoji] || 0) +
-                                                          1;
-                                                        return acc;
-                                                      },
-                                                      {}
-                                                    );
-
-                                                  return Object.entries(
-                                                    reactionCounts
-                                                  )
-                                                    .filter(
-                                                      ([emoji]) =>
-                                                        emoji &&
-                                                        emoji.trim() !== ""
-                                                    )
-                                                    .map(
-                                                      ([emoji, count]: any) => {
-                                                        const userReacted =
-                                                          message.reactions.some(
-                                                            (r: any) =>
-                                                              r.emoji ===
-                                                                emoji &&
-                                                              r.userId ===
-                                                                user?.id
-                                                          );
-
-                                                        return (
-                                                          <button
-                                                            key={emoji}
-                                                            className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
-                                                              userReacted
-                                                                ? message.sender ===
-                                                                  "human"
-                                                                  ? "bg-white/30 backdrop-blur-sm ring-1 ring-white/50"
-                                                                  : "bg-blue-200 ring-1 ring-blue-400"
-                                                                : message.sender ===
-                                                                  "human"
-                                                                ? "bg-white/20 backdrop-blur-sm hover:bg-white/30"
-                                                                : "bg-blue-100 hover:bg-blue-200"
-                                                            }`}
-                                                            style={{
-                                                              width: "24px",
-                                                              height: "24px",
-                                                              borderRadius:
-                                                                "50%",
-                                                              padding: "0",
-                                                              minWidth: "24px",
-                                                              minHeight: "24px",
-                                                            }}
-                                                            title={message.reactions
-                                                              .filter(
+                                                        .map(
+                                                          ([
+                                                            emoji,
+                                                            count,
+                                                          ]: any) => {
+                                                            const userReacted =
+                                                              message.reactions.some(
                                                                 (r: any) =>
                                                                   r.emoji ===
-                                                                  emoji
-                                                              )
-                                                              .map(
-                                                                (r: any) =>
-                                                                  r.userName
-                                                              )
-                                                              .join(", ")}
-                                                            onClick={(e) => {
-                                                              e.stopPropagation();
-                                                              if (userReacted) {
-                                                                removeReactionMutation.mutate(
-                                                                  {
-                                                                    messageId:
-                                                                      message.id,
-                                                                    emoji,
-                                                                  }
-                                                                );
-                                                              } else {
-                                                                reactToMessageMutation.mutate(
-                                                                  {
-                                                                    messageId:
-                                                                      message.id,
-                                                                    emoji,
-                                                                  }
-                                                                );
-                                                              }
-                                                            }}
-                                                          >
-                                                            <span
-                                                              className="text-xs leading-none block"
-                                                              style={{
-                                                                lineHeight: "1",
-                                                              }}
-                                                            >
-                                                              {emoji}
-                                                            </span>
-                                                            {count > 1 && (
-                                                              <span
-                                                                className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                    emoji &&
+                                                                  r.userId ===
+                                                                    user?.id
+                                                              );
+                                                            return (
+                                                              <button
+                                                                key={emoji}
+                                                                className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-110 active:scale-95 ${
+                                                                  userReacted
+                                                                    ? message.sender ===
+                                                                      "human"
+                                                                      ? "bg-white/30 backdrop-blur-sm ring-1 ring-white/50"
+                                                                      : "bg-blue-200 ring-1 ring-blue-400"
+                                                                    : message.sender ===
+                                                                      "human"
+                                                                    ? "bg-white/20 backdrop-blur-sm hover:bg-white/30"
+                                                                    : "bg-blue-100 hover:bg-blue-200"
+                                                                }`}
                                                                 style={{
-                                                                  width: "12px",
+                                                                  width: "24px",
                                                                   height:
-                                                                    "12px",
+                                                                    "24px",
                                                                   borderRadius:
                                                                     "50%",
-                                                                  lineHeight:
-                                                                    "1",
+                                                                  padding: "0",
+                                                                  minWidth:
+                                                                    "24px",
+                                                                  minHeight:
+                                                                    "24px",
+                                                                }}
+                                                                title={message.reactions
+                                                                  .filter(
+                                                                    (r: any) =>
+                                                                      r.emoji ===
+                                                                      emoji
+                                                                  )
+                                                                  .map(
+                                                                    (r: any) =>
+                                                                      r.userName
+                                                                  )
+                                                                  .join(", ")}
+                                                                onClick={(
+                                                                  e
+                                                                ) => {
+                                                                  e.stopPropagation();
+                                                                  if (
+                                                                    userReacted
+                                                                  ) {
+                                                                    removeReactionMutation.mutate(
+                                                                      {
+                                                                        messageId:
+                                                                          message.id,
+                                                                        emoji,
+                                                                      }
+                                                                    );
+                                                                  } else {
+                                                                    reactToMessageMutation.mutate(
+                                                                      {
+                                                                        messageId:
+                                                                          message.id,
+                                                                        emoji,
+                                                                      }
+                                                                    );
+                                                                  }
                                                                 }}
                                                               >
-                                                                {count}
-                                                              </span>
-                                                            )}
-                                                          </button>
+                                                                <span
+                                                                  className="text-xs leading-none block"
+                                                                  style={{
+                                                                    lineHeight:
+                                                                      "1",
+                                                                  }}
+                                                                >
+                                                                  {emoji}
+                                                                </span>
+                                                                {count > 1 && (
+                                                                  <span
+                                                                    className="absolute -top-1 -right-1 text-[8px] font-bold text-white bg-slate-800 flex items-center justify-center"
+                                                                    style={{
+                                                                      width:
+                                                                        "12px",
+                                                                      height:
+                                                                        "12px",
+                                                                      borderRadius:
+                                                                        "50%",
+                                                                      lineHeight:
+                                                                        "1",
+                                                                    }}
+                                                                  >
+                                                                    {count}
+                                                                  </span>
+                                                                )}
+                                                              </button>
+                                                            );
+                                                          }
                                                         );
+                                                    })()}
+                                                  </div>
+                                                )}
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {!message.isStatusMessage && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowReactionPicker(
+                                              showReactionPicker === message.id
+                                                ? null
+                                                : message.id
+                                            );
+                                          }}
+                                          className={`absolute top-1/2 -translate-y-1/2 ${
+                                            message.sender === "lead"
+                                              ? "-right-8"
+                                              : "-left-8"
+                                          } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
+                                          style={{
+                                            width: "28px",
+                                            height: "28px",
+                                            borderRadius: "50%",
+                                            padding: "0",
+                                            minWidth: "28px",
+                                            minHeight: "28px",
+                                          }}
+                                          title="React"
+                                        >
+                                          <span
+                                            className="text-sm leading-none block"
+                                            style={{ lineHeight: "1" }}
+                                          >
+                                            😊
+                                          </span>
+                                        </button>
+                                      )}
+                                      {!message.isStatusMessage &&
+                                        message.sender !== "lead" && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setShowMessageInfo(message.id);
+                                            }}
+                                            className={`absolute top-1/2 -translate-y-1/2 ${
+                                              message.sender === "lead"
+                                                ? "-right-16"
+                                                : "-left-16"
+                                            } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
+                                            style={{
+                                              width: "28px",
+                                              height: "28px",
+                                              borderRadius: "50%",
+                                              padding: "0",
+                                              minWidth: "28px",
+                                              minHeight: "28px",
+                                            }}
+                                            title="Message Info"
+                                          >
+                                            <Info className="w-3 h-3 text-slate-600" />
+                                          </button>
+                                        )}
+                                      {showReactionPicker === message.id && (
+                                        <>
+                                          <div
+                                            className="fixed inset-0 z-30"
+                                            onClick={() =>
+                                              setShowReactionPicker(null)
+                                            }
+                                          />
+                                          <div
+                                            className={`absolute ${
+                                              message.sender === "lead"
+                                                ? "left-0"
+                                                : "right-0"
+                                            } bottom-full mb-1 bg-white rounded-full shadow-lg border border-slate-300 px-1.5 py-1 flex items-center gap-0.5 z-40 animate-in fade-in slide-in-from-bottom-1 duration-150`}
+                                          >
+                                            {[
+                                              "👍",
+                                              "❤️",
+                                              "😂",
+                                              "😮",
+                                              "😢",
+                                              "🙏",
+                                              "🔥",
+                                              "👏",
+                                            ].map((emoji) => {
+                                              const isCurrentReaction =
+                                                getUserReaction(message) ===
+                                                emoji;
+                                              return (
+                                                <button
+                                                  key={emoji}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    reactToMessageMutation.mutate(
+                                                      {
+                                                        messageId: message.id,
+                                                        emoji,
                                                       }
                                                     );
-                                                })()}
-                                              </div>
-                                            )}
+                                                    setShowReactionPicker(null);
+                                                  }}
+                                                  className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-125 active:scale-100 ${
+                                                    isCurrentReaction
+                                                      ? "bg-blue-50 ring-1 ring-blue-400"
+                                                      : "hover:bg-slate-50"
+                                                  }`}
+                                                  style={{
+                                                    width: "28px",
+                                                    height: "28px",
+                                                    borderRadius: "50%",
+                                                    padding: "0",
+                                                    minWidth: "28px",
+                                                    minHeight: "28px",
+                                                  }}
+                                                >
+                                                  <span
+                                                    className="text-base leading-none block"
+                                                    style={{ lineHeight: "1" }}
+                                                  >
+                                                    {emoji}
+                                                  </span>
+                                                  {isCurrentReaction && (
+                                                    <span
+                                                      className="absolute bg-blue-600 flex items-center justify-center"
+                                                      style={{
+                                                        width: "10px",
+                                                        height: "10px",
+                                                        borderRadius: "50%",
+                                                        top: "-2px",
+                                                        right: "-2px",
+                                                      }}
+                                                    >
+                                                      <span
+                                                        className="bg-white"
+                                                        style={{
+                                                          width: "4px",
+                                                          height: "4px",
+                                                          borderRadius: "50%",
+                                                        }}
+                                                      ></span>
+                                                    </span>
+                                                  )}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
                                         </>
                                       )}
                                     </div>
                                   </div>
 
-                                  {/* React Button */}
-                                  {!message.isStatusMessage && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowReactionPicker(
-                                          showReactionPicker === message.id
-                                            ? null
-                                            : message.id
-                                        );
-                                      }}
-                                      className={`absolute top-1/2 -translate-y-1/2 ${
-                                        message.sender === "lead"
-                                          ? "-right-8"
-                                          : "-left-8"
-                                      } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
-                                      style={{
-                                        width: "28px",
-                                        height: "28px",
-                                        borderRadius: "50%",
-                                        padding: "0",
-                                        minWidth: "28px",
-                                        minHeight: "28px",
-                                      }}
-                                      title="React"
-                                    >
-                                      <span
-                                        className="text-sm leading-none block"
-                                        style={{ lineHeight: "1" }}
-                                      >
-                                        😊
-                                      </span>
-                                    </button>
-                                  )}
-
-                                  {/* Message Info Button - NEW */}
-                                  {!message.isStatusMessage &&
-                                    message.sender !== "lead" && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setShowMessageInfo(message.id);
-                                        }}
-                                        className={`absolute top-1/2 -translate-y-1/2 ${
-                                          message.sender === "lead"
-                                            ? "-right-16"
-                                            : "-left-16"
-                                        } opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm z-20 inline-flex items-center justify-center flex-shrink-0`}
-                                        style={{
-                                          width: "28px",
-                                          height: "28px",
-                                          borderRadius: "50%",
-                                          padding: "0",
-                                          minWidth: "28px",
-                                          minHeight: "28px",
-                                        }}
-                                        title="Message Info"
-                                      >
-                                        <Info className="w-3 h-3 text-slate-600" />
-                                      </button>
-                                    )}
-
-                                  {/* Reaction Picker */}
-                                  {showReactionPicker === message.id && (
-                                    <>
-                                      <div
-                                        className="fixed inset-0 z-30"
-                                        onClick={() =>
-                                          setShowReactionPicker(null)
-                                        }
-                                      />
-                                      <div
-                                        className={`absolute ${
-                                          message.sender === "lead"
-                                            ? "left-0"
-                                            : "right-0"
-                                        } bottom-full mb-1 bg-white rounded-full shadow-lg border border-slate-300 px-1.5 py-1 flex items-center gap-0.5 z-40 animate-in fade-in slide-in-from-bottom-1 duration-150`}
-                                      >
-                                        {[
-                                          "👍",
-                                          "❤️",
-                                          "😂",
-                                          "😮",
-                                          "😢",
-                                          "🙏",
-                                          "🔥",
-                                          "👏",
-                                        ].map((emoji) => {
-                                          const isCurrentReaction =
-                                            getUserReaction(message) === emoji;
-
-                                          return (
-                                            <button
-                                              key={emoji}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                reactToMessageMutation.mutate({
-                                                  messageId: message.id,
-                                                  emoji,
-                                                });
-                                                setShowReactionPicker(null);
-                                              }}
-                                              className={`relative inline-flex items-center justify-center flex-shrink-0 transition-transform hover:scale-125 active:scale-100 ${
-                                                isCurrentReaction
-                                                  ? "bg-blue-50 ring-1 ring-blue-400"
-                                                  : "hover:bg-slate-50"
-                                              }`}
-                                              style={{
-                                                width: "28px",
-                                                height: "28px",
-                                                borderRadius: "50%",
-                                                padding: "0",
-                                                minWidth: "28px",
-                                                minHeight: "28px",
-                                              }}
-                                            >
-                                              <span
-                                                className="text-base leading-none block"
-                                                style={{ lineHeight: "1" }}
-                                              >
-                                                {emoji}
-                                              </span>
-                                              {isCurrentReaction && (
-                                                <span
-                                                  className="absolute bg-blue-600 flex items-center justify-center"
-                                                  style={{
-                                                    width: "10px",
-                                                    height: "10px",
-                                                    borderRadius: "50%",
-                                                    top: "-2px",
-                                                    right: "-2px",
-                                                  }}
-                                                >
-                                                  <span
-                                                    className="bg-white"
-                                                    style={{
-                                                      width: "4px",
-                                                      height: "4px",
-                                                      borderRadius: "50%",
-                                                    }}
-                                                  ></span>
-                                                </span>
-                                              )}
-                                            </button>
-                                          );
-                                        })}
+                                  {/* ✅ NEW: AI DISCLAIMER AFTER LAST AI MESSAGE */}
+                                  {isLastAiMessage && (
+                                    <div className="flex justify-end mt-2">
+                                      <div className="max-w-xs lg:max-w-md w-full bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                        <div className="flex items-start gap-2">
+                                          <AlertCircle className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                              <span className="font-medium text-slate-700">
+                                                AI can make mistakes.
+                                              </span>{" "}
+                                              Please double-check responses,
+                                              dates, times, and booking details
+                                              before taking action.
+                                            </p>
+                                          </div>
+                                        </div>
                                       </div>
-                                    </>
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ));
                     })()
                   )}
-
-                  {/* Message Info Modal */}
                   {showMessageInfo &&
                     (() => {
                       const selectedMessage = messages?.find(
@@ -2098,21 +2067,16 @@ export default function Conversations() {
                         />
                       ) : null;
                     })()}
-
-                  {/* Typing Indicator - IMPROVED VERSION */}
                   {typingIndicators[selectedConversation?.id]?.isTyping && (
                     <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-200">
                       <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
                         <div className="flex items-center space-x-3">
-                          {/* Icon based on sender */}
                           {typingIndicators[selectedConversation.id].sender ===
                           "ai" ? (
                             <Bot className="w-4 h-4 text-blue-600" />
                           ) : (
                             <UserCheck className="w-4 h-4 text-green-600" />
                           )}
-
-                          {/* Animated dots */}
                           <div className="flex space-x-1">
                             <div
                               className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
@@ -2136,8 +2100,6 @@ export default function Conversations() {
                               }}
                             ></div>
                           </div>
-
-                          {/* Text - Updated to remove "Lead is typing" */}
                           <span className="text-sm text-slate-600 font-medium">
                             {typingIndicators[selectedConversation.id]
                               .sender === "ai"
@@ -2149,13 +2111,237 @@ export default function Conversations() {
                     </div>
                   )}
 
+{/* Booking Approval - Compact & Wide */}
+{pendingBookings
+  .filter((b: any) => b.leadId === selectedConversation?.lead?.id)
+  .map((booking: any) => {
+    const isApproving = approvingBookingId === booking.id;
+    const isDeclining = decliningBookingId === booking.id;
+    const showConfirm = showDeclineConfirm === booking.id;
+    const isProcessing = isApproving || isDeclining;
+    const isExpired = new Date(booking.scheduledFor) < new Date();
+    
+    return (
+      <div
+        key={booking.id}
+        className="flex justify-center my-4 px-4"
+      >
+        <div className="max-w-4xl w-full">
+          {/* Compact White Card */}
+          <div className="bg-white rounded-lg border-l-4 border-amber-400 shadow-sm">
+            {/* Compact Header */}
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-md font-medium text-slate-900">
+                    Booking Pending Approval
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    AI-suggested based on conversation
+                  </p>
+                </div>
+              </div>
+              <Badge 
+                variant="outline" 
+                className="border-amber-500 text-amber-700 bg-amber-50 text-xs font-medium px-2.5 py-0.5"
+              >
+                Action Required
+              </Badge>
+            </div>
+
+            {/* Compact Content Grid - 2 Columns */}
+            <div className="px-4 py-3">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {/* Date */}
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(booking.scheduledFor).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </p>
+                    {isExpired && (
+                      <p className="text-xs text-red-600 mt-0.5 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Date passed
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Time & Duration */}
+                <div className="flex items-start gap-3">
+                  <Clock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Time & Duration</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(booking.scheduledFor).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      })} • {booking.duration} min
+                    </p>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Location</p>
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {booking.location || 'To be determined'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Type */}
+                <div className="flex items-start gap-3">
+                  <svg className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-500 mb-0.5">Type</p>
+                    <p className="text-sm font-medium text-slate-900 capitalize">
+                      {booking.meetingType || 'Consultation'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            {!showConfirm && !isExpired && (
+              <div className="px-4 pb-3">
+                <div className="flex gap-2.5">
+                  <Button
+                    onClick={() => handleApproveBooking(booking.id)}
+                    disabled={isProcessing}
+                    className="flex-[2] bg-green-600 hover:bg-green-700 text-white h-9 text-sm font-medium rounded-lg shadow-sm transition-colors"
+                  >
+                    {isApproving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                        Approving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Approve & Send Invite
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => setShowDeclineConfirm(booking.id)}
+                    disabled={isProcessing}
+                    variant="outline"
+                    className="flex-1 h-9 text-sm font-medium rounded-lg border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <XCircle className="w-4 h-4 mr-1.5" />
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Decline Confirmation */}
+            {showConfirm && (
+              <div className="px-4 pb-3">
+                <div className="space-y-2.5">
+                  <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-900">
+                        Decline this booking?
+                      </p>
+                      <p className="text-xs text-red-700 mt-0.5">
+                        The lead will be notified and can reschedule.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <Button
+                      onClick={() => handleDeclineBooking(booking.id)}
+                      disabled={isDeclining}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white h-9 text-sm font-medium rounded-lg"
+                    >
+                      {isDeclining ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                          Declining...
+                        </>
+                      ) : (
+                        'Yes, Decline'
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => setShowDeclineConfirm(null)}
+                      variant="outline"
+                      className="flex-1 h-9 text-sm rounded-lg"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Expired State */}
+            {isExpired && (
+              <div className="px-4 pb-3">
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <p className="text-xs text-red-800">
+                      This booking time has passed. Decline to clear.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => handleDeclineBooking(booking.id)}
+                    disabled={isDeclining}
+                    variant="outline"
+                    className="w-full h-9 text-sm border-red-300 text-red-700 hover:bg-red-50 rounded-lg"
+                  >
+                    <XCircle className="w-4 h-4 mr-1.5" />
+                    Clear Expired Booking
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Compact Footer Info */}
+            <div className="px-4 py-2.5 bg-blue-50 border-t border-blue-100 rounded-b-lg">
+              <div className="flex items-center gap-2 text-xs text-blue-800">
+                <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                </svg>
+                <span className="font-medium">
+                  AI will automatically send calendar invite and confirmation email
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  })}
                   <div ref={messagesEndRef} />
                 </div>
               </div>
 
               <div className="bg-white border-t border-slate-200 p-4 flex-shrink-0">
                 <div className="flex space-x-2">
-                  {/* Templates Button */}
                   <Button
                     variant="outline"
                     size="icon"
@@ -2165,16 +2351,12 @@ export default function Conversations() {
                   >
                     <Sparkles className="w-4 h-4" />
                   </Button>
-
-                  {/* 🆕 ADD THIS BOOK MEETING BUTTON */}
-                  {/* Check for existing booking */}
                   {(() => {
                     const hasActiveBooking = allBookings.some(
                       (booking: any) =>
                         booking.leadId === selectedConversation?.lead?.id &&
                         booking.status === "scheduled"
                     );
-
                     return (
                       <>
                         {hasActiveBooking && (
@@ -2195,13 +2377,12 @@ export default function Conversations() {
                       </>
                     );
                   })()}
-
                   <Input
                     placeholder="Type your message..."
                     value={newMessage}
                     onChange={(e) => {
                       setNewMessage(e.target.value);
-                      handleTyping(); // ✅ Call typing indicator
+                      handleTyping();
                     }}
                     onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
                     disabled={sendMessageMutation.isPending}
@@ -2217,11 +2398,8 @@ export default function Conversations() {
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
-
-                {/* Templates Dropdown */}
                 {showTemplates && (
                   <div className="mt-3 border border-slate-200 rounded-lg bg-white shadow-lg max-h-96 overflow-hidden flex flex-col">
-                    {/* Search and Filter */}
                     <div className="p-3 border-b border-slate-200 space-y-2">
                       <Input
                         placeholder="Search templates..."
@@ -2252,8 +2430,6 @@ export default function Conversations() {
                         ))}
                       </div>
                     </div>
-
-                    {/* Templates List */}
                     <div className="overflow-y-auto flex-1 p-2">
                       {filteredTemplates.length === 0 ? (
                         <div className="text-center py-8 text-slate-500">
@@ -2310,18 +2486,13 @@ export default function Conversations() {
           )}
         </div>
 
-        {/* Right: Lead Detail Sidebar */}
-
-        {/* Right: Lead Detail Sidebar - MINIMAL VERSION */}
+        {/* Right: Lead Detail Sidebar - CLEANED UP */}
         {selectedConversation && showLeadDetails && (
           <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-            {/* Header with Hot Lead Indicator */}
             <div className="p-4 border-b border-slate-200">
               <h3 className="text-sm font-semibold text-slate-900">
                 Lead Details
               </h3>
-
-              {/* Hot Lead Banner */}
               {parseFloat(
                 selectedConversation.lead?.manualScore ||
                   selectedConversation.lead?.qualificationScore ||
@@ -2336,9 +2507,7 @@ export default function Conversations() {
                 </div>
               )}
             </div>
-
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Contact Info - Compact */}
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500 text-xs">Phone</span>
@@ -2359,12 +2528,8 @@ export default function Conversations() {
                   </span>
                 </div>
               </div>
-
               <Separator />
-
-              {/* Status & Score - Compact */}
               <div className="space-y-2">
-                {/* Temperature (AI Quality) */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Temperature</span>
                   <Badge
@@ -2384,16 +2549,12 @@ export default function Conversations() {
                       "❄️ Cold"}
                   </Badge>
                 </div>
-
-                {/* Status (Sales Stage) */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Status</span>
                   <Badge variant="outline" className="text-xs capitalize">
                     {selectedConversation.lead?.status || "new"}
                   </Badge>
                 </div>
-
-                {/* Score */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Score</span>
                   <Badge
@@ -2426,8 +2587,6 @@ export default function Conversations() {
                     %
                   </Badge>
                 </div>
-
-                {/* Source */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Source</span>
                   <span className="text-xs text-slate-600">
@@ -2435,10 +2594,7 @@ export default function Conversations() {
                   </span>
                 </div>
               </div>
-
               <Separator />
-
-              {/* Manual Controls - Collapsible */}
               <div>
                 <Button
                   variant="ghost"
@@ -2455,10 +2611,8 @@ export default function Conversations() {
                     }`}
                   />
                 </Button>
-
                 {showManualControls && (
                   <div className="mt-3 space-y-3">
-                    {/* Score Slider - Compact */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-slate-500">
@@ -2489,8 +2643,6 @@ export default function Conversations() {
                         className="w-full"
                       />
                     </div>
-
-                    {/* Temperature Control - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
                         Temperature Override
@@ -2511,8 +2663,6 @@ export default function Conversations() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    {/* Status Dropdown - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
                         Sales Stage
@@ -2546,8 +2696,6 @@ export default function Conversations() {
                         </SelectContent>
                       </Select>
                     </div>
-
-                    {/* Tags - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
                         Tags
@@ -2572,8 +2720,6 @@ export default function Conversations() {
                         })}
                       </div>
                     </div>
-
-                    {/* Internal Note - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
                         Internal Note
@@ -2600,8 +2746,6 @@ export default function Conversations() {
                         </Button>
                       </div>
                     </div>
-
-                    {/* Follow-up - Compact */}
                     <div>
                       <span className="text-xs text-slate-500 block mb-1">
                         Follow-up
@@ -2644,10 +2788,7 @@ export default function Conversations() {
                   </div>
                 )}
               </div>
-
               <Separator />
-
-              {/* Quick Actions - Compact */}
               <div className="space-y-1">
                 <Button
                   variant="outline"
@@ -2686,10 +2827,7 @@ export default function Conversations() {
                   Mark Lost
                 </Button>
               </div>
-
               <Separator />
-
-              {/* Activity Log - Compact */}
               {showManualControls && activityLog && activityLog.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -2722,8 +2860,6 @@ export default function Conversations() {
                   </div>
                 </div>
               )}
-
-              {/* Timestamps - Minimal */}
               <div className="pt-2 border-t border-slate-200">
                 <div className="flex justify-between text-xs text-slate-500">
                   <span>Created</span>
@@ -2746,12 +2882,13 @@ export default function Conversations() {
           </div>
         )}
       </div>
+
       {/* Book Meeting Modal */}
       <Dialog
         open={showBookingModal}
         onOpenChange={(open) => {
           setShowBookingModal(open);
-          if (!open) setConflictError(null); // Clear error when closing
+          if (!open) setConflictError(null);
         }}
       >
         <DialogContent className="max-w-lg">
@@ -2762,8 +2899,6 @@ export default function Conversations() {
               {selectedConversation?.lead?.lastName}
             </DialogDescription>
           </DialogHeader>
-
-          {/* 🎨 COMPACT CONFLICT ALERT */}
           {conflictError && (
             <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
               <div className="flex items-start gap-3">
@@ -2803,9 +2938,7 @@ export default function Conversations() {
               </div>
             </div>
           )}
-
           <div className="space-y-4">
-            {/* Meeting Type */}
             <div className="space-y-2">
               <Label htmlFor="meeting-type">Meeting Type</Label>
               <Select value={bookingType} onValueChange={setBookingType}>
@@ -2819,8 +2952,6 @@ export default function Conversations() {
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Date Picker */}
             <div className="space-y-2">
               <Label htmlFor="meeting-date">Date</Label>
               <Popover>
@@ -2855,8 +2986,6 @@ export default function Conversations() {
                   />
                 </PopoverContent>
               </Popover>
-
-              {/* Show existing bookings for selected date */}
               {bookingDate &&
                 allBookings.length > 0 &&
                 (() => {
@@ -2869,9 +2998,7 @@ export default function Conversations() {
                       bDate.getFullYear() === bookingDate.getFullYear()
                     );
                   });
-
                   if (dayBookings.length === 0) return null;
-
                   return (
                     <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
                       <p className="font-semibold text-blue-900 mb-2 flex items-center gap-1">
@@ -2914,9 +3041,7 @@ export default function Conversations() {
                   );
                 })()}
             </div>
-
             <div className="grid grid-cols-2 gap-4">
-              {/* Time */}
               <div className="space-y-2">
                 <Label htmlFor="meeting-time">Time</Label>
                 <Input
@@ -2929,8 +3054,6 @@ export default function Conversations() {
                   }}
                 />
               </div>
-
-              {/* Duration */}
               <div className="space-y-2">
                 <Label htmlFor="meeting-duration">Duration</Label>
                 <Select
@@ -2953,8 +3076,6 @@ export default function Conversations() {
                 </Select>
               </div>
             </div>
-
-            {/* Show calculated end time */}
             {bookingDate && bookingTime && (
               <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-200">
                 <Clock className="w-3 h-3" />
@@ -2977,8 +3098,6 @@ export default function Conversations() {
                 </span>
               </div>
             )}
-
-            {/* Location */}
             <div className="space-y-2">
               <Label htmlFor="meeting-location">Location</Label>
               <Input
@@ -2988,8 +3107,6 @@ export default function Conversations() {
                 placeholder="Office, Site, Virtual, etc."
               />
             </div>
-
-            {/* Notes */}
             <div className="space-y-2">
               <Label htmlFor="meeting-notes">Notes (Optional)</Label>
               <Textarea
@@ -3002,7 +3119,6 @@ export default function Conversations() {
               />
             </div>
           </div>
-
           <div className="flex gap-3 pt-4">
             <Button
               type="button"

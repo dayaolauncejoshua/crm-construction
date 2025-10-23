@@ -2218,7 +2218,7 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-  // Approve pending booking (agent one-click)
+// Approve pending booking (agent one-click)
 app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
   try {
     const { bookingId } = req.params;
@@ -2246,9 +2246,56 @@ app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
 
     console.log("✅ Booking approved, sending confirmations...");
 
+    const startTime = new Date(booking.scheduledFor);
+    const formattedDate = startTime.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const formattedTime = startTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // ✅ NEW: Add approval message to conversation FIRST
+    try {
+      const conversations = await storage.getConversations(booking.clientId, 100);
+      const conversation = conversations.find((c) => c.leadId === booking.leadId);
+
+      if (conversation) {
+        const approvalMessage = await storage.createMessage({
+          conversationId: conversation.id,
+          sender: "human",
+          content: `✅ Meeting Approved & Confirmed
+
+📅 ${formattedDate}
+🕐 ${formattedTime}
+⏱️ ${booking.duration} minutes
+📍 ${booking.location || "TBD"}
+
+Calendar invite sent via email and WhatsApp.`,
+          channel: "whatsapp",
+          isStatusMessage: true,
+          sentAt: new Date(),
+          deliveredAt: new Date(),
+        });
+
+        console.log("✅ Approval message added to conversation");
+
+        // Broadcast immediately so agent sees it
+        broadcastUpdate({
+          type: "new_message",
+          conversationId: conversation.id,
+          message: approvalMessage,
+        });
+      }
+    } catch (error) {
+      console.error("⚠️ Failed to add approval message:", error);
+    }
+
     // Send email with calendar invite
     if (lead.email) {
-      const startTime = new Date(booking.scheduledFor);
       const endTime = new Date(startTime.getTime() + booking.duration! * 60000);
 
       const icsContent = emailService.generateICS({
@@ -2271,16 +2318,8 @@ app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
           
           <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin-top: 0;">📅 Meeting Details</h3>
-            <p><strong>Date:</strong> ${startTime.toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })}</p>
-            <p><strong>Time:</strong> ${startTime.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}</p>
+            <p><strong>Date:</strong> ${formattedDate}</p>
+            <p><strong>Time:</strong> ${formattedTime}</p>
             <p><strong>Duration:</strong> ${booking.duration} minutes</p>
             <p><strong>Location:</strong> ${booking.location || "TBD"}</p>
           </div>
@@ -2294,34 +2333,36 @@ app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
       await emailService.sendCalendarInvite({
         to: lead.email,
         toName: `${lead.firstName} ${lead.lastName}`,
-        subject: `Meeting Confirmed - ${startTime.toLocaleDateString()}`,
+        subject: `Meeting Confirmed - ${formattedDate}`,
         htmlBody: emailBody,
         icsContent,
         icsFilename: "meeting.ics",
       });
+
+      console.log("✅ Confirmation email sent");
     }
 
     // Send WhatsApp confirmation
     if (lead.phone) {
-      const startTime = new Date(booking.scheduledFor);
       const whatsappMsg = `✅ Meeting Confirmed!
 
-📅 ${startTime.toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })}
-🕐 ${startTime.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}
+📅 ${formattedDate}
+🕐 ${formattedTime}
 ⏱️ ${booking.duration} minutes
 📍 ${booking.location || "TBD"}
 
 Check your email for the calendar invite. See you then!`;
 
       await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+      console.log("✅ Confirmation WhatsApp sent");
     }
+
+    // Broadcast booking approval
+    broadcastUpdate({
+      type: "booking_approved",
+      bookingId: booking.id,
+      booking: updatedBooking,
+    });
 
     res.json({ success: true, booking: updatedBooking });
   } catch (error: any) {
@@ -2330,24 +2371,132 @@ Check your email for the calendar invite. See you then!`;
   }
 });
 
-// Reject pending booking
-app.post("/api/bookings/:bookingId/reject", requireAuth, async (req, res) => {
+// Decline pending booking
+app.post("/api/bookings/:bookingId/decline", requireAuth, async (req, res) => {
   try {
     const { bookingId } = req.params;
     const { reason } = req.body;
 
-    console.log("❌ Agent rejecting booking:", bookingId);
+    console.log("❌ Agent declining booking:", bookingId);
 
     const booking = await storage.getBooking(bookingId);
     if (!booking) {
       return res.status(404).json({ error: "Booking not found" });
     }
 
+    const lead = await storage.getLead(booking.leadId);
+    const client = await storage.getClient(booking.clientId);
+
+    if (!lead || !client) {
+      return res.status(404).json({ error: "Lead or client not found" });
+    }
+
+    // Reject booking in database
     await storage.rejectBooking(bookingId, reason);
+
+    console.log("✅ Booking declined in database");
+
+    const startTime = new Date(booking.scheduledFor);
+    const formattedDate = startTime.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
+    const formattedTime = startTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // ✅ NEW: Add decline message to conversation
+    try {
+      const conversations = await storage.getConversations(booking.clientId, 100);
+      const conversation = conversations.find((c) => c.leadId === booking.leadId);
+
+      if (conversation) {
+        const declineMessage = await storage.createMessage({
+          conversationId: conversation.id,
+          sender: "human",
+          content: `❌ Booking Request Declined
+
+The proposed meeting for:
+📅 ${formattedDate} at ${formattedTime}
+
+Could not be scheduled at this time.${reason ? `\n\nReason: ${reason}` : ""}
+
+Please suggest alternative times that work for you.`,
+          channel: "whatsapp",
+          isStatusMessage: true,
+          sentAt: new Date(),
+          deliveredAt: new Date(),
+        });
+
+        console.log("✅ Decline message added to conversation");
+
+        // Broadcast immediately
+        broadcastUpdate({
+          type: "new_message",
+          conversationId: conversation.id,
+          message: declineMessage,
+        });
+      }
+    } catch (error) {
+      console.error("⚠️ Failed to add decline message:", error);
+    }
+
+    // ✅ NEW: Send WhatsApp notification to lead
+    if (lead.phone) {
+      const whatsappMsg = `Hi ${lead.firstName},
+
+Unfortunately, we're unable to confirm the meeting for ${formattedDate} at ${formattedTime}.${reason ? `\n\n${reason}` : ""}
+
+Could you suggest some alternative times that work for you? We'd love to find a time that suits your schedule.`;
+
+      await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+      console.log("✅ Decline WhatsApp sent to lead");
+    }
+
+    // ✅ NEW: Send email notification
+    if (lead.email) {
+      const emailBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2 style="color: #dc2626;">Unable to Confirm Meeting</h2>
+          <p>Hi ${lead.firstName},</p>
+          <p>Unfortunately, we're unable to confirm the meeting at the requested time.</p>
+          
+          <div style="background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="margin-top: 0; color: #7f1d1d;">📅 Requested Time</h3>
+            <p><strong>Date:</strong> ${formattedDate}</p>
+            <p><strong>Time:</strong> ${formattedTime}</p>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+          </div>
+          
+          <p>Please reply with some alternative times that work for you, and we'll do our best to accommodate your schedule.</p>
+          
+          <p style="margin-top: 30px;">Best regards,<br>${client.name}</p>
+        </div>
+      `;
+
+      await emailService.sendCalendarInvite({
+        to: lead.email,
+        toName: `${lead.firstName} ${lead.lastName}`,
+        subject: `Meeting Request - Alternative Time Needed`,
+        htmlBody: emailBody,
+        icsContent: "",
+        icsFilename: "",
+      });
+
+      console.log("✅ Decline email sent");
+    }
+
+    // Broadcast booking decline
+    broadcastUpdate({
+      type: "booking_declined",
+      bookingId: booking.id,
+    });
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error("❌ Error rejecting booking:", error);
+    console.error("❌ Error declining booking:", error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -5,25 +5,264 @@ import { qualifyLead, generateAIResponse } from "./openai";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
 import { spamPatternLearning } from "./spamPatternLearning";
-import { detectBookingIntent } from "./openai";
-import type {InsertBooking} from "../../shared/schema";
+import { detectBookingIntent, extractLeadDetails } from "./openai";
+import type { InsertBooking } from "../../shared/schema";
 
+// ✅ Constants
+const BOOKING_CONFIDENCE_THRESHOLD = 0.8;
+const BOOKING_INTEREST_THRESHOLD = 0.5;
+
+// ✅ Booking detail validation interface
+interface BookingDetails {
+  hasDate: boolean;
+  hasTime: boolean;
+  hasAddress: boolean;
+  hasName: boolean;
+  hasEmail: boolean;
+  missingDetails: string[];
+}
+
+// ✅ IMPROVED: Better time normalization
 function normalizeTimeString(timeStr: string): string {
-  if (!timeStr) return "10:00 AM"; // Default if time is missing
+  if (!timeStr) return "10:00 AM";
 
-  const upperTime = timeStr.toUpperCase().replace(/\s/g, "");
+  const upperTime = timeStr.toUpperCase().trim();
 
-  if (upperTime.includes(":")) {
-    return upperTime.replace(/([AP]M)/, " $1");
-  }
-  const match = upperTime.match(/(\d+)([AP]M)/);
-  if (match) {
-    const hour = match[1];
-    const period = match[2];
-    return `${hour}:00 ${period}`;
+  // Handle formats: "2PM", "2 PM", "2:00PM", "2:00 PM", "14:00"
+  const match = upperTime.match(/(\d{1,2})(?::(\d{2}))?\s*([AP]M)?/);
+
+  if (!match) {
+    console.warn(`⚠️ Could not parse time "${timeStr}", using default`);
+    return "10:00 AM";
   }
 
-  return "10:00 AM";
+  let hours = parseInt(match[1]);
+  const minutes = match[2] || "00";
+  let period = match[3];
+
+  // Handle 24-hour format
+  if (!period) {
+    period = hours >= 12 ? "PM" : "AM";
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+  }
+
+  // Validate
+  if (hours < 1 || hours > 12) {
+    console.warn(`⚠️ Invalid hour "${hours}", using default`);
+    return "10:00 AM";
+  }
+
+  return `${hours}:${minutes} ${period}`;
+}
+
+// ✅ Smart date parser
+function parseDateFromNaturalLanguage(
+  dateStr: string,
+  timeStr?: string
+): Date | null {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // Normalize time
+  const normalizedTime = timeStr ? normalizeTimeString(timeStr) : "10:00 AM";
+
+  // Handle day names (Monday, Tuesday, etc.)
+  const dayNames = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  const lowerDate = dateStr.toLowerCase().trim();
+
+  if (dayNames.includes(lowerDate)) {
+    // Find next occurrence of this day
+    const targetDay = dayNames.indexOf(lowerDate);
+    const currentDay = now.getDay();
+    let daysUntil = targetDay - currentDay;
+
+    if (daysUntil <= 0) {
+      daysUntil += 7; // Next week
+    }
+
+    const targetDate = new Date(now);
+    targetDate.setDate(now.getDate() + daysUntil);
+
+    // Parse time
+    const timeMatch = normalizedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1]);
+      const minutes = parseInt(timeMatch[2]);
+      const period = timeMatch[3].toUpperCase();
+
+      if (period === "PM" && hours !== 12) hours += 12;
+      if (period === "AM" && hours === 12) hours = 0;
+
+      targetDate.setHours(hours, minutes, 0, 0);
+    }
+
+    return targetDate;
+  }
+
+  // Handle full date strings (e.g., "November 15", "Nov 15", "15 November")
+  let parsed = new Date(`${dateStr}, ${currentYear} ${normalizedTime}`);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  // Try without comma
+  parsed = new Date(`${dateStr} ${currentYear} ${normalizedTime}`);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  console.error(`❌ Could not parse date: "${dateStr}"`);
+  return null;
+}
+
+// ✅ Smart day suggestions
+function getSmartDaySuggestions(): string {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const currentHour = now.getHours();
+
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+
+  // If it's late in the day (after 3 PM), skip today
+  const startDay = currentHour >= 15 ? currentDay + 1 : currentDay;
+
+  const suggestions: string[] = [];
+
+  // Get next 2-3 business days
+  for (let i = startDay; i < startDay + 7 && suggestions.length < 3; i++) {
+    const dayIndex = i % 7;
+
+    // Skip weekends
+    if (dayIndex === 0 || dayIndex === 6) continue;
+
+    const daysAway = i - currentDay;
+
+    if (daysAway === 0) {
+      suggestions.push("today");
+    } else if (daysAway === 1) {
+      suggestions.push("tomorrow");
+    } else if (daysAway <= 7) {
+      suggestions.push(`this ${dayNames[dayIndex]}`);
+    } else {
+      suggestions.push(`next ${dayNames[dayIndex]}`);
+    }
+  }
+
+  // Format: "today or tomorrow", "Thursday or Friday", etc.
+  if (suggestions.length >= 2) {
+    return `${suggestions[0]} or ${suggestions[1]}`;
+  } else if (suggestions.length === 1) {
+    return suggestions[0];
+  } else {
+    return "this week";
+  }
+}
+
+// ✅ NEW: Validate booking details
+function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
+  const missing: string[] = [];
+
+  // Check date and time
+  const hasDate = !!bookingIntent.proposedDateTime?.date;
+  const hasTime = !!bookingIntent.proposedDateTime?.time;
+
+  if (!hasDate)
+    missing.push("specific date (e.g., November 15 or next Monday)");
+  if (!hasTime) missing.push("time (e.g., 2 PM or 14:00)");
+
+  // ✅ IMPROVED: Better address validation
+  const location = bookingIntent.location || "";
+  const addressKeywords = [
+    "st",
+    "ave",
+    "rd",
+    "blvd",
+    "drive",
+    "way",
+    "lane",
+    "court",
+    "place",
+    "street",
+    "avenue",
+    "road",
+    "boulevard",
+    "cres",
+    "crescent",
+    "pkwy",
+    "parkway",
+    "circle",
+    "terrace",
+    "plaza",
+    "square",
+  ];
+
+  const hasAddress =
+    location.length > 15 &&
+    // Has street indicator
+    (addressKeywords.some((keyword) =>
+      location.toLowerCase().includes(keyword)
+    ) ||
+      // Has comma (city separator)
+      location.includes(",") ||
+      // Has postal code pattern (for Canada: A1A 1A1 or USA: 12345)
+      /[A-Z]\d[A-Z]\s?\d[A-Z]\d/i.test(location) || // Canadian postal
+      /\d{5}(-\d{4})?/.test(location) || // US ZIP
+      // Has "RR" (Rural Route) pattern
+      /RR\d+/i.test(location));
+
+  if (!hasAddress) {
+    missing.push("specific address (street, city) for the site visit");
+  }
+
+  // Check lead details
+  const hasName =
+    lead.firstName &&
+    lead.firstName !== lead.phone &&
+    !lead.firstName.startsWith("639") &&
+    !lead.firstName.startsWith("+") &&
+    !lead.firstName.toLowerCase().includes("unknown") &&
+    lead.firstName.length > 2;
+
+  if (!hasName) {
+    missing.push("your full name");
+  }
+
+  const hasEmail =
+    lead.email &&
+    !lead.email.includes("whatsapp_") &&
+    !lead.email.includes("@temp.com") &&
+    lead.email.includes("@") &&
+    lead.email.includes(".");
+
+  if (!hasEmail) {
+    missing.push("email address for the calendar invite");
+  }
+
+  return {
+    hasDate,
+    hasTime,
+    hasAddress,
+    hasName,
+    hasEmail,
+    missingDetails: missing,
+  };
 }
 
 export class LeadQualificationService {
@@ -67,6 +306,7 @@ export class LeadQualificationService {
           ? new Date(lead.createdAt).getTime()
           : Date.now();
         const responseTime = Math.floor((Date.now() - createdAt) / 1000);
+
         await storage.updateLead(lead.id, {
           responseTimeSeconds: responseTime,
         });
@@ -99,7 +339,7 @@ export class LeadQualificationService {
     message: string,
     timestamp: number,
     phoneNumberId?: string,
-    messageId?: string // ✅ ADD THIS
+    messageId?: string
   ): Promise<void> {
     console.log(`📨 Queueing message from ${from}, messageId: ${messageId}`);
     await messageQueue.enqueueMessage(
@@ -108,7 +348,7 @@ export class LeadQualificationService {
       timestamp,
       this.handleIncomingMessage.bind(this),
       phoneNumberId,
-      messageId // ✅ ADD THIS
+      messageId
     );
   }
 
@@ -120,6 +360,15 @@ export class LeadQualificationService {
     messageId?: string
   ): Promise<void> {
     try {
+      // ✅ Prevent duplicate message processing
+      if (messageId) {
+        const existingMessage = await storage.getMessageByWhatsAppId(messageId);
+        if (existingMessage) {
+          console.log(`⚠️ Message ${messageId} already processed, skipping`);
+          return;
+        }
+      }
+
       console.log("=== INCOMING MESSAGE ===");
       console.log("From:", from);
       console.log("Message:", message);
@@ -128,10 +377,8 @@ export class LeadQualificationService {
 
       // Step 1: Find or create lead
       let lead = await storage.getLeadByPhone(from);
-
       if (!lead) {
         console.log("📝 Unknown number - creating new lead automatically");
-
         const allUsers = await storage.getAllUsersForAdmin();
         let targetClient = null;
 
@@ -141,13 +388,10 @@ export class LeadQualificationService {
             `🔍 Looking for client with Phone number ID: ${phoneNumberId}`
           );
 
-          // Loop through regular users to and their clients
           for (const user of allUsers) {
             if (user.role === "super_admin") continue;
-
             const userClients = await storage.getClients(user.id);
 
-            // Find active client with matching WhatsApp Phone Number ID
             const matchedClient = userClients.find(
               (c) => c.isActive && c.whatsappPhoneNumberId === phoneNumberId
             );
@@ -167,10 +411,8 @@ export class LeadQualificationService {
           console.log(
             "⚠️ No client matched WhatsApp number, using first active client"
           );
-
           for (const user of allUsers) {
             if (user.role === "super_admin") continue;
-
             const userClients = await storage.getClients(user.id);
             const firstWithWhatsApp = userClients.find(
               (c) => c.isActive && (c.whatsappPhoneNumberId || c.whatsappNumber)
@@ -220,16 +462,12 @@ export class LeadQualificationService {
       }
 
       // Step 2: Find or create conversation
-      // ✅ CHANGED: Look for ANY conversation (active or closed) for this lead
       const allConversations = await storage.getAllConversations(lead.clientId);
       let conversation = allConversations.find(
-        (c: any) => c.leadId === lead.id
+        (c: any) => c.leadId === lead!.id
       );
 
-      let wasReopened = false;
-
       if (!conversation) {
-        // No conversation exists - create new one
         const newConv = await storage.createConversation({
           leadId: lead.id,
           clientId: lead.clientId,
@@ -242,21 +480,18 @@ export class LeadQualificationService {
         conversation = { ...newConv, lead } as any;
         console.log("✅ New conversation created:", conversation?.id);
       } else if (conversation.status === "closed") {
-        // ✅ SMART REOPENING: Conversation was closed (terminated spam)
         console.log(
           "🔄 Reopening previously closed conversation:",
           conversation.id
         );
 
-        // Reopen conversation but KEEP AI DISABLED (human review required)
         await storage.updateConversation(conversation.id, {
           status: "active",
-          isAiHandled: false, // ← AI stays OFF, human must review
+          isAiHandled: false,
           lastMessageAt: new Date(),
-          reopenedAt: new Date(), // Track when it was reopened
-        } as any); // ✅ Type assertion to bypass TypeScript
+          reopenedAt: new Date(),
+        } as any);
 
-        // Update lead status from "spam" back to "not-a-lead" for human review
         if (lead.status === "spam") {
           const existingTags = Array.isArray(lead.tags) ? lead.tags : [];
           await storage.updateLead(lead.id, {
@@ -264,14 +499,12 @@ export class LeadQualificationService {
             tags: [
               ...existingTags.filter((t: string) => t !== "terminated"),
               "reopened",
-            ], // Remove "terminated", add "reopened"
+            ],
           });
         }
 
-        wasReopened = true;
         console.log("✅ Conversation reopened - flagged for human review");
 
-        // Broadcast reopened conversation alert
         this.broadcastUpdate({
           type: "conversation_reopened",
           conversationId: conversation.id,
@@ -315,9 +548,10 @@ export class LeadQualificationService {
 
       // Step 4: AI Processing
       if (conversation.isAiHandled) {
-        console.log("🤖 AI is handling - generating response...");
+        console.log("🤖 AI is handling - processing message...");
 
-        // BROADCAST: AI is typing (dashboard only)
+        // ✅ REMOVED: No more status message ("Let me check that for you...")
+        // Just show typing indicator to dashboard
         this.broadcastUpdate({
           type: "typing_indicator",
           conversationId: conversation.id,
@@ -325,35 +559,22 @@ export class LeadQualificationService {
           sender: "ai",
         });
 
-        // SEND STATUS MESSAGE: Let lead know we're processing
-        const statusMessage = "Let me check that for you...";
-        await whatsappService.sendTextMessage(from, statusMessage);
-
-        // Record status message
-        await storage.createMessage({
-          conversationId: conversation.id,
-          content: statusMessage,
-          sender: "ai",
-          channel: "whatsapp",
-          sentAt: new Date(),
-          deliveredAt: new Date(),
-          isStatusMessage: true, // Flag as status message
-        });
-
-        // Get conversation history and qualify
+        // Get conversation history
         const messages = await storage.getMessages(conversation.id);
-        const qualification = await qualifyLead(lead, messages);
 
+        // Qualify lead
+        const qualification = await qualifyLead(lead, messages);
         console.log("AI Qualification:", qualification);
 
-        // ✅ CHECK: Is this a non-construction inquiry?
+        // ============================================
+        // CHECK: Non-construction inquiry?
+        // ============================================
         if (
           qualification.nextAction === "mark_as_not_a_lead" ||
           qualification.score < 0.1
         ) {
-          console.log("🚫 Marking as not-a-lead");
+          console.log("🚫 Non-construction inquiry detected");
 
-          // ✅ NEW: Count redirect messages
           const redirectCount = messages.filter(
             (msg) =>
               msg.sender === "ai" &&
@@ -362,9 +583,8 @@ export class LeadQualificationService {
                 msg.content.includes("wrong business"))
           ).length;
 
-          console.log(`🔢 Total redirects sent: ${redirectCount}`);
+          console.log(`🔢 Redirect count: ${redirectCount}`);
 
-          // Update lead status
           await storage.updateLead(lead.id, {
             status: "not-a-lead",
             qualificationScore: qualification.score.toString(),
@@ -372,11 +592,8 @@ export class LeadQualificationService {
             tags: ["not-construction", "irrelevant"],
           });
 
-          // ✅ NEW: After final redirect (3rd message), disable AI
           if (redirectCount >= 2) {
-            console.log(
-              "⛔ Disabling AI for this conversation - max redirects reached"
-            );
+            console.log("⛔ Max redirects reached - terminating");
 
             const category =
               message.toLowerCase().includes("food") ||
@@ -391,16 +608,14 @@ export class LeadQualificationService {
                 : "other";
 
             await spamPatternLearning.learnFromSpam(message, category);
-            console.log(`🧠 Learning complete for category: ${category}`);
 
             await storage.updateConversation(conversation.id, {
               qualificationScore: qualification.score.toString(),
               lastMessageAt: new Date(),
-              isAiHandled: false, // ← STOP AI FROM RESPONDING
-              status: "closed", // ← CLOSE CONVERSATION
+              isAiHandled: false,
+              status: "closed",
             });
 
-            // Add additional tags
             await storage.updateLead(lead.id, {
               status: "spam",
               tags: [
@@ -411,15 +626,13 @@ export class LeadQualificationService {
               ],
             });
           } else {
-            // Still within redirect limit
             await storage.updateConversation(conversation.id, {
               qualificationScore: qualification.score.toString(),
               lastMessageAt: new Date(),
-              isAiHandled: true, // Keep AI handling for now
+              isAiHandled: true,
             });
           }
 
-          // Broadcast lead update
           const updatedLead = await storage.getLead(lead.id);
           this.broadcastUpdate({
             type: "lead_updated",
@@ -427,15 +640,10 @@ export class LeadQualificationService {
             conversationId: conversation.id,
           });
 
-          // ✅ Generate polite redirect response
-          console.log("💬 Generating redirect response...");
-
+          // Generate redirect response
           const client = await storage.getClient(lead.clientId);
           const aiResponse = await generateAIResponse(messages, lead, client);
 
-          console.log("AI Redirect Response:", aiResponse);
-
-          // STOP TYPING
           this.broadcastUpdate({
             type: "typing_indicator",
             conversationId: conversation.id,
@@ -443,7 +651,6 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
-          // Send redirect message
           const redirectResult = await whatsappService.sendTextMessage(
             from,
             aiResponse
@@ -461,23 +668,20 @@ export class LeadQualificationService {
               : undefined,
           });
 
-          console.log(
-            "✅ Redirect message sent, conversation marked as not-a-lead"
-          );
-
-          // Broadcast final message update
           this.broadcastUpdate({
             type: "new_message",
             conversationId: conversation.id,
-            message: { content: "AI redirect sent", sender: "ai" },
+            message: { content: aiResponse, sender: "ai" },
           });
 
-          // ✅ STOP HERE - Don't continue with normal flow
-          return;
+          return; // Stop processing
         }
 
-        // ✅ NORMAL FLOW: Construction-related inquiry
-        // Determine temperature based on score
+        // ============================================
+        // NORMAL FLOW: Construction-related inquiry
+        // ============================================
+
+        // Update temperature
         let temperature: "hot" | "warm" | "cold";
         if (qualification.score >= 0.7) {
           temperature = "hot";
@@ -487,22 +691,19 @@ export class LeadQualificationService {
           temperature = "cold";
         }
 
-        // ✅ UPDATE CONVERSATION with score
         await storage.updateConversation(conversation.id, {
           qualificationScore: qualification.score.toString(),
           lastMessageAt: new Date(),
         });
 
-        // ✅ UPDATE LEAD with temperature and auto-qualify hot leads
         await storage.updateLead(lead.id, {
           qualificationScore: qualification.score.toString(),
           temperature: temperature,
-          status: qualification.score >= 0.7 ? "qualified" : lead.status, // Auto-qualify hot leads
+          status: qualification.score >= 0.7 ? "qualified" : lead.status,
         });
 
-        console.log(`🌡️ Temperature set to: ${temperature}`);
+        console.log(`🌡️ Temperature: ${temperature}`);
 
-        // Broadcast lead update to dashboard
         const updatedLead = await storage.getLead(lead.id);
         this.broadcastUpdate({
           type: "lead_updated",
@@ -510,16 +711,17 @@ export class LeadQualificationService {
           conversationId: conversation.id,
         });
 
-        // Hot lead detection
+        // ============================================
+        // HOT LEAD: Immediate human handoff (score-based)
+        // ============================================
         if (qualification.needsHumanAttention || qualification.score >= 0.7) {
-          console.log("🔥 HOT LEAD - Triggering human handoff");
+          console.log("🔥 HOT LEAD - Immediate human handoff");
 
           await storage.updateConversation(conversation.id, {
             isAiHandled: false,
             humanTakeoverAt: new Date(),
           });
 
-          // STOP TYPING
           this.broadcastUpdate({
             type: "typing_indicator",
             conversationId: conversation.id,
@@ -527,7 +729,6 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
-          const updatedLead = await storage.getLead(lead.id);
           this.broadcastUpdate({
             type: "lead_updated",
             lead: updatedLead,
@@ -546,6 +747,7 @@ export class LeadQualificationService {
 
           const handoffMessage =
             "Thanks for your message! You've been identified as a priority lead. A team member will respond within 5 minutes.";
+
           const handoffResult = await whatsappService.sendTextMessage(
             from,
             handoffMessage
@@ -562,178 +764,463 @@ export class LeadQualificationService {
               ? { whatsappMessageId: handoffResult.messageId }
               : undefined,
           });
-        } else {
-          console.log("💬 Generating AI response...");
 
-          const client = await storage.getClient(lead.clientId);
-          const aiResponse = await generateAIResponse(messages, lead, client);
-
-          console.log("AI Response:", aiResponse);
-
-          // STOP TYPING
-          this.broadcastUpdate({
-            type: "typing_indicator",
-            conversationId: conversation.id,
-            isTyping: false,
-            sender: "ai",
-          });
-
-          const aiResult = await whatsappService.sendTextMessage(
-            from,
-            aiResponse
-          );
-
-          await storage.createMessage({
-            conversationId: conversation.id,
-            content: aiResponse,
-            sender: "ai",
-            channel: "whatsapp",
-            sentAt: new Date(),
-            deliveredAt: new Date(),
-            metadata: aiResult.messageId
-              ? { whatsappMessageId: aiResult.messageId }
-              : undefined,
-          });
-
-          console.log("✅ AI response sent");
-
-          // ✅ NEW: Check for booking intent after AI responds to construction inquiry
-          console.log("🔍 Checking for booking intent...");
-
-          const bookingIntent = await detectBookingIntent(messages, lead);
-
-          console.log("📅 Booking Intent:", bookingIntent);
-
-          // ✅ STRICT VALIDATION: Only create booking if BOTH conditions met
-          if (
-            bookingIntent.wantsToBook &&
-            bookingIntent.isConfirmed &&
-            bookingIntent.confidence > 0.8 &&
-            bookingIntent.proposedDateTime?.date // ← MUST have specific date
-          ) {
-            console.log("✅ High booking intent detected with specific date!");
-
-            let scheduledFor: Date;
-          const currentYear = new Date().getFullYear();
-
-          if (
-            bookingIntent.proposedDateTime.date &&
-            bookingIntent.proposedDateTime.time
-          ) {
-            const normalizedTime = normalizeTimeString(bookingIntent.proposedDateTime.time);
-            const dateString = `${bookingIntent.proposedDateTime.date}, ${currentYear} ${normalizedTime}`;
-            console.log(`[DEBUG] Parsing normalized date string: "${dateString}"`);
-            scheduledFor = new Date(dateString);
-          } else if (bookingIntent.proposedDateTime.date) {
-            const normalizedTime = normalizeTimeString("10am"); // Default time
-            const dateString = `${bookingIntent.proposedDateTime.date}, ${currentYear} ${normalizedTime}`;
-             console.log(`[DEBUG] Parsing normalized date string with default time: "${dateString}"`);
-            scheduledFor = new Date(dateString);
-          } else {
-             console.error("❌ Booking intent confirmed but date is missing. Aborting.");
-             return; // Exit if date is somehow missing
-          }
-          
-          // Validate the parsed date
-          if (isNaN(scheduledFor.getTime())) {
-              console.error("❌ Failed to parse date. Aborting booking creation.", { bookingIntent });
-              return;
-          }
-
-            // Create pending booking
-            try {
-              // Check for an existing pending booking for this lead
-              const existingPendingBooking =
-                await storage.findPendingBookingByLeadId(lead.id);
-
-              const bookingDetails: InsertBooking = {
-                leadId: lead.id,
-                clientId: lead.clientId,
-                title: `${
-                  bookingIntent.meetingType === "site-visit"
-                    ? "Site Visit"
-                    : "Consultation"
-                } - ${lead.firstName} ${lead.lastName}`,
-                scheduledFor,
-                scheduledAt: scheduledFor,
-                duration: 60,
-                status: "pending_approval",
-                attendeeEmail: lead.email,
-                attendeeName: `${lead.firstName} ${lead.lastName}`,
-                attendeePhone: lead.phone,
-                meetingType: bookingIntent.meetingType,
-                location: bookingIntent.location || "TBD",
-                notes: `AI-proposed booking. Confidence: ${(
-                  bookingIntent.confidence * 100
-                ).toFixed(0)}%. Reasoning: ${bookingIntent.reasoning}.`,
-                proposedBy: "ai",
-                aiConfidence: bookingIntent.confidence.toString(),
-              };
-
-              let savedBooking;
-              let eventType = "booking_approval_needed";
-
-              if (existingPendingBooking) {
-                console.log(
-                  `🔄 Updating existing pending booking: ${existingPendingBooking.id}`
-                );
-                // We remove status from the update object as we don't want to change it from pending_approval here
-                const { status, ...updateDetails } = bookingDetails;
-                savedBooking = await storage.updateBooking(
-                  existingPendingBooking.id,
-                  updateDetails
-                );
-                eventType = "booking_updated"; // Use a different event for updates on the frontend
-              } else {
-                console.log("✅ Creating new pending booking...");
-                savedBooking = await storage.createBooking(bookingDetails);
-              }
-
-              console.log("✅ Pending booking saved:", savedBooking.id);
-
-              // Broadcast to agents for approval using the correct event type
-              this.broadcastUpdate({
-                type: eventType,
-                booking: {
-                  ...savedBooking,
-                  lead: {
-                    firstName: lead.firstName,
-                    lastName: lead.lastName,
-                    company: lead.company,
-                    phone: lead.phone,
-                  },
-                },
-              });
-
-              console.log(
-                `📢 Booking ${eventType} notification sent to agents`
-              );
-            } catch (error) {
-              console.error(
-                "❌ Error creating/updating pending booking:",
-                error
-              );
-            }
-          } else if (
-            bookingIntent.wantsToBook &&
-            bookingIntent.confidence > 0.5
-          ) {
-            // ✅ NEW: Medium confidence or no specific date - just log it
-            console.log(
-              `ℹ️ Booking interest detected (confidence: ${bookingIntent.confidence}) but no specific date yet. Waiting for lead to specify day.`
-            );
-          }
+          return; // Stop AI processing
         }
 
-        // Broadcast final message update
+        // ============================================
+        // STEP 1: CHECK BOOKING INTENT FIRST (CRITICAL FIX)
+        // ============================================
+        console.log("🔍 Step 1: Checking booking intent...");
+        const bookingIntent = await detectBookingIntent(messages, lead);
+        console.log("📅 Booking Intent:", bookingIntent);
+
+        if (
+          bookingIntent.wantsToBook &&
+          bookingIntent.isConfirmed &&
+          bookingIntent.confidence > BOOKING_CONFIDENCE_THRESHOLD
+        ) {
+          console.log("✅ Confirmed booking intent detected!");
+
+          // ============================================
+          // ✅ NEW: STEP 1.5 - EXTRACT LEAD DETAILS FROM CONVERSATION
+          // ============================================
+          console.log(
+            "🔍 Step 1.5: Extracting lead details from conversation..."
+          );
+
+          const extractedDetails = await extractLeadDetails(messages);
+          console.log("📋 Extracted details:", extractedDetails);
+
+          // Update lead with extracted information if confidence is high
+          if (extractedDetails.confidence > 0.7) {
+            const updates: any = {};
+
+            // Extract name if found and current name is phone number
+            if (
+              extractedDetails.name &&
+              (lead.firstName === lead.phone ||
+                lead.firstName!.startsWith("639") ||
+                lead.firstName!.startsWith("+") ||
+                lead.firstName === "Unknown")
+            ) {
+              const nameParts = extractedDetails.name.split(" ");
+              updates.firstName = nameParts[0];
+              updates.lastName = nameParts.slice(1).join(" ") || "";
+              console.log(`✅ Extracted name: ${extractedDetails.name}`);
+            }
+
+            // Extract email if found and current email is temporary
+            if (
+              extractedDetails.email &&
+              (lead.email.includes("whatsapp_") ||
+                lead.email.includes("@temp.com"))
+            ) {
+              updates.email = extractedDetails.email;
+              console.log(`✅ Extracted email: ${extractedDetails.email}`);
+            }
+
+            // Update lead if we found anything
+            if (Object.keys(updates).length > 0) {
+              await storage.updateLead(lead.id, updates);
+              // Refresh lead data with updated info
+              lead = (await storage.getLead(lead.id))!;
+              console.log(`✅ Updated lead with extracted details`);
+            }
+          }
+
+          // ✅ Override location if extracted address is more specific
+          if (
+            extractedDetails.address &&
+            extractedDetails.confidence > 0.7 &&
+            (!bookingIntent.location ||
+              bookingIntent.location === "TBD" ||
+              bookingIntent.location.length < 20 ||
+              bookingIntent.location === "British Columbia" ||
+              bookingIntent.location === "BC")
+          ) {
+            bookingIntent.location = extractedDetails.address;
+            console.log(
+              `✅ Using extracted address: ${extractedDetails.address}`
+            );
+          }
+
+          // ============================================
+          // STEP 2: VALIDATE DETAILS
+          // ============================================
+          console.log("📋 Step 2: Validating booking details...");
+          const detailsCheck = validateBookingDetails(bookingIntent, lead);
+
+          if (detailsCheck.missingDetails.length > 0) {
+            // ============================================
+            // STEP 3A: REQUEST MISSING DETAILS
+            // ============================================
+            console.log("❓ Missing details:", detailsCheck.missingDetails);
+
+            // ✅ Check if lead JUST provided details in last message
+            const lastLeadMessage =
+              messages
+                .filter((m) => m.sender === "lead")
+                .slice(-1)[0]
+                ?.content.toLowerCase() || "";
+
+            const justProvidedDetails =
+              (detailsCheck.missingDetails.includes("specific address") &&
+                (lastLeadMessage.includes("address") ||
+                  lastLeadMessage.match(
+                    /\d+\s+\w+\s+(st|ave|rd|way|drive|lane|blvd)/i
+                  ))) ||
+              (detailsCheck.missingDetails.includes("your full name") &&
+                lastLeadMessage.includes("name")) ||
+              (detailsCheck.missingDetails.includes("email") &&
+                lastLeadMessage.includes("@"));
+
+            if (justProvidedDetails) {
+              console.log(
+                "⚠️ Lead just provided details but validation failed"
+              );
+              console.log("Last message:", lastLeadMessage);
+              console.log("Booking location:", bookingIntent.location);
+              console.log("Lead data:", {
+                name: `${lead.firstName} ${lead.lastName}`,
+                email: lead.email,
+              });
+
+              // Don't ask again - something is wrong with validation or extraction
+              // Log error and notify human
+              this.broadcastUpdate({
+                type: "validation_error",
+                conversationId: conversation.id,
+                message:
+                  "Lead provided details but validation failed - needs human review",
+                missingDetails: detailsCheck.missingDetails,
+                leadMessage: lastLeadMessage,
+              });
+
+              // Send acknowledgment instead of asking again
+              const acknowledgment = `Thank you for providing those details! Let me review this information and our team will reach out shortly to confirm your booking for November 3 at 2 PM. 📋`;
+
+              this.broadcastUpdate({
+                type: "typing_indicator",
+                conversationId: conversation.id,
+                isTyping: false,
+                sender: "ai",
+              });
+
+              await whatsappService.sendTextMessage(from, acknowledgment);
+
+              await storage.createMessage({
+                conversationId: conversation.id,
+                content: acknowledgment,
+                sender: "ai",
+                channel: "whatsapp",
+                sentAt: new Date(),
+                deliveredAt: new Date(),
+              });
+
+              // Escalate to human
+              await storage.updateConversation(conversation.id, {
+                isAiHandled: false,
+                humanTakeoverAt: new Date(),
+              });
+
+              console.log("✅ Escalated to human due to validation loop");
+              return;
+            }
+
+            this.broadcastUpdate({
+              type: "typing_indicator",
+              conversationId: conversation.id,
+              isTyping: false,
+              sender: "ai",
+            });
+
+            const missingList = detailsCheck.missingDetails
+              .map(
+                (d, i) => `${i + 1}. ${d.charAt(0).toUpperCase() + d.slice(1)}`
+              )
+              .join("\n");
+
+            const detailsRequest = `Perfect! Before I confirm the booking for ${
+              bookingIntent.proposedDateTime?.date || "the meeting"
+            } at ${
+              bookingIntent.proposedDateTime?.time || "the specified time"
+            }, I need a few more details:
+
+${missingList}
+
+Please provide all in one message (e.g., "My name is John Smith, email john@email.com, address is 123 Main St, Vancouver"). 📋`;
+
+            await whatsappService.sendTextMessage(from, detailsRequest);
+
+            await storage.createMessage({
+              conversationId: conversation.id,
+              content: detailsRequest,
+              sender: "ai",
+              channel: "whatsapp",
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+            });
+
+            this.broadcastUpdate({
+              type: "new_message",
+              conversationId: conversation.id,
+              message: { content: detailsRequest, sender: "ai" },
+            });
+
+            console.log("✅ Requested missing details, waiting for response");
+            return; // Stop processing, wait for details
+          }
+
+          // ============================================
+          // STEP 3B: ALL DETAILS PRESENT - CREATE BOOKING
+          // ============================================
+          console.log("✅ All details present, creating booking...");
+
+          // Parse date
+          let scheduledFor: Date | null = null;
+
+          if (bookingIntent.proposedDateTime?.date) {
+            scheduledFor = parseDateFromNaturalLanguage(
+              bookingIntent.proposedDateTime.date,
+              bookingIntent.proposedDateTime.time
+            );
+
+            if (!scheduledFor) {
+              console.error("❌ Failed to parse date");
+              return;
+            }
+
+            if (scheduledFor < new Date()) {
+              console.error("❌ Date is in the past");
+              return;
+            }
+
+            console.log(`✅ Parsed date: ${scheduledFor.toISOString()}`);
+          } else {
+            console.error("❌ Date missing after validation");
+            return;
+          }
+
+          // Create booking
+          try {
+            const existingPendingBooking =
+              await storage.findPendingBookingByLeadId(lead.id);
+
+            const bookingDetails: InsertBooking = {
+              leadId: lead.id,
+              clientId: lead.clientId,
+              title: `${
+                bookingIntent.meetingType === "site-visit"
+                  ? "Site Visit"
+                  : "Consultation"
+              } - ${lead.firstName} ${lead.lastName}`,
+              scheduledFor,
+              scheduledAt: scheduledFor,
+              duration: 60,
+              status: "pending_approval",
+              attendeeEmail: lead.email,
+              attendeeName: `${lead.firstName} ${lead.lastName}`,
+              attendeePhone: lead.phone,
+              meetingType: bookingIntent.meetingType || "consultation",
+              location: bookingIntent.location || "TBD",
+              notes: `AI-proposed booking. Confidence: ${(
+                bookingIntent.confidence * 100
+              ).toFixed(0)}%. Reasoning: ${bookingIntent.reasoning}.`,
+              proposedBy: "ai",
+              aiConfidence: bookingIntent.confidence.toString(),
+            };
+
+            let savedBooking;
+            let eventType = "booking_approval_needed";
+
+            if (existingPendingBooking) {
+              console.log(
+                `🔄 Updating existing booking: ${existingPendingBooking.id}`
+              );
+              const { status, ...updateDetails } = bookingDetails;
+              savedBooking = await storage.updateBooking(
+                existingPendingBooking.id,
+                updateDetails
+              );
+              eventType = "booking_updated";
+            } else {
+              console.log("✅ Creating new booking...");
+              savedBooking = await storage.createBooking(bookingDetails);
+            }
+
+            console.log("✅ Booking saved:", savedBooking.id);
+
+            // Broadcast to agents
+            this.broadcastUpdate({
+              type: eventType,
+              booking: {
+                ...savedBooking,
+                lead: {
+                  firstName: lead.firstName,
+                  lastName: lead.lastName,
+                  company: lead.company,
+                  phone: lead.phone,
+                },
+              },
+            });
+
+            // Send confirmation to lead
+            const confirmationMessage = `Excellent! I've requested a ${
+              bookingIntent.meetingType === "site-visit"
+                ? "site visit"
+                : "consultation"
+            } for:
+
+📅 ${bookingIntent.proposedDateTime.date} at ${
+              bookingIntent.proposedDateTime.time || "2 PM"
+            }
+📍 ${bookingIntent.location || "your location"}
+👤 ${lead.firstName} ${lead.lastName}
+📧 ${lead.email}
+
+Our team will send you a calendar invite shortly. Looking forward to discussing your ${
+              lead.company !== "Unknown" ? lead.company + " " : ""
+            }project! 🏗️`;
+
+            this.broadcastUpdate({
+              type: "typing_indicator",
+              conversationId: conversation.id,
+              isTyping: false,
+              sender: "ai",
+            });
+
+            await whatsappService.sendTextMessage(from, confirmationMessage);
+
+            await storage.createMessage({
+              conversationId: conversation.id,
+              content: confirmationMessage,
+              sender: "ai",
+              channel: "whatsapp",
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+              metadata: { bookingId: savedBooking.id },
+            });
+
+            console.log("✅ Confirmation sent to lead");
+
+            // ============================================
+            // STEP 4: ESCALATE TO HOT LEAD + HUMAN TAKEOVER
+            // ============================================
+            console.log("🔥 Escalating to HOT LEAD with human takeover");
+
+            await storage.updateLead(lead.id, {
+              qualificationScore: "0.85",
+              temperature: "hot",
+              status: "qualified",
+            });
+
+            await storage.updateConversation(conversation.id, {
+              qualificationScore: "0.85",
+              isAiHandled: false, // ✅ CRITICAL: Stop AI
+              humanTakeoverAt: new Date(),
+            });
+
+            const escalatedLead = await storage.getLead(lead.id);
+
+            this.broadcastUpdate({
+              type: "hot_lead_alert",
+              conversation: {
+                ...conversation,
+                lead: escalatedLead,
+                qualificationScore: "0.85",
+              },
+              qualification: {
+                score: 0.85,
+                needsHumanAttention: true,
+                reasoning:
+                  "Booking confirmed - immediate human attention required",
+                nextAction: "finalize_booking_details",
+              },
+            });
+
+            this.broadcastUpdate({
+              type: "lead_updated",
+              lead: escalatedLead,
+              conversationId: conversation.id,
+            });
+
+            this.broadcastUpdate({
+              type: "new_message",
+              conversationId: conversation.id,
+              message: { content: confirmationMessage, sender: "ai" },
+            });
+
+            console.log(
+              "✅ Booking complete, AI stopped, human takeover active"
+            );
+            return; // ✅ CRITICAL: Stop processing immediately
+          } catch (error) {
+            console.error("❌ Error creating booking:", error);
+          }
+        } else if (
+          bookingIntent.wantsToBook &&
+          bookingIntent.confidence > BOOKING_INTEREST_THRESHOLD
+        ) {
+          console.log(
+            `ℹ️ Booking interest (${bookingIntent.confidence}) but not confirmed yet`
+          );
+        }
+
+        // ============================================
+        // STEP 5: NORMAL CONVERSATION (No booking intent)
+        // ============================================
+        console.log("💬 No booking intent - normal conversation flow");
+
+        const existingPendingBooking = await storage.findPendingBookingByLeadId(
+          lead.id
+        );
+        const daySuggestions = getSmartDaySuggestions();
+        const client = await storage.getClient(lead.clientId);
+
+        const aiResponse = await generateAIResponse(
+          messages,
+          lead,
+          client,
+          !!existingPendingBooking,
+          daySuggestions
+        );
+
+        console.log("AI Response:", aiResponse);
+
+        this.broadcastUpdate({
+          type: "typing_indicator",
+          conversationId: conversation.id,
+          isTyping: false,
+          sender: "ai",
+        });
+
+        const aiResult = await whatsappService.sendTextMessage(
+          from,
+          aiResponse
+        );
+
+        await storage.createMessage({
+          conversationId: conversation.id,
+          content: aiResponse,
+          sender: "ai",
+          channel: "whatsapp",
+          sentAt: new Date(),
+          deliveredAt: new Date(),
+          metadata: aiResult.messageId
+            ? { whatsappMessageId: aiResult.messageId }
+            : undefined,
+        });
+
         this.broadcastUpdate({
           type: "new_message",
           conversationId: conversation.id,
-          message: { content: "AI response sent", sender: "ai" },
+          message: { content: aiResponse, sender: "ai" },
         });
+
+        console.log("✅ Normal response sent");
       } else {
         console.log("👤 Human handling - just recording");
-
         await storage.updateConversation(conversation.id, {
           lastMessageAt: new Date(),
         });
@@ -742,7 +1229,6 @@ export class LeadQualificationService {
       console.log("✅ Message processing complete");
     } catch (error) {
       console.error("Error handling message:", error);
-
       try {
         await whatsappService.sendTextMessage(
           from,
@@ -760,7 +1246,6 @@ export class LeadQualificationService {
     const message = JSON.stringify(data);
     this.wss.clients.forEach((client) => {
       if (client.readyState === 1) {
-        // WebSocket.OPEN
         client.send(message);
       }
     });

@@ -566,6 +566,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(conversations.lastMessageAt));
   }
 
+  async getMessageByWhatsAppId(whatsappMessageId: string): Promise<Message | undefined> {
+  const allMessages = await db.select().from(messages);
+  return allMessages.find(m => 
+    m.metadata && 
+    typeof m.metadata === 'object' && 
+    'whatsappMessageId' in m.metadata && 
+    m.metadata.whatsappMessageId === whatsappMessageId
+  );
+}
+
   // ==================== SPAM PATTERN LEARNING METHODS ====================
 
   async getSpamPatterns(): Promise<any[]> {
