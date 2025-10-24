@@ -25,8 +25,9 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  
   Legend,
+  Tooltip
 } from "recharts";
 import {
   Bot,
@@ -43,7 +44,16 @@ import {
   UserPlus,
   ArrowRight,
   HardHat,
+  BarChart3
 } from "lucide-react";
+import {
+  Tooltip as Tooltip1,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -356,69 +366,197 @@ export default function Dashboard() {
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       <VerificationBanner />
 
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">
-              Welcome back, {user?.firstName || "User"}! 👋
-            </h2>
-            <p className="text-slate-600 mt-1">
-              Here's what's happening with your leads today
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation("/conversations")}
-              className="gap-2 border-2 hover:border-construction/30"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">Conversations</span>
-              <Badge variant="secondary" className="text-xs">
-                {conversations.length}
-              </Badge>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation("/leads")}
-              className="gap-2 border-2 hover:border-construction/30"
-            >
-              <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">Leads</span>
-              <Badge variant="secondary" className="text-xs">
-                {kpis.totalLeads}
-              </Badge>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation("/calendar")}
-              className="border-2 hover:border-construction/30"
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="hidden sm:inline">Calendar</span>
-            </Button>
-            <div
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
-                isConnected
-                  ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  isConnected ? "bg-construction animate-pulse" : "bg-red-500"
-                }`}
-              ></div>
-              <span className="font-medium hidden sm:inline">
-                {isConnected ? "Live" : "Offline"}
-              </span>
-            </div>
-          </div>
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+  {/* DESKTOP HEADER (md and up) */}
+  <div className="hidden md:block px-4 lg:px-6 py-4">
+    <div className="flex items-center justify-between gap-4">
+      {/* Left: Welcome Section */}
+      <div className="flex-1 min-w-0">
+        <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+          Welcome back, {user?.firstName || "User"}! 👋
+        </h2>
+        <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+          Here's what's happening with your leads today
+        </p>
+      </div>
+
+      {/* Right: Action Buttons + Status */}
+      <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+        {/* Conversations Button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip1>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation("/conversations")}
+                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+              >
+                <MessageCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden lg:inline">Conversations</span>
+                {conversations.length > 0 && (
+                  <Badge variant="secondary" className="text-xs ml-1">
+                    {conversations.length}
+                  </Badge>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">View all conversations</p>
+            </TooltipContent>
+          </Tooltip1>
+        </TooltipProvider>
+
+        {/* Leads Button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip1>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation("/leads")}
+                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+              >
+                <Users className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden lg:inline">Leads</span>
+                {kpis.totalLeads > 0 && (
+                  <Badge variant="secondary" className="text-xs ml-1">
+                    {kpis.totalLeads}
+                  </Badge>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Manage your leads</p>
+            </TooltipContent>
+          </Tooltip1>
+        </TooltipProvider>
+
+        {/* Calendar Button */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip1>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation("/calendar")}
+                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+              >
+                <Calendar className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden xl:inline">Calendar</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">View calendar</p>
+            </TooltipContent>
+          </Tooltip1>
+        </TooltipProvider>
+
+        {/* Status Indicator */}
+        <div
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
+            isConnected
+              ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
+              : "bg-red-50 text-red-700 border border-red-200"
+          }`}
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isConnected ? "bg-construction animate-pulse" : "bg-red-500"
+            }`}
+          ></div>
+          <span className="hidden xl:inline">
+            {isConnected ? "Live" : "Offline"}
+          </span>
         </div>
-      </header>
+      </div>
+    </div>
+  </div>
+
+  {/* MOBILE/TABLET HEADER (below md) */}
+  <div className="md:hidden px-4 py-3 space-y-3">
+    {/* Row 1: Welcome + Status */}
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+          Welcome, {user?.firstName || "User"}! 👋
+        </h2>
+        <p className="text-xs text-slate-600 mt-0.5 truncate">
+          Track your leads today
+        </p>
+      </div>
+      
+      {/* Compact Status Indicator */}
+      <div
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm flex-shrink-0 ${
+          isConnected
+            ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
+            : "bg-red-50 text-red-700 border border-red-200"
+        }`}
+      >
+        <div
+          className={`w-1.5 h-1.5 rounded-full ${
+            isConnected ? "bg-construction animate-pulse" : "bg-red-500"
+          }`}
+        ></div>
+        <span className="whitespace-nowrap">{isConnected ? "Live" : "Off"}</span>
+      </div>
+    </div>
+
+    {/* Row 2: Action Buttons - Horizontal Scroll */}
+    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLocation("/conversations")}
+        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+      >
+        <MessageCircle className="w-4 h-4" />
+        <span className="text-xs font-medium">Chats</span>
+        {conversations.length > 0 && (
+          <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
+            {conversations.length}
+          </Badge>
+        )}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLocation("/leads")}
+        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+      >
+        <Users className="w-4 h-4" />
+        <span className="text-xs font-medium">Leads</span>
+        {kpis.totalLeads > 0 && (
+          <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
+            {kpis.totalLeads}
+          </Badge>
+        )}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLocation("/calendar")}
+        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+      >
+        <Calendar className="w-4 h-4" />
+        <span className="text-xs font-medium">Calendar</span>
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setLocation("/analytics")}
+        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+      >
+        <BarChart3 className="w-4 h-4" />
+        <span className="text-xs font-medium">Analytics</span>
+      </Button>
+    </div>
+  </div>
+</header>
 
       <main className="flex-1 overflow-hidden">
         {!hasData ? (

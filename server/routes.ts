@@ -768,6 +768,225 @@ app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
   }
 });
 
+ // =========================== ANALYTICS ROUTES =================================
+ // Analytics data endpoint
+app.get("/api/analytics/:clientId", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { timeRange = "30" } = req.query; // days
+    const requestUser = req.user!;
+
+    console.log(`📊 [ANALYTICS] Fetching for client: ${clientId}, range: ${timeRange} days`);
+
+    // Verify access
+    if (requestUser.role !== "super_admin") {
+      const client = await storage.getClient(clientId);
+      if (!client || client.userId !== requestUser.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    const days = parseInt(timeRange as string, 10);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Fetch all data
+    const [leads, conversations, bookings] = await Promise.all([
+      storage.getLeads(clientId, 1000),
+      storage.getAllConversations(clientId),
+      storage.getBookings(clientId),
+    ]);
+
+    // Filter by date range
+    const filteredLeads = leads.filter(
+      (l) => new Date(l.createdAt!) >= startDate
+    );
+    const filteredConversations = conversations.filter(
+      (c) => new Date(c.createdAt!) >= startDate
+    );
+    const filteredBookings = bookings.filter(
+      (b) => new Date(b.createdAt!) >= startDate
+    );
+
+    console.log(`📊 [ANALYTICS] Filtered data: ${filteredLeads.length} leads, ${filteredConversations.length} conversations`);
+
+    // ===== 1. LEAD TREND (Daily) =====
+    const leadTrendMap = new Map<string, number>();
+    filteredLeads.forEach((lead) => {
+      const dateKey = new Date(lead.createdAt!).toISOString().split("T")[0];
+      leadTrendMap.set(dateKey, (leadTrendMap.get(dateKey) || 0) + 1);
+    });
+
+    const leadTrend = Array.from(leadTrendMap.entries())
+      .map(([date, count]) => ({
+        date,
+        leads: count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // ===== 2. RESPONSE TIME BY HOUR =====
+    const responseTimeByHour = Array.from({ length: 24 }, (_, i) => ({
+      hour: i,
+      hourLabel: i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`,
+      totalTime: 0,
+      count: 0,
+      avgTime: 0,
+    }));
+
+    filteredLeads.forEach((lead) => {
+      if (lead.responseTimeSeconds && lead.createdAt) {
+        const hour = new Date(lead.createdAt).getHours();
+        responseTimeByHour[hour].totalTime += lead.responseTimeSeconds;
+        responseTimeByHour[hour].count += 1;
+      }
+    });
+
+    responseTimeByHour.forEach((hourData) => {
+      hourData.avgTime =
+        hourData.count > 0
+          ? Math.round(hourData.totalTime / hourData.count)
+          : 0;
+    });
+
+    // ===== 3. LEAD TEMPERATURE DISTRIBUTION =====
+    const temperatureMap = {
+      hot: 0,
+      warm: 0,
+      cold: 0,
+    };
+
+    filteredLeads.forEach((lead) => {
+      const temp = lead.temperature || "cold";
+      if (temp in temperatureMap) {
+        temperatureMap[temp as keyof typeof temperatureMap]++;
+      }
+    });
+
+    const temperatureData = [
+      { name: "Hot", value: temperatureMap.hot, color: "#ef4444" },
+      { name: "Warm", value: temperatureMap.warm, color: "#f59e0b" },
+      { name: "Cold", value: temperatureMap.cold, color: "#3b82f6" },
+    ];
+
+    // ===== 4. LEAD STATUS DISTRIBUTION =====
+    const statusMap = new Map<string, number>();
+    filteredLeads.forEach((lead) => {
+      const status = lead.status || "new";
+      statusMap.set(status, (statusMap.get(status) || 0) + 1);
+    });
+
+    const statusData = Array.from(statusMap.entries()).map(([status, count]) => ({
+      status,
+      count,
+      percentage: ((count / filteredLeads.length) * 100).toFixed(1),
+    }));
+
+    // ===== 5. AI PERFORMANCE METRICS =====
+    const aiConversations = filteredConversations.filter((c) => c.isAiHandled);
+    const humanConversations = filteredConversations.filter((c) => !c.isAiHandled);
+
+    const aiLeads = filteredLeads.filter((l) => {
+      const conv = filteredConversations.find((c) => c.leadId === l.id);
+      return conv?.isAiHandled;
+    });
+
+    const humanLeads = filteredLeads.filter((l) => {
+      const conv = filteredConversations.find((c) => c.leadId === l.id);
+      return conv && !conv.isAiHandled;
+    });
+
+    const aiAvgResponse =
+      aiLeads.length > 0
+        ? aiLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) / aiLeads.length
+        : 0;
+
+    const humanAvgResponse =
+      humanLeads.length > 0
+        ? humanLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) / humanLeads.length
+        : 0;
+
+    // AI Qualification Rate (leads with score >= 0.4)
+    const qualifiedByAI = aiLeads.filter(
+      (l) => parseFloat(l.qualificationScore || "0") >= 0.4
+    ).length;
+    const aiQualificationRate =
+      aiLeads.length > 0 ? (qualifiedByAI / aiLeads.length) * 100 : 0;
+
+    // Handoff Rate (% of AI conversations that became human)
+    const handoffCount = filteredConversations.filter(
+      (c) => c.isAiHandled === false && c.humanTakeoverAt
+    ).length;
+    const handoffRate =
+      filteredConversations.length > 0
+        ? (handoffCount / filteredConversations.length) * 100
+        : 0;
+
+    const aiPerformance = {
+      totalAiHandled: aiConversations.length,
+      totalHumanHandled: humanConversations.length,
+      aiPercentage:
+        filteredConversations.length > 0
+          ? ((aiConversations.length / filteredConversations.length) * 100).toFixed(1)
+          : "0",
+      aiAvgResponseTime: Math.round(aiAvgResponse),
+      humanAvgResponseTime: Math.round(humanAvgResponse),
+      aiQualificationRate: aiQualificationRate.toFixed(1),
+      handoffRate: handoffRate.toFixed(1),
+      aiSpeedAdvantage:
+        humanAvgResponse > 0
+          ? `${(((humanAvgResponse - aiAvgResponse) / humanAvgResponse) * 100).toFixed(0)}%`
+          : "N/A",
+    };
+
+    // ===== 6. BOOKING CONVERSION TIMELINE =====
+    const bookingTimeline = filteredBookings.map((booking) => {
+      const lead = leads.find((l) => l.id === booking.leadId);
+      if (!lead || !lead.createdAt) return null;
+
+      const leadCreated = new Date(lead.createdAt).getTime();
+      const bookingCreated = new Date(booking.createdAt!).getTime();
+      const hoursToBook = (bookingCreated - leadCreated) / (1000 * 60 * 60);
+
+      return {
+        leadId: lead.id,
+        leadName: `${lead.firstName} ${lead.lastName}`,
+        hoursToBook: Math.round(hoursToBook * 10) / 10,
+        bookingDate: booking.createdAt,
+      };
+    }).filter(Boolean);
+
+    const avgTimeToBook =
+      bookingTimeline.length > 0
+        ? bookingTimeline.reduce((sum, b) => sum + (b?.hoursToBook || 0), 0) / bookingTimeline.length
+        : 0;
+
+    console.log(`✅ [ANALYTICS] Data prepared successfully`);
+
+    res.json({
+      timeRange: days,
+      summary: {
+        totalLeads: filteredLeads.length,
+        totalConversations: filteredConversations.length,
+        totalBookings: filteredBookings.length,
+        conversionRate:
+          filteredLeads.length > 0
+            ? ((filteredBookings.length / filteredLeads.length) * 100).toFixed(1)
+            : "0",
+        avgTimeToBook: avgTimeToBook.toFixed(1),
+      },
+      leadTrend,
+      responseTimeByHour: responseTimeByHour,
+      temperatureData,
+      statusData,
+      aiPerformance,
+      bookingTimeline: bookingTimeline.slice(0, 10), // Latest 10
+    });
+  } catch (error: any) {
+    console.error("❌ [ANALYTICS] Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
   // =========================== CONVERSATION ROUTES  =====================================
 
   // Conversations
