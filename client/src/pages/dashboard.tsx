@@ -37,28 +37,25 @@ import {
   Calendar,
   Users,
   Flame,
-  Wind,
-  Snowflake,
   AlertCircle,
   CheckCircle,
   Video,
   UserPlus,
   ArrowRight,
-  PhoneCall,
-  Mail,
-  HardHat, // ✅ Construction icon
+  HardHat,
 } from "lucide-react";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
-  usePageTitle(user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard");
 
-  // WebSocket for real-time updates
+  usePageTitle(
+    user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard"
+  );
+
   const { data: wsData, isConnected } = useWebSocket();
 
-  // Fetch dashboard data
   const {
     data: dashboardData,
     isLoading,
@@ -75,7 +72,6 @@ export default function Dashboard() {
     enabled: !!selectedClientId,
   });
 
-  // Fetch system health
   const { data: systemHealth } = useQuery({
     queryKey: ["/api/health"],
     refetchInterval: 30000,
@@ -102,48 +98,108 @@ export default function Dashboard() {
   const hotLeads = dashboardData?.hotLeads || [];
   const recentActivity = dashboardData?.recentActivity || [];
   const leads = dashboardData?.leads || [];
-
   const hasData = kpis.totalLeads > 0 || conversations.length > 0;
 
-  // Prepare chart data
+  // Lead Trend Data
+  // ✅ NEW: Lead Trend Data with REAL DATE RANGES + WORKING CONVERSIONS
   const leadTrendData = React.useMemo(() => {
+    const bookings = dashboardData?.bookings || [];
+
     if (!leads || leads.length === 0) {
+      // Get current date range even with no data
+      const now = new Date();
+      const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+
       return [
-        { name: "Week 1", leads: 0, conversions: 0 },
-        { name: "Week 2", leads: 0, conversions: 0 },
-        { name: "Week 3", leads: 0, conversions: 0 },
-        { name: "Week 4", leads: 0, conversions: 0 },
+        {
+          name: formatWeekRange(
+            fourWeeksAgo,
+            new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000)
+          ),
+          leads: 0,
+          conversions: 0,
+        },
+        {
+          name: formatWeekRange(
+            new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+            new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000)
+          ),
+          leads: 0,
+          conversions: 0,
+        },
+        {
+          name: formatWeekRange(
+            new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
+            new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000)
+          ),
+          leads: 0,
+          conversions: 0,
+        },
+        {
+          name: formatWeekRange(
+            new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
+            now
+          ),
+          leads: 0,
+          conversions: 0,
+        },
       ];
     }
 
-    // Get last 4 weeks of data
     const now = new Date();
     const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
 
+    // Helper function to format date range
+    function formatWeekRange(start: Date, end: Date): string {
+      const startMonth = start.toLocaleDateString("en-US", { month: "short" });
+      const endMonth = end.toLocaleDateString("en-US", { month: "short" });
+      const startDay = start.getDate();
+      const endDay = end.getDate();
+
+      // If same month: "Oct 18-24"
+      if (startMonth === endMonth) {
+        return `${startMonth} ${startDay}-${endDay}`;
+      }
+      // If different months: "Oct 28-Nov 3"
+      return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+    }
+
     const weeklyData = [
       {
-        name: "Week 1",
+        name: formatWeekRange(
+          fourWeeksAgo,
+          new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000)
+        ),
         leads: 0,
         conversions: 0,
         start: new Date(fourWeeksAgo.getTime()),
         end: new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
       },
       {
-        name: "Week 2",
+        name: formatWeekRange(
+          new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+          new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000)
+        ),
         leads: 0,
         conversions: 0,
         start: new Date(fourWeeksAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
         end: new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
       },
       {
-        name: "Week 3",
+        name: formatWeekRange(
+          new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
+          new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000)
+        ),
         leads: 0,
         conversions: 0,
         start: new Date(fourWeeksAgo.getTime() + 14 * 24 * 60 * 60 * 1000),
         end: new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
       },
       {
-        name: "Week 4",
+        name: formatWeekRange(
+          new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
+          now
+        ),
         leads: 0,
         conversions: 0,
         start: new Date(fourWeeksAgo.getTime() + 21 * 24 * 60 * 60 * 1000),
@@ -151,7 +207,7 @@ export default function Dashboard() {
       },
     ];
 
-    // Count leads and conversions per week
+    // ✅ FIX: Count leads AND conversions properly
     leads.forEach((lead: any) => {
       const createdAt = new Date(lead.createdAt);
       const weekIndex = weeklyData.findIndex(
@@ -159,8 +215,12 @@ export default function Dashboard() {
       );
 
       if (weekIndex !== -1) {
+        // Count all leads
         weeklyData[weekIndex].leads++;
-        if (lead.status === "converted") {
+
+        // ✅ NEW: Check if this lead has a booking (conversion)
+        const hasBooking = bookings.some((b: any) => b.leadId === lead.id);
+        if (hasBooking) {
           weeklyData[weekIndex].conversions++;
         }
       }
@@ -171,66 +231,95 @@ export default function Dashboard() {
       leads,
       conversions,
     }));
-  }, [leads]);
+  }, [leads, dashboardData?.bookings]);
 
-  // ✅ CONSTRUCTION-THEMED TEMPERATURE DATA
+  // ✅ NEW: Calculate date range for subtitle
+  const dateRangeText = React.useMemo(() => {
+    const now = new Date();
+    const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+
+    const startDate = fourWeeksAgo.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const endDate = now.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    return `${startDate} - ${endDate}`;
+  }, []);
+
+  // Temperature Data
   const temperatureData = [
     {
       name: "Hot",
       value: leads.filter((l: any) => l.temperature === "hot").length,
-      color: "#ea580c", // construction orange
+      color: "#ea580c",
     },
     {
       name: "Warm",
       value: leads.filter((l: any) => l.temperature === "warm").length,
-      color: "#f59e0b", // amber
+      color: "#f59e0b",
     },
     {
       name: "Cold",
       value: leads.filter((l: any) => l.temperature === "cold").length,
-      color: "#2563eb", // primary blue
+      color: "#2563eb",
     },
   ];
 
-  // Response Time Data
+  // ✅ NEW: Response Time Data with AI vs Human
   const responseTimeData = React.useMemo(() => {
     if (!conversations || conversations.length === 0) {
       return [
-        { time: "Mon", avgTime: 0 },
-        { time: "Tue", avgTime: 0 },
-        { time: "Wed", avgTime: 0 },
-        { time: "Thu", avgTime: 0 },
-        { time: "Fri", avgTime: 0 },
-        { time: "Sat", avgTime: 0 },
-        { time: "Sun", avgTime: 0 },
+        { day: "Mon", aiTime: 0, humanTime: 0 },
+        { day: "Tue", aiTime: 0, humanTime: 0 },
+        { day: "Wed", aiTime: 0, humanTime: 0 },
+        { day: "Thu", aiTime: 0, humanTime: 0 },
+        { day: "Fri", aiTime: 0, humanTime: 0 },
+        { day: "Sat", aiTime: 0, humanTime: 0 },
+        { day: "Sun", aiTime: 0, humanTime: 0 },
       ];
     }
 
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const weekData = dayNames.map((day) => ({
-      time: day,
-      avgTime: 0,
-      count: 0,
+      day,
+      aiTime: 0,
+      aiCount: 0,
+      humanTime: 0,
+      humanCount: 0,
     }));
 
-    // Calculate average response time per day
     conversations.forEach((conv: any) => {
       if (conv.lead?.responseTimeSeconds) {
         const createdAt = new Date(conv.createdAt);
         const dayIndex = createdAt.getDay();
-        weekData[dayIndex].avgTime += conv.lead.responseTimeSeconds / 60;
-        weekData[dayIndex].count++;
+        const timeInMinutes = conv.lead.responseTimeSeconds / 60;
+
+        if (conv.isAiHandled) {
+          weekData[dayIndex].aiTime += timeInMinutes;
+          weekData[dayIndex].aiCount++;
+        } else {
+          weekData[dayIndex].humanTime += timeInMinutes;
+          weekData[dayIndex].humanCount++;
+        }
       }
     });
 
-    // Calculate averages
     return weekData.map((day) => ({
-      time: day.time,
-      avgTime: day.count > 0 ? Number((day.avgTime / day.count).toFixed(1)) : 0,
+      day: day.day,
+      aiTime:
+        day.aiCount > 0 ? Number((day.aiTime / day.aiCount).toFixed(1)) : 0,
+      humanTime:
+        day.humanCount > 0
+          ? Number((day.humanTime / day.humanCount).toFixed(1))
+          : 0,
     }));
   }, [conversations]);
 
-  // Handle real-time updates
   useEffect(() => {
     if (wsData) {
       console.log("WebSocket update:", wsData);
@@ -238,7 +327,6 @@ export default function Dashboard() {
     }
   }, [wsData, refetch]);
 
-  // Skeleton Loader
   if (isLoading && selectedClientId) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -246,7 +334,6 @@ export default function Dashboard() {
           <Skeleton className="h-8 w-64 mb-2" />
           <Skeleton className="h-4 w-96" />
         </header>
-
         <main className="flex-1 overflow-auto p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map((i) => (
@@ -268,7 +355,7 @@ export default function Dashboard() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       <VerificationBanner />
-      {/* Header */}
+
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
@@ -280,7 +367,6 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Quick Action Buttons */}
             <Button
               variant="outline"
               size="sm"
@@ -293,7 +379,6 @@ export default function Dashboard() {
                 {conversations.length}
               </Badge>
             </Button>
-
             <Button
               variant="outline"
               size="sm"
@@ -306,7 +391,6 @@ export default function Dashboard() {
                 {kpis.totalLeads}
               </Badge>
             </Button>
-
             <Button
               variant="outline"
               size="sm"
@@ -316,8 +400,6 @@ export default function Dashboard() {
               <Calendar className="w-4 h-4" />
               <span className="hidden sm:inline">Calendar</span>
             </Button>
-
-            {/* ✅ CONSTRUCTION-THEMED STATUS INDICATOR */}
             <div
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
                 isConnected
@@ -338,14 +420,11 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        {/* Empty State */}
+      <main className="flex-1 overflow-hidden">
         {!hasData ? (
-          <div className="h-full flex items-center justify-center p-6">
+          <div className="h-full flex items-center justify-center p-4">
             <Card className="max-w-2xl w-full border-2">
               <CardContent className="p-12 text-center">
-                {/* ✅ CONSTRUCTION-THEMED ICON */}
                 <div className="w-20 h-20 bg-gradient-construction rounded-full flex items-center justify-center mx-auto mb-6">
                   <HardHat className="w-10 h-10 text-white" />
                 </div>
@@ -356,9 +435,8 @@ export default function Dashboard() {
                   Start generating leads to see your dashboard come to life with
                   insights and analytics
                 </p>
-
                 <div className="flex gap-3 justify-center">
-                  <Button 
+                  <Button
                     onClick={() => setLocation("/clients")}
                     className="bg-gradient-construction hover:opacity-90 text-white"
                   >
@@ -379,55 +457,102 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="p-4 flex flex-col h-full">
-            {/* ✅ CONSTRUCTION-THEMED KPI CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* KPI CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard
                 title="Total Leads"
                 value={kpis.totalLeads.toLocaleString()}
-                change="+12.5%"
-                changeType="positive"
+                change={
+                  kpis.totalLeadsChange && kpis.totalLeadsChange !== 0
+                    ? `${
+                        kpis.totalLeadsChange > 0 ? "+" : ""
+                      }${kpis.totalLeadsChange.toFixed(1)}%`
+                    : undefined
+                }
+                changeType={kpis.totalLeadsChange > 0 ? "positive" : "negative"}
                 icon={<TrendingUp className="text-construction text-xl" />}
                 bgColor="bg-orange-50"
-                subtitle="Last 30 days"
+                subtitle="vs previous 30 days"
               />
+
               <KPICard
                 title="Conversion Rate"
                 value={`${kpis.conversionRate.toFixed(1)}%`}
-                change="+3.2%"
-                changeType="positive"
+                change={
+                  kpis.conversionRateChange && kpis.conversionRateChange !== 0
+                    ? `${
+                        kpis.conversionRateChange > 0 ? "+" : ""
+                      }${kpis.conversionRateChange.toFixed(1)}%`
+                    : undefined
+                }
+                changeType={
+                  kpis.conversionRateChange > 0 ? "positive" : "negative"
+                }
                 icon={<Percent className="text-primary text-xl" />}
                 bgColor="bg-blue-50"
-                subtitle="Lead to booking"
+                subtitle={
+                  kpis.convertedLeads !== undefined
+                    ? `${kpis.convertedLeads} of ${kpis.totalLeads} leads booked`
+                    : "Lead to booking"
+                }
+                tooltip="Percentage of leads who booked a meeting"
               />
+
               <KPICard
-                title="Response Time"
-                value={`${(kpis.avgResponseTime / 60).toFixed(1)}min`}
-                change="-15s"
-                changeType="positive"
+                title="AI Response Time"
+                value={
+                  kpis.aiAvgResponseTime && kpis.aiAvgResponseTime > 0
+                    ? `${(kpis.aiAvgResponseTime / 60).toFixed(1)}min`
+                    : "N/A"
+                }
+                change={
+                  kpis.avgResponseTimeChange && kpis.avgResponseTimeChange !== 0
+                    ? `${Math.abs(kpis.avgResponseTimeChange).toFixed(1)}%`
+                    : undefined
+                }
+                changeType={
+                  kpis.avgResponseTimeChange < 0 ? "positive" : "negative"
+                }
                 icon={<Clock className="text-construction text-xl" />}
                 bgColor="bg-orange-50"
-                subtitle="Average"
+                subtitle="Average first response"
+                tooltip="Time until AI agent responds to new lead"
               />
+
               <KPICard
                 title="AI Automated"
                 value={`${kpis.aiHandledPercentage.toFixed(0)}%`}
-                change="+5.1%"
-                changeType="positive"
+                change={
+                  kpis.aiHandledPercentageChange &&
+                  kpis.aiHandledPercentageChange !== 0
+                    ? `${
+                        kpis.aiHandledPercentageChange > 0 ? "+" : ""
+                      }${kpis.aiHandledPercentageChange.toFixed(1)}%`
+                    : undefined
+                }
+                changeType={
+                  kpis.aiHandledPercentageChange > 0 ? "positive" : "negative"
+                }
                 icon={<Bot className="text-primary text-xl" />}
                 bgColor="bg-blue-50"
-                subtitle="Conversations"
+                subtitle="Conversations handled by AI"
               />
             </div>
 
-            {/* Main Content Grid */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-              {/* Left Column - 2/3 width */}
+            {/* MAIN CONTENT GRID */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-5">
+              {/* LEFT COLUMN */}
               <div className="lg:col-span-2 flex flex-col h-full space-y-6">
-                {/* ✅ CONSTRUCTION-THEMED LEAD TREND CHART */}
+                {/* LEAD TREND CHART */}
                 <Card className="flex-none border-2">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                      <span>Lead Generation Trend</span>
+                      <div>
+                        <span>Lead Generation Trend</span>
+                        <p className="text-sm font-normal text-slate-500 mt-1">
+                          📅 {dateRangeText} (Last 28 days)
+                        </p>
+                      </div>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -443,7 +568,6 @@ export default function Dashboard() {
                     <ResponsiveContainer width="100%" height={250}>
                       <AreaChart data={leadTrendData}>
                         <defs>
-                          {/* ✅ CONSTRUCTION GRADIENT */}
                           <linearGradient
                             id="colorLeads"
                             x1="0"
@@ -482,13 +606,27 @@ export default function Dashboard() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="name" stroke="#64748b" />
-                        <YAxis stroke="#64748b" />
+                        <XAxis
+                          dataKey="name"
+                          stroke="#64748b"
+                          style={{ fontSize: "11px" }}
+                          tick={{ fill: "#64748b" }}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          style={{ fontSize: "11px" }}
+                          allowDecimals={false}
+                        />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: "#fff",
                             border: "1px solid #e2e8f0",
                             borderRadius: "8px",
+                            fontSize: "12px",
+                          }}
+                          labelStyle={{
+                            fontWeight: "bold",
+                            marginBottom: "4px",
                           }}
                         />
                         <Area
@@ -513,9 +651,9 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* Charts Row */}
+                {/* CHARTS ROW */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Temperature Distribution */}
+                  {/* TEMPERATURE CHART */}
                   <Card className="border-2">
                     <CardHeader>
                       <CardTitle className="text-base">
@@ -523,13 +661,13 @@ export default function Dashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={160}>
                         <PieChart>
                           <Pie
                             data={temperatureData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
+                            innerRadius={50}
                             outerRadius={80}
                             paddingAngle={5}
                             dataKey="value"
@@ -560,46 +698,117 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* ✅ CONSTRUCTION-THEMED RESPONSE TIME */}
+                  {/* ✅ NEW: DUAL-AXIS RESPONSE TIME CHART */}
                   <Card className="border-2">
                     <CardHeader>
-                      <CardTitle className="text-base">
-                        Response Time (min)
+                      <CardTitle className="text-base flex items-center justify-between">
+                        <span>Response Time</span>
+                        <div className="flex items-center gap-3 text-xs">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                            <span className="text-slate-600">AI</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2.5 h-2.5 rounded-full bg-construction"></div>
+                            <span className="text-slate-600">Human</span>
+                          </div>
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={170}>
                         <LineChart data={responseTimeData}>
                           <CartesianGrid
                             strokeDasharray="3 3"
                             stroke="#e2e8f0"
                           />
-                          <XAxis dataKey="time" stroke="#64748b" />
-                          <YAxis stroke="#64748b" />
+                          <XAxis
+                            dataKey="day"
+                            stroke="#64748b"
+                            style={{ fontSize: "11px" }}
+                          />
+                          {/* LEFT Y-AXIS: AI */}
+                          <YAxis
+                            yAxisId="left"
+                            stroke="#2563eb"
+                            width={35}
+                            style={{ fontSize: "11px" }}
+                          />
+                          {/* RIGHT Y-AXIS: Human */}
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            stroke="#ea580c"
+                            width={35}
+                            style={{ fontSize: "11px" }}
+                          />
                           <Tooltip
                             contentStyle={{
                               backgroundColor: "#fff",
                               border: "1px solid #e2e8f0",
-                              borderRadius: "8px",
+                              borderRadius: "6px",
+                              padding: "6px 10px",
+                              fontSize: "12px",
                             }}
+                            formatter={(value: number, name: string) => [
+                              `${value} min`,
+                              name === "aiTime" ? "AI" : "Human",
+                            ]}
                           />
+                          {/* AI LINE */}
                           <Line
+                            yAxisId="left"
                             type="monotone"
-                            dataKey="avgTime"
+                            dataKey="aiTime"
+                            stroke="#2563eb"
+                            strokeWidth={2}
+                            dot={{ fill: "#2563eb", r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                          {/* HUMAN LINE */}
+                          <Line
+                            yAxisId="right"
+                            type="monotone"
+                            dataKey="humanTime"
                             stroke="#ea580c"
                             strokeWidth={2}
-                            dot={{ fill: "#ea580c" }}
+                            dot={{ fill: "#ea580c", r: 3 }}
+                            activeDot={{ r: 5 }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
+
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-primary">
+                            {kpis.aiAvgResponseTime
+                              ? `${(kpis.aiAvgResponseTime / 60).toFixed(1)}m`
+                              : "N/A"}
+                          </div>
+                          <div className="text-xs text-slate-500">Avg AI</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-construction">
+                            {kpis.humanAvgResponseTime
+                              ? `${(kpis.humanAvgResponseTime / 60).toFixed(
+                                  1
+                                )}m`
+                              : "N/A"}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Avg Human
+                          </div>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
               </div>
 
-              {/* Right Column - 1/3 width */}
+              {/* RIGHT COLUMN */}
               <div className="flex flex-col h-full justify-between space-y-6">
-                {/* ✅ CONSTRUCTION-THEMED NEEDS ATTENTION */}
+                {/* NEEDS ATTENTION */}
                 <Card className="border-l-4 border-l-construction">
                   <CardHeader>
                     <CardTitle className="text-base flex items-center">
@@ -664,7 +873,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* Recent Activity */}
+                {/* RECENT ACTIVITY */}
                 <Card className="border-l-4 border-l-primary">
                   <CardHeader>
                     <CardTitle className="text-base">Recent Activity</CardTitle>
@@ -724,7 +933,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* ✅ CONSTRUCTION-THEMED SYSTEM STATUS */}
+                {/* SYSTEM STATUS */}
                 <Card className="border-l-4 border-l-slate-200">
                   <CardHeader>
                     <CardTitle className="text-base">System Status</CardTitle>
@@ -742,7 +951,6 @@ export default function Dashboard() {
                           {systemHealth?.whatsapp || "Active"}
                         </span>
                       </div>
-
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-primary rounded-full"></div>
@@ -754,7 +962,6 @@ export default function Dashboard() {
                           {systemHealth?.ai || "Active"}
                         </span>
                       </div>
-
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <div
@@ -776,7 +983,6 @@ export default function Dashboard() {
                           {systemHealth?.vsl || "Active"}
                         </span>
                       </div>
-
                       <div className="pt-3 mt-3 border-t border-slate-200">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-slate-500">Uptime</span>

@@ -826,6 +826,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Lead not found" });
       }
 
+      // ✅ NEW: Track response time if this is first human response
+      const messages = await storage.getMessages(conversationId);
+      const firstResponse = messages.filter(
+        (m) => m.sender === "ai" || m.sender === "human"
+      )[0];
+
+      if (!firstResponse) {
+      // This is the first response - track it
+      const firstLeadMessage = messages
+        .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
+        .sort((a, b) => {
+          const timeA = new Date(a.sentAt!).getTime();
+          const timeB = new Date(b.sentAt!).getTime();
+          return timeA - timeB;
+        })[0];
+
+        if (firstLeadMessage && firstLeadMessage.sentAt) {
+          const leadMessageTime = new Date(firstLeadMessage.sentAt);
+          const responseTime = new Date();
+          const responseTimeSeconds = Math.round(
+            (responseTime.getTime() - leadMessageTime.getTime()) / 1000
+          );
+
+          console.log(`⏱️ HUMAN Response time: ${responseTimeSeconds}s`);
+
+          await storage.updateLead(lead.id, {
+            responseTimeSeconds,
+          });
+        }
+      }
+
       let whatsappMessageId = null;
 
       // Send message via appropriate channel
@@ -927,33 +958,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-// Typing indicator endpoint - Internal only (WebSocket broadcast)
-app.post("/api/conversations/:conversationId/typing", async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { isTyping } = req.body;
+  // Typing indicator endpoint - Internal only (WebSocket broadcast)
+  app.post("/api/conversations/:conversationId/typing", async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const { isTyping } = req.body;
 
-    const conversation = await storage.getConversation(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // ✅ Only broadcast to other agents via WebSocket
+      // Note: WhatsApp Business API doesn't support sending typing indicators to users
+      broadcastUpdate({
+        type: "typing_indicator",
+        conversationId,
+        isTyping,
+        sender: "human",
+        userId: req.user?.id, // Track which agent is typing
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error broadcasting typing indicator:", error);
+      res.status(500).json({ message: "Failed to broadcast typing indicator" });
     }
-
-    // ✅ Only broadcast to other agents via WebSocket
-    // Note: WhatsApp Business API doesn't support sending typing indicators to users
-    broadcastUpdate({
-      type: "typing_indicator",
-      conversationId,
-      isTyping,
-      sender: "human",
-      userId: req.user?.id, // Track which agent is typing
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Error broadcasting typing indicator:", error);
-    res.status(500).json({ message: "Failed to broadcast typing indicator" });
-  }
-});
+  });
 
   // ==================== MESSAGE REACTION ROUTES ====================
 
@@ -2218,56 +2249,67 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
     }
   });
 
-// Approve pending booking (agent one-click)
-app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
-  try {
-    const { bookingId } = req.params;
+  // Approve pending booking (agent one-click)
+  app.post(
+    "/api/bookings/:bookingId/approve",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { bookingId } = req.params;
 
-    console.log("✅ Agent approving booking:", bookingId);
+        console.log("✅ Agent approving booking:", bookingId);
 
-    const booking = await storage.getBooking(bookingId);
-    if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
-    }
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
 
-    if (booking.status !== "pending_approval") {
-      return res.status(400).json({ error: "Booking is not pending" });
-    }
+        if (booking.status !== "pending_approval") {
+          return res.status(400).json({ error: "Booking is not pending" });
+        }
 
-    const lead = await storage.getLead(booking.leadId);
-    const client = await storage.getClient(booking.clientId);
+        const lead = await storage.getLead(booking.leadId);
+        const client = await storage.getClient(booking.clientId);
 
-    if (!lead || !client) {
-      return res.status(404).json({ error: "Lead or client not found" });
-    }
+        if (!lead || !client) {
+          return res.status(404).json({ error: "Lead or client not found" });
+        }
 
-    // Approve booking
-    const updatedBooking = await storage.approveBooking(bookingId, req.user!.id);
+        // Approve booking
+        const updatedBooking = await storage.approveBooking(
+          bookingId,
+          req.user!.id
+        );
 
-    console.log("✅ Booking approved, sending confirmations...");
+        console.log("✅ Booking approved, sending confirmations...");
 
-    const startTime = new Date(booking.scheduledFor);
-    const formattedDate = startTime.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-    const formattedTime = startTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+        const startTime = new Date(booking.scheduledFor);
+        const formattedDate = startTime.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+        const formattedTime = startTime.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-    // ✅ NEW: Add approval message to conversation FIRST
-    try {
-      const conversations = await storage.getConversations(booking.clientId, 100);
-      const conversation = conversations.find((c) => c.leadId === booking.leadId);
+        // ✅ NEW: Add approval message to conversation FIRST
+        try {
+          const conversations = await storage.getConversations(
+            booking.clientId,
+            100
+          );
+          const conversation = conversations.find(
+            (c) => c.leadId === booking.leadId
+          );
 
-      if (conversation) {
-        const approvalMessage = await storage.createMessage({
-          conversationId: conversation.id,
-          sender: "human",
-          content: `✅ Meeting Approved & Confirmed
+          if (conversation) {
+            const approvalMessage = await storage.createMessage({
+              conversationId: conversation.id,
+              sender: "human",
+              content: `✅ Meeting Approved & Confirmed
 
 📅 ${formattedDate}
 🕐 ${formattedTime}
@@ -2275,42 +2317,45 @@ app.post("/api/bookings/:bookingId/approve", requireAuth, async (req, res) => {
 📍 ${booking.location || "TBD"}
 
 Calendar invite sent via email and WhatsApp.`,
-          channel: "whatsapp",
-          isStatusMessage: true,
-          sentAt: new Date(),
-          deliveredAt: new Date(),
-        });
+              channel: "whatsapp",
+              isStatusMessage: true,
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+            });
 
-        console.log("✅ Approval message added to conversation");
+            console.log("✅ Approval message added to conversation");
 
-        // Broadcast immediately so agent sees it
-        broadcastUpdate({
-          type: "new_message",
-          conversationId: conversation.id,
-          message: approvalMessage,
-        });
-      }
-    } catch (error) {
-      console.error("⚠️ Failed to add approval message:", error);
-    }
+            // Broadcast immediately so agent sees it
+            broadcastUpdate({
+              type: "new_message",
+              conversationId: conversation.id,
+              message: approvalMessage,
+            });
+          }
+        } catch (error) {
+          console.error("⚠️ Failed to add approval message:", error);
+        }
 
-    // Send email with calendar invite
-    if (lead.email) {
-      const endTime = new Date(startTime.getTime() + booking.duration! * 60000);
+        // Send email with calendar invite
+        if (lead.email) {
+          const endTime = new Date(
+            startTime.getTime() + booking.duration! * 60000
+          );
 
-      const icsContent = emailService.generateICS({
-        title: booking.title,
-        description: booking.notes || `Meeting with ${client.name}`,
-        location: booking.location || "TBD",
-        startTime,
-        endTime,
-        organizerEmail: process.env.EMAIL_USER || "noreply@aileadsystem.com",
-        organizerName: client.name,
-        attendeeEmail: lead.email,
-        attendeeName: `${lead.firstName} ${lead.lastName}`,
-      });
+          const icsContent = emailService.generateICS({
+            title: booking.title,
+            description: booking.notes || `Meeting with ${client.name}`,
+            location: booking.location || "TBD",
+            startTime,
+            endTime,
+            organizerEmail:
+              process.env.EMAIL_USER || "noreply@aileadsystem.com",
+            organizerName: client.name,
+            attendeeEmail: lead.email,
+            attendeeName: `${lead.firstName} ${lead.lastName}`,
+          });
 
-      const emailBody = `
+          const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
           <h2 style="color: #2563eb;">✅ Meeting Confirmed!</h2>
           <p>Hi ${lead.firstName},</p>
@@ -2330,21 +2375,21 @@ Calendar invite sent via email and WhatsApp.`,
         </div>
       `;
 
-      await emailService.sendCalendarInvite({
-        to: lead.email,
-        toName: `${lead.firstName} ${lead.lastName}`,
-        subject: `Meeting Confirmed - ${formattedDate}`,
-        htmlBody: emailBody,
-        icsContent,
-        icsFilename: "meeting.ics",
-      });
+          await emailService.sendCalendarInvite({
+            to: lead.email,
+            toName: `${lead.firstName} ${lead.lastName}`,
+            subject: `Meeting Confirmed - ${formattedDate}`,
+            htmlBody: emailBody,
+            icsContent,
+            icsFilename: "meeting.ics",
+          });
 
-      console.log("✅ Confirmation email sent");
-    }
+          console.log("✅ Confirmation email sent");
+        }
 
-    // Send WhatsApp confirmation
-    if (lead.phone) {
-      const whatsappMsg = `✅ Meeting Confirmed!
+        // Send WhatsApp confirmation
+        if (lead.phone) {
+          const whatsappMsg = `✅ Meeting Confirmed!
 
 📅 ${formattedDate}
 🕐 ${formattedTime}
@@ -2353,70 +2398,79 @@ Calendar invite sent via email and WhatsApp.`,
 
 Check your email for the calendar invite. See you then!`;
 
-      await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
-      console.log("✅ Confirmation WhatsApp sent");
+          await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+          console.log("✅ Confirmation WhatsApp sent");
+        }
+
+        // Broadcast booking approval
+        broadcastUpdate({
+          type: "booking_approved",
+          bookingId: booking.id,
+          booking: updatedBooking,
+        });
+
+        res.json({ success: true, booking: updatedBooking });
+      } catch (error: any) {
+        console.error("❌ Error approving booking:", error);
+        res.status(500).json({ error: error.message });
+      }
     }
+  );
 
-    // Broadcast booking approval
-    broadcastUpdate({
-      type: "booking_approved",
-      bookingId: booking.id,
-      booking: updatedBooking,
-    });
+  // Decline pending booking
+  app.post(
+    "/api/bookings/:bookingId/decline",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { bookingId } = req.params;
+        const { reason } = req.body;
 
-    res.json({ success: true, booking: updatedBooking });
-  } catch (error: any) {
-    console.error("❌ Error approving booking:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+        console.log("❌ Agent declining booking:", bookingId);
 
-// Decline pending booking
-app.post("/api/bookings/:bookingId/decline", requireAuth, async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-    const { reason } = req.body;
+        const booking = await storage.getBooking(bookingId);
+        if (!booking) {
+          return res.status(404).json({ error: "Booking not found" });
+        }
 
-    console.log("❌ Agent declining booking:", bookingId);
+        const lead = await storage.getLead(booking.leadId);
+        const client = await storage.getClient(booking.clientId);
 
-    const booking = await storage.getBooking(bookingId);
-    if (!booking) {
-      return res.status(404).json({ error: "Booking not found" });
-    }
+        if (!lead || !client) {
+          return res.status(404).json({ error: "Lead or client not found" });
+        }
 
-    const lead = await storage.getLead(booking.leadId);
-    const client = await storage.getClient(booking.clientId);
+        // Reject booking in database
+        await storage.rejectBooking(bookingId, reason);
 
-    if (!lead || !client) {
-      return res.status(404).json({ error: "Lead or client not found" });
-    }
+        console.log("✅ Booking declined in database");
 
-    // Reject booking in database
-    await storage.rejectBooking(bookingId, reason);
+        const startTime = new Date(booking.scheduledFor);
+        const formattedDate = startTime.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        });
+        const formattedTime = startTime.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-    console.log("✅ Booking declined in database");
+        // ✅ NEW: Add decline message to conversation
+        try {
+          const conversations = await storage.getConversations(
+            booking.clientId,
+            100
+          );
+          const conversation = conversations.find(
+            (c) => c.leadId === booking.leadId
+          );
 
-    const startTime = new Date(booking.scheduledFor);
-    const formattedDate = startTime.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    });
-    const formattedTime = startTime.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // ✅ NEW: Add decline message to conversation
-    try {
-      const conversations = await storage.getConversations(booking.clientId, 100);
-      const conversation = conversations.find((c) => c.leadId === booking.leadId);
-
-      if (conversation) {
-        const declineMessage = await storage.createMessage({
-          conversationId: conversation.id,
-          sender: "human",
-          content: `❌ Booking Request Declined
+          if (conversation) {
+            const declineMessage = await storage.createMessage({
+              conversationId: conversation.id,
+              sender: "human",
+              content: `❌ Booking Request Declined
 
 The proposed meeting for:
 📅 ${formattedDate} at ${formattedTime}
@@ -2424,40 +2478,42 @@ The proposed meeting for:
 Could not be scheduled at this time.${reason ? `\n\nReason: ${reason}` : ""}
 
 Please suggest alternative times that work for you.`,
-          channel: "whatsapp",
-          isStatusMessage: true,
-          sentAt: new Date(),
-          deliveredAt: new Date(),
-        });
+              channel: "whatsapp",
+              isStatusMessage: true,
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+            });
 
-        console.log("✅ Decline message added to conversation");
+            console.log("✅ Decline message added to conversation");
 
-        // Broadcast immediately
-        broadcastUpdate({
-          type: "new_message",
-          conversationId: conversation.id,
-          message: declineMessage,
-        });
-      }
-    } catch (error) {
-      console.error("⚠️ Failed to add decline message:", error);
-    }
+            // Broadcast immediately
+            broadcastUpdate({
+              type: "new_message",
+              conversationId: conversation.id,
+              message: declineMessage,
+            });
+          }
+        } catch (error) {
+          console.error("⚠️ Failed to add decline message:", error);
+        }
 
-    // ✅ NEW: Send WhatsApp notification to lead
-    if (lead.phone) {
-      const whatsappMsg = `Hi ${lead.firstName},
+        // ✅ NEW: Send WhatsApp notification to lead
+        if (lead.phone) {
+          const whatsappMsg = `Hi ${lead.firstName},
 
-Unfortunately, we're unable to confirm the meeting for ${formattedDate} at ${formattedTime}.${reason ? `\n\n${reason}` : ""}
+Unfortunately, we're unable to confirm the meeting for ${formattedDate} at ${formattedTime}.${
+            reason ? `\n\n${reason}` : ""
+          }
 
 Could you suggest some alternative times that work for you? We'd love to find a time that suits your schedule.`;
 
-      await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
-      console.log("✅ Decline WhatsApp sent to lead");
-    }
+          await whatsappService.sendTextMessage(lead.phone, whatsappMsg);
+          console.log("✅ Decline WhatsApp sent to lead");
+        }
 
-    // ✅ NEW: Send email notification
-    if (lead.email) {
-      const emailBody = `
+        // ✅ NEW: Send email notification
+        if (lead.email) {
+          const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
           <h2 style="color: #dc2626;">Unable to Confirm Meeting</h2>
           <p>Hi ${lead.firstName},</p>
@@ -2476,42 +2532,43 @@ Could you suggest some alternative times that work for you? We'd love to find a 
         </div>
       `;
 
-      await emailService.sendCalendarInvite({
-        to: lead.email,
-        toName: `${lead.firstName} ${lead.lastName}`,
-        subject: `Meeting Request - Alternative Time Needed`,
-        htmlBody: emailBody,
-        icsContent: "",
-        icsFilename: "",
-      });
+          await emailService.sendCalendarInvite({
+            to: lead.email,
+            toName: `${lead.firstName} ${lead.lastName}`,
+            subject: `Meeting Request - Alternative Time Needed`,
+            htmlBody: emailBody,
+            icsContent: "",
+            icsFilename: "",
+          });
 
-      console.log("✅ Decline email sent");
+          console.log("✅ Decline email sent");
+        }
+
+        // Broadcast booking decline
+        broadcastUpdate({
+          type: "booking_declined",
+          bookingId: booking.id,
+        });
+
+        res.json({ success: true });
+      } catch (error: any) {
+        console.error("❌ Error declining booking:", error);
+        res.status(500).json({ error: error.message });
+      }
     }
+  );
 
-    // Broadcast booking decline
-    broadcastUpdate({
-      type: "booking_declined",
-      bookingId: booking.id,
-    });
-
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error("❌ Error declining booking:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get pending bookings
-app.get("/api/bookings/:clientId/pending", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const pendingBookings = await storage.getPendingBookings(clientId);
-    res.json(pendingBookings);
-  } catch (error: any) {
-    console.error("❌ Error fetching pending bookings:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  // Get pending bookings
+  app.get("/api/bookings/:clientId/pending", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const pendingBookings = await storage.getPendingBookings(clientId);
+      res.json(pendingBookings);
+    } catch (error: any) {
+      console.error("❌ Error fetching pending bookings:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // =========================== USER TRIAL MANAGEMENT ROUTES  ====================================
 

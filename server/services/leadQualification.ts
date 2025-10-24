@@ -175,6 +175,8 @@ function getSmartDaySuggestions(): string {
   }
 }
 
+
+
 // ✅ NEW: Validate booking details
 function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
   const missing: string[] = [];
@@ -271,6 +273,60 @@ export class LeadQualificationService {
   setWebSocketServer(wss: WebSocketServer) {
     this.wss = wss;
   }
+
+  private async trackResponseTime(
+  conversationId: string,
+  leadId: string,
+  sender: "ai" | "human"
+): Promise<void> {
+  try {
+    // Get all messages in conversation
+    const messages = await storage.getMessages(conversationId);
+    
+   // Find first lead message (filter out nulls)
+    const firstLeadMessage = messages
+      .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
+      .sort((a, b) => {
+        // ✅ Safe: we already filtered out nulls above
+        const timeA = new Date(a.sentAt!).getTime();
+        const timeB = new Date(b.sentAt!).getTime();
+        return timeA - timeB;
+      })[0];
+    
+     // Find first response (AI or human) - filter out nulls
+    const firstResponse = messages
+      .filter((m) => (m.sender === "ai" || m.sender === "human") && m.sentAt !== null)
+      .sort((a, b) => {
+        const timeA = new Date(a.sentAt!).getTime();
+        const timeB = new Date(b.sentAt!).getTime();
+        return timeA - timeB;
+      })[0];
+    
+    // If this is the FIRST response to the lead
+    if (firstLeadMessage && !firstResponse) {
+      const sentAt = firstLeadMessage.sentAt;
+      if (!sentAt) {
+        console.log("⚠️ First lead message has no sentAt timestamp");
+        return;
+      }
+      
+      const leadMessageTime = new Date(sentAt);
+      const responseTime = new Date();
+      const responseTimeSeconds = Math.round((responseTime.getTime() - leadMessageTime.getTime()) / 1000);
+      
+      console.log(`⏱️ ${sender.toUpperCase()} Response time: ${responseTimeSeconds}s (${(responseTimeSeconds / 60).toFixed(1)} min)`);
+      
+      // Save to lead
+      await storage.updateLead(leadId, {
+        responseTimeSeconds,
+      });
+      
+      console.log(`✅ Response time saved to lead ${leadId}`);
+    }
+  } catch (error) {
+    console.error("❌ Error tracking response time:", error);
+  }
+}
 
   async processNewLead(leadId: string): Promise<void> {
     try {
@@ -1199,6 +1255,9 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
           from,
           aiResponse
         );
+
+        await this.trackResponseTime(conversation.id, lead.id, "ai");
+
 
         await storage.createMessage({
           conversationId: conversation.id,
