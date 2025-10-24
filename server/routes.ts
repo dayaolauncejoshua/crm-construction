@@ -630,58 +630,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ============================ DASHBOARD ROUTES  ==============================
 
-  // Dashboard data
-  app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
-    try {
-      const { clientId } = req.params;
-      const requestUser = req.user!;
+// Dashboard data
+app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const requestUser = req.user!;
 
-      // Verify user owns this client (unless super admin)
-      if (requestUser.role !== "super_admin") {
-        const client = await storage.getClient(clientId);
-        if (!client || client.userId !== requestUser.id) {
-          return res.status(403).json({ message: "Access denied" });
-        }
+    console.log(`\n========================================`);
+    console.log(`📊 [DASHBOARD] Fetching data for client: ${clientId}`);
+    console.log(`👤 [DASHBOARD] Requested by user: ${requestUser.id} (${requestUser.email})`);
+    console.log(`========================================\n`);
+
+    // Verify access
+    if (requestUser.role !== "super_admin") {
+      const client = await storage.getClient(clientId);
+      if (!client || client.userId !== requestUser.id) {
+        console.error(
+          `❌ [DASHBOARD] Access denied for user ${requestUser.id}`
+        );
+        return res.status(403).json({ message: "Access denied" });
       }
-
-      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
-        await Promise.all([
-          storage.getKPIs(clientId),
-          storage.getConversations(clientId, 50),
-          storage.getHotLeads(clientId),
-          storage.getRecentActivity(clientId),
-          storage.getLeads(clientId, 100),
-          storage.getBookings(clientId),
-        ]);
-
-      console.log("📊 Dashboard data fetched:");
-      console.log("  - KPIs:", kpis);
-      console.log("  - Conversations:", conversations.length);
-      console.log("  - Hot Leads:", hotLeads.length);
-      console.log("  - Recent Activity:", recentActivity.length);
-      console.log("  - Leads:", leads.length);
-      console.log("  - Bookings:", bookings.length);
-
-      const conversationMap = new Map(conversations.map((c) => [c.id, c]));
-      hotLeads.forEach((hl) => {
-        if (!conversationMap.has(hl.id)) {
-          conversationMap.set(hl.id, hl);
-        }
-      });
-      const allConversations = Array.from(conversationMap.values());
-
-      res.json({
-        kpis,
-        conversations: allConversations,
-        hotLeads,
-        recentActivity,
-        leads,
-        bookings,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.log(`✅ [DASHBOARD] Client verified: ${client.name}`);
     }
-  });
+
+    // ✅ FIXED: Renamed to avoid collision
+    const rawLeads = await storage.getLeads(clientId, 1000);
+    const rawConversations = await storage.getConversations(clientId, 1000);
+    const rawBookings = await storage.getBookings(clientId);
+    
+    console.log(`\n📊 [DASHBOARD] RAW DATA CHECK:`);
+    console.log(`  - Total Leads in DB: ${rawLeads.length}`);
+    console.log(`  - Total Conversations in DB: ${rawConversations.length}`);
+    console.log(`  - Total Bookings in DB: ${rawBookings.length}`);
+    
+    if (rawLeads.length > 0) {
+      console.log(`\n🔍 [DASHBOARD] Sample Lead Data:`);
+      console.log(`  - First Lead ID: ${rawLeads[0].id}`);
+      console.log(`  - First Lead Name: ${rawLeads[0].firstName} ${rawLeads[0].lastName}`);
+      console.log(`  - First Lead Created: ${rawLeads[0].createdAt}`);
+      console.log(`  - First Lead Client ID: ${rawLeads[0].clientId}`);
+      console.log(`  - First Lead Status: ${rawLeads[0].status}`);
+      console.log(`  - First Lead Response Time: ${rawLeads[0].responseTimeSeconds}s`);
+      
+      // ✅ FIXED: Check for null before creating Date
+      if (rawLeads[0].createdAt) {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const leadDate = new Date(rawLeads[0].createdAt);
+        const isWithin30Days = leadDate >= thirtyDaysAgo;
+        
+        console.log(`\n📅 [DASHBOARD] Date Check:`);
+        console.log(`  - Now: ${now.toISOString()}`);
+        console.log(`  - 30 Days Ago: ${thirtyDaysAgo.toISOString()}`);
+        console.log(`  - First Lead Date: ${leadDate.toISOString()}`);
+        console.log(`  - Is Within 30 Days? ${isWithin30Days ? '✅ YES' : '❌ NO'}`);
+      } else {
+        console.warn(`  - ⚠️ First Lead has no createdAt date!`);
+      }
+    }
+    console.log(`\n========================================\n`);
+
+    // Fetch dashboard data with error handling
+    const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
+      await Promise.all([
+        storage.getKPIs(clientId).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching KPIs:", err.message);
+          return {
+            totalLeads: 0,
+            conversionRate: 0,
+            avgResponseTime: 0,
+            aiHandledPercentage: 0,
+            totalLeadsChange: 0,
+            conversionRateChange: 0,
+            avgResponseTimeChange: 0,
+            aiHandledPercentageChange: 0,
+            convertedLeads: 0,
+            aiAvgResponseTime: 0,
+            humanAvgResponseTime: 0,
+          };
+        }),
+        storage.getConversations(clientId, 50).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching conversations:", err.message);
+          return [];
+        }),
+        storage.getHotLeads(clientId).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching hot leads:", err.message);
+          return [];
+        }),
+        storage.getRecentActivity(clientId).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching recent activity:", err.message);
+          return [];
+        }),
+        storage.getLeads(clientId, 100).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching leads:", err.message);
+          return [];
+        }),
+        storage.getBookings(clientId).catch((err) => {
+          console.error("❌ [DASHBOARD] Error fetching bookings:", err.message);
+          return [];
+        }),
+      ]);
+
+    console.log("\n✅ [DASHBOARD] Data fetched successfully:");
+    console.log("  - KPIs:", JSON.stringify(kpis, null, 2));
+    console.log("  - Conversations:", conversations.length);
+    console.log("  - Hot Leads:", hotLeads.length);
+    console.log("  - Recent Activity:", recentActivity.length);
+    console.log("  - Leads:", leads.length);
+    console.log("  - Bookings:", bookings.length);
+    console.log("\n========================================\n");
+
+    const conversationMap = new Map(conversations.map((c) => [c.id, c]));
+    hotLeads.forEach((hl) => {
+      if (!conversationMap.has(hl.id)) {
+        conversationMap.set(hl.id, hl);
+      }
+    });
+    
+    // ✅ FIXED: Different variable name
+    const allConversations = Array.from(conversationMap.values());
+
+    res.json({
+      kpis,
+      conversations: allConversations,
+      hotLeads,
+      recentActivity,
+      leads,
+      bookings,
+    });
+  } catch (error: any) {
+    console.error("❌ [DASHBOARD] Fatal error:", error);
+    console.error("Stack trace:", error.stack);
+    res.status(500).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
 
   // =========================== CONVERSATION ROUTES  =====================================
 
@@ -833,14 +918,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       )[0];
 
       if (!firstResponse) {
-      // This is the first response - track it
-      const firstLeadMessage = messages
-        .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
-        .sort((a, b) => {
-          const timeA = new Date(a.sentAt!).getTime();
-          const timeB = new Date(b.sentAt!).getTime();
-          return timeA - timeB;
-        })[0];
+        // This is the first response - track it
+        const firstLeadMessage = messages
+          .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
+          .sort((a, b) => {
+            const timeA = new Date(a.sentAt!).getTime();
+            const timeB = new Date(b.sentAt!).getTime();
+            return timeA - timeB;
+          })[0];
 
         if (firstLeadMessage && firstLeadMessage.sentAt) {
           const leadMessageTime = new Date(firstLeadMessage.sentAt);

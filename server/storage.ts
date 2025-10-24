@@ -1568,247 +1568,388 @@ export class DatabaseStorage implements IStorage {
     avgResponseTime: number;
     aiHandledPercentage: number;
     convertedLeads: number;
-
     // Previous Period (30-60 days ago) for comparison
     totalLeadsChange: number;
     conversionRateChange: number;
     avgResponseTimeChange: number;
     aiHandledPercentageChange: number;
-
     // Response Time Breakdown
     aiAvgResponseTime: number;
     humanAvgResponseTime: number;
   }> {
-    // Current period: Last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    try {
+      console.log(`📊 [getKPIs] Starting for client: ${clientId}`);
 
-    // Previous period: 31-60 days ago
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      // ✅ SAFETY CHECK: Verify client exists first
+      const [clientExists] = await db
+        .select({ id: clients.id })
+        .from(clients)
+        .where(eq(clients.id, clientId))
+        .limit(1);
 
-    // ==================CURRENT PERIOD=======================
+      if (!clientExists) {
+        console.warn(
+          `⚠️ [getKPIs] Client ${clientId} not found - returning zero metrics`
+        );
+        return {
+          totalLeads: 0,
+          conversionRate: 0,
+          avgResponseTime: 0,
+          aiHandledPercentage: 0,
+          convertedLeads: 0,
+          totalLeadsChange: 0,
+          conversionRateChange: 0,
+          avgResponseTimeChange: 0,
+          aiHandledPercentageChange: 0,
+          aiAvgResponseTime: 0,
+          humanAvgResponseTime: 0,
+        };
+      }
 
-    // Total leads in last 30 days
-    const [currentLeadsResult] = await db
-      .select({ count: count() })
-      .from(leads)
-      .where(
-        and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
+      console.log(`✅ [getKPIs] Client verified, fetching metrics...`);
+
+      // Current period: Last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Previous period: 31-60 days ago
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+      // ==================CURRENT PERIOD=======================
+      console.log(
+        `📊 [getKPIs] Fetching current period stats (last 30 days)...`
       );
 
-    // Converted leads (with bookings)
-    const [currentConversionsResult] = await db
-      .select({ count: count() })
-      .from(leads)
-      .innerJoin(bookings, eq(leads.id, bookings.leadId))
-      .where(
-        and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
+      // Total leads in last 30 days
+      const [currentLeadsResult] = await db
+        .select({ count: count() })
+        .from(leads)
+        .where(
+          and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
+        );
+
+      // ✅ DEBUG: Show what we found
+      console.log(
+        `📊 [getKPIs] Query result - Current leads: ${currentLeadsResult.count}`
+      );
+      console.log(
+        `📊 [getKPIs] Date filter: createdAt >= ${thirtyDaysAgo.toISOString()}`
       );
 
-    // Average response time (all)
-    const [currentAvgResponseResult] = await db
-      .select({
-        avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
-      })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, thirtyDaysAgo),
-          sql`${leads.responseTimeSeconds} IS NOT NULL`
-        )
+      // ✅ DEBUG: Get sample of ALL leads for this client (no date filter)
+      const [allLeadsForClient] = await db
+        .select({ count: count() })
+        .from(leads)
+        .where(eq(leads.clientId, clientId));
+
+      console.log(
+        `📊 [getKPIs] Total leads for client (all time): ${allLeadsForClient.count}`
       );
 
-    // AI handled conversations
-    const [currentAiHandledResult] = await db
-      .select({ count: count() })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.clientId, clientId),
-          eq(conversations.isAiHandled, true),
-          gte(conversations.createdAt, thirtyDaysAgo)
-        )
+      if (allLeadsForClient.count > 0 && currentLeadsResult.count === 0) {
+        console.warn(
+          `⚠️ [getKPIs] ISSUE: Client has ${allLeadsForClient.count} total leads, but 0 in last 30 days!`
+        );
+        console.warn(
+          `⚠️ [getKPIs] This suggests leads are older than 30 days.`
+        );
+
+        // Get the most recent lead date
+        const recentLead = await db
+          .select({ createdAt: leads.createdAt })
+          .from(leads)
+          .where(eq(leads.clientId, clientId))
+          .orderBy(desc(leads.createdAt))
+          .limit(1);
+
+        if (recentLead.length > 0) {
+          console.warn(
+            `⚠️ [getKPIs] Most recent lead created: ${recentLead[0].createdAt}`
+          );
+        }
+      }
+
+      // Converted leads (with bookings)
+      const [currentConversionsResult] = await db
+        .select({ count: count() })
+        .from(leads)
+        .innerJoin(bookings, eq(leads.id, bookings.leadId))
+        .where(
+          and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
+        );
+
+      // Average response time (all)
+      const [currentAvgResponseResult] = await db
+        .select({
+          avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            gte(leads.createdAt, thirtyDaysAgo),
+            sql`${leads.responseTimeSeconds} IS NOT NULL`
+          )
+        );
+
+      // AI handled conversations
+      const [currentAiHandledResult] = await db
+        .select({ count: count() })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.clientId, clientId),
+            eq(conversations.isAiHandled, true),
+            gte(conversations.createdAt, thirtyDaysAgo)
+          )
+        );
+
+      const [currentTotalConversationsResult] = await db
+        .select({ count: count() })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.clientId, clientId),
+            gte(conversations.createdAt, thirtyDaysAgo)
+          )
+        );
+
+      console.log(
+        `📊 [getKPIs] Current period - Leads: ${currentLeadsResult.count}, Conversions: ${currentConversionsResult.count}`
       );
 
-    const [currentTotalConversationsResult] = await db
-      .select({ count: count() })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.clientId, clientId),
-          gte(conversations.createdAt, thirtyDaysAgo)
-        )
+      // ================= PREVIOUS PERIOD ====================
+      console.log(
+        `📊 [getKPIs] Fetching previous period stats (31-60 days ago)...`
       );
 
-    // ================= PREVIOUS PERIOD ====================
+      const [previousLeadsResult] = await db
+        .select({ count: count() })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            gte(leads.createdAt, sixtyDaysAgo),
+            sql`${leads.createdAt} < ${thirtyDaysAgo}`
+          )
+        );
 
-    const [previousLeadsResult] = await db
-      .select({ count: count() })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, sixtyDaysAgo),
-          sql`${leads.createdAt} < ${thirtyDaysAgo}`
-        )
+      const [previousConversionsResult] = await db
+        .select({ count: count() })
+        .from(leads)
+        .innerJoin(bookings, eq(leads.id, bookings.leadId))
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            gte(leads.createdAt, sixtyDaysAgo),
+            sql`${leads.createdAt} < ${thirtyDaysAgo}`
+          )
+        );
+
+      const [previousAvgResponseResult] = await db
+        .select({
+          avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            gte(leads.createdAt, sixtyDaysAgo),
+            sql`${leads.createdAt} < ${thirtyDaysAgo}`,
+            sql`${leads.responseTimeSeconds} IS NOT NULL`
+          )
+        );
+
+      const [previousAiHandledResult] = await db
+        .select({ count: count() })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.clientId, clientId),
+            eq(conversations.isAiHandled, true),
+            gte(conversations.createdAt, sixtyDaysAgo),
+            sql`${conversations.createdAt} < ${thirtyDaysAgo}`
+          )
+        );
+
+      const [previousTotalConversationsResult] = await db
+        .select({ count: count() })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.clientId, clientId),
+            gte(conversations.createdAt, sixtyDaysAgo),
+            sql`${conversations.createdAt} < ${thirtyDaysAgo}`
+          )
+        );
+
+      console.log(
+        `📊 [getKPIs] Previous period - Leads: ${previousLeadsResult.count}, Conversions: ${previousConversionsResult.count}`
       );
 
-    const [previousConversionsResult] = await db
-      .select({ count: count() })
-      .from(leads)
-      .innerJoin(bookings, eq(leads.id, bookings.leadId))
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, sixtyDaysAgo),
-          sql`${leads.createdAt} < ${thirtyDaysAgo}`
-        )
+      // ============================== CALCULATE CURRENT VALUES ===============================
+      const totalLeads = currentLeadsResult.count;
+      const convertedLeads = currentConversionsResult.count;
+      const conversionRate =
+        totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
+
+      // ✅ FIX: Ensure avgResponseTime is a proper number
+      const avgResponseTime = Number(currentAvgResponseResult.avg) || 0;
+
+      const aiHandledPercentage =
+        currentTotalConversationsResult.count > 0
+          ? (currentAiHandledResult.count /
+              currentTotalConversationsResult.count) *
+            100
+          : 0;
+
+      // ✅ DEBUG: Log the actual values
+      console.log(`📊 [getKPIs] Current values:`, {
+        totalLeads,
+        convertedLeads,
+        conversionRate,
+        avgResponseTime: avgResponseTime,
+        avgResponseTimeType: typeof avgResponseTime,
+        rawAvgValue: currentAvgResponseResult.avg,
+        rawAvgType: typeof currentAvgResponseResult.avg,
+      });
+
+      // ============================== CALCULATE PREVIOUS VALUES ==============================
+      const previousTotalLeads = previousLeadsResult.count;
+      const previousConvertedLeads = previousConversionsResult.count;
+      const previousConversionRate =
+        previousTotalLeads > 0
+          ? (previousConvertedLeads / previousTotalLeads) * 100
+          : 0;
+
+      // ✅ FIX: Ensure previousAvgResponseTime is a proper number
+      const previousAvgResponseTime =
+        Number(previousAvgResponseResult.avg) || 0;
+
+      const previousAiHandledPercentage =
+        previousTotalConversationsResult.count > 0
+          ? (previousAiHandledResult.count /
+              previousTotalConversationsResult.count) *
+            100
+          : 0;
+
+      // ============================ CALCULATE CHANGES ================================
+      const totalLeadsChange =
+        previousTotalLeads > 0
+          ? ((totalLeads - previousTotalLeads) / previousTotalLeads) * 100
+          : 0;
+      const conversionRateChange =
+        previousConversionRate > 0
+          ? conversionRate - previousConversionRate
+          : 0;
+      const avgResponseTimeChange =
+        previousAvgResponseTime > 0
+          ? ((avgResponseTime - previousAvgResponseTime) /
+              previousAvgResponseTime) *
+            100
+          : 0;
+      const aiHandledPercentageChange =
+        previousAiHandledPercentage > 0
+          ? aiHandledPercentage - previousAiHandledPercentage
+          : 0;
+
+      console.log(`📊 [getKPIs] Fetching AI vs Human response times...`);
+
+      // ============================ AI vs HUMAN RESPONSE TIME =========================
+      // Get AI response times (from conversations where AI handled first)
+      const [aiResponseResult] = await db
+        .select({
+          avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
+        })
+        .from(leads)
+        .innerJoin(conversations, eq(leads.id, conversations.leadId))
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            eq(conversations.isAiHandled, true),
+            gte(leads.createdAt, thirtyDaysAgo),
+            sql`${leads.responseTimeSeconds} IS NOT NULL`
+          )
+        );
+
+      // Get Human response times (from conversations where human took over immediately)
+      const [humanResponseResult] = await db
+        .select({
+          avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
+        })
+        .from(leads)
+        .innerJoin(conversations, eq(leads.id, conversations.leadId))
+        .where(
+          and(
+            eq(leads.clientId, clientId),
+            eq(conversations.isAiHandled, false),
+            gte(leads.createdAt, thirtyDaysAgo),
+            sql`${leads.responseTimeSeconds} IS NOT NULL`
+          )
+        );
+
+      const safeToFixed = (value: any, decimals: number): number => {
+        if (value === null || value === undefined || isNaN(value)) {
+          return 0;
+        }
+        return Number(Number(value).toFixed(decimals));
+      };
+
+      // ✅ FIX: Safely convert all values to numbers before .toFixed()
+      const safeNumber = (val: any): number => {
+        const num = Number(val);
+        return isNaN(num) ? 0 : num;
+      };
+
+      const result = {
+        // Current values
+        totalLeads,
+        convertedLeads,
+        conversionRate: safeNumber(conversionRate.toFixed(1)),
+        avgResponseTime: safeNumber(avgResponseTime.toFixed(0)),
+        aiHandledPercentage: safeNumber(aiHandledPercentage.toFixed(1)),
+        // Change percentages
+        totalLeadsChange: safeNumber(totalLeadsChange.toFixed(1)),
+        conversionRateChange: safeNumber(conversionRateChange.toFixed(1)),
+        avgResponseTimeChange: safeNumber(avgResponseTimeChange.toFixed(1)),
+        aiHandledPercentageChange: safeNumber(
+          aiHandledPercentageChange.toFixed(1)
+        ),
+        // AI vs Human breakdown
+        aiAvgResponseTime: safeNumber(
+          (Number(aiResponseResult.avg) || 0).toFixed(0)
+        ),
+        humanAvgResponseTime: safeNumber(
+          (Number(humanResponseResult.avg) || 0).toFixed(0)
+        ),
+      };
+
+      console.log(`✅ [getKPIs] Successfully calculated KPIs:`, result);
+
+      return result;
+    } catch (error: any) {
+      console.error(
+        `❌ [getKPIs] Error for client ${clientId}:`,
+        error.message
       );
+      console.error(`Stack trace:`, error.stack);
 
-    const [previousAvgResponseResult] = await db
-      .select({
-        avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
-      })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          gte(leads.createdAt, sixtyDaysAgo),
-          sql`${leads.createdAt} < ${thirtyDaysAgo}`,
-          sql`${leads.responseTimeSeconds} IS NOT NULL`
-        )
-      );
-
-    const [previousAiHandledResult] = await db
-      .select({ count: count() })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.clientId, clientId),
-          eq(conversations.isAiHandled, true),
-          gte(conversations.createdAt, sixtyDaysAgo),
-          sql`${conversations.createdAt} < ${thirtyDaysAgo}`
-        )
-      );
-
-    const [previousTotalConversationsResult] = await db
-      .select({ count: count() })
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.clientId, clientId),
-          gte(conversations.createdAt, sixtyDaysAgo),
-          sql`${conversations.createdAt} < ${thirtyDaysAgo}`
-        )
-      );
-
-    // ============================== CALCULATE CURRENT VALUES ===============================
-
-    const totalLeads = currentLeadsResult.count;
-    const convertedLeads = currentConversionsResult.count;
-    const conversionRate =
-      totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
-    const avgResponseTime = currentAvgResponseResult.avg || 0;
-    const aiHandledPercentage =
-      currentTotalConversationsResult.count > 0
-        ? (currentAiHandledResult.count /
-            currentTotalConversationsResult.count) *
-          100
-        : 0;
-
-    // ============================== CALCULATE PREVIOUS VALUES ==============================
-
-    const previousTotalLeads = previousLeadsResult.count;
-    const previousConvertedLeads = previousConversionsResult.count;
-    const previousConversionRate =
-      previousTotalLeads > 0
-        ? (previousConvertedLeads / previousTotalLeads) * 100
-        : 0;
-    const previousAvgResponseTime = previousAvgResponseResult.avg || 0;
-    const previousAiHandledPercentage =
-      previousTotalConversationsResult.count > 0
-        ? (previousAiHandledResult.count /
-            previousTotalConversationsResult.count) *
-          100
-        : 0;
-
-    // ============================ CALCULATE CHANGES ================================
-
-    const totalLeadsChange =
-      previousTotalLeads > 0
-        ? ((totalLeads - previousTotalLeads) / previousTotalLeads) * 100
-        : 0;
-
-    const conversionRateChange =
-      previousConversionRate > 0 ? conversionRate - previousConversionRate : 0;
-
-    const avgResponseTimeChange =
-      previousAvgResponseTime > 0
-        ? ((avgResponseTime - previousAvgResponseTime) /
-            previousAvgResponseTime) *
-          100
-        : 0;
-
-    const aiHandledPercentageChange =
-      previousAiHandledPercentage > 0
-        ? aiHandledPercentage - previousAiHandledPercentage
-        : 0;
-
-    // ============================ AI vs HUMAN RESPONSE TIME =========================
-
-    // Get AI response times (from conversations where AI handled first)
-    const [aiResponseResult] = await db
-      .select({
-        avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
-      })
-      .from(leads)
-      .innerJoin(conversations, eq(leads.id, conversations.leadId))
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          eq(conversations.isAiHandled, true),
-          gte(leads.createdAt, thirtyDaysAgo),
-          sql`${leads.responseTimeSeconds} IS NOT NULL`
-        )
-      );
-
-    // Get Human response times (from conversations where human took over immediately)
-    const [humanResponseResult] = await db
-      .select({
-        avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
-      })
-      .from(leads)
-      .innerJoin(conversations, eq(leads.id, conversations.leadId))
-      .where(
-        and(
-          eq(leads.clientId, clientId),
-          eq(conversations.isAiHandled, false),
-          gte(leads.createdAt, thirtyDaysAgo),
-          sql`${leads.responseTimeSeconds} IS NOT NULL`
-        )
-      );
-
-    return {
-      // Current values
-      totalLeads,
-      convertedLeads,
-      conversionRate: Number(conversionRate.toFixed(1)),
-      avgResponseTime: Number(avgResponseTime.toFixed(0)),
-      aiHandledPercentage: Number(aiHandledPercentage.toFixed(1)),
-
-      // Change percentages
-      totalLeadsChange: Number(totalLeadsChange.toFixed(1)),
-      conversionRateChange: Number(conversionRateChange.toFixed(1)),
-      avgResponseTimeChange: Number(avgResponseTimeChange.toFixed(1)),
-      aiHandledPercentageChange: Number(aiHandledPercentageChange.toFixed(1)),
-
-      // AI vs Human breakdown
-      aiAvgResponseTime: Number((aiResponseResult.avg || 0).toFixed(0)),
-      humanAvgResponseTime: Number((humanResponseResult.avg || 0).toFixed(0)),
-    };
+      // Return zero metrics on error instead of throwing
+      return {
+        totalLeads: 0,
+        conversionRate: 0,
+        avgResponseTime: 0,
+        aiHandledPercentage: 0,
+        convertedLeads: 0,
+        totalLeadsChange: 0,
+        conversionRateChange: 0,
+        avgResponseTimeChange: 0,
+        aiHandledPercentageChange: 0,
+        aiAvgResponseTime: 0,
+        humanAvgResponseTime: 0,
+      };
+    }
   }
 
   async getRecentActivity(clientId: string): Promise<any[]> {

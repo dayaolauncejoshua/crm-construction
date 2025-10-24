@@ -368,9 +368,7 @@ export default function Conversations() {
     enabled: !!selectedClientId,
   });
 
-  const [typingIndicators, setTypingIndicators] = useState<
-    Record<string, { isTyping: boolean; sender: string; leadName?: string }>
-  >({});
+  const [typingIndicators, setTypingIndicators] = useState<Record<string, { isTyping: boolean; sender: string; leadName?: string }>>({});
   const [showMessageInfo, setShowMessageInfo] = useState<string | null>(null);
 
   const { data: wsData, isConnected } = useWebSocket();
