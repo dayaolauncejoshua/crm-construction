@@ -15,6 +15,7 @@ import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
+import twoFactorRoutes from "./routes/2fa";
 
 // import transferRouter from "./routes/transfer.route";
 // import leadsRouter from "./routes/leads.route";
@@ -125,6 +126,7 @@ app.use(loadUser);
 
 // Auth routes (login, signup, logout)
 app.use(authRouter);
+app.use(twoFactorRoutes);
 
 // Request logging middleware
 app.use((req, res, next) => {

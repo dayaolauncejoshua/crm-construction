@@ -13,6 +13,7 @@ import {
   MessageCircle,
   ArrowRight,
 } from "lucide-react";
+import { TwoFactorAuth } from "@/components/TwoFactorAuth";
 
 export default function Login() {
   usePageTitle("Login");
@@ -23,6 +24,12 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // 2FA state
+
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [pending2FAUserId, setPending2FAUserId] = useState("");
+  const [pending2FAEmail, setPending2FAEmail] = useState("");
 
   if (isAuthenticated) {
     setLocation("/dashboard");
@@ -36,12 +43,33 @@ export default function Login() {
     console.log("=== LOGIN DEBUG ===");
     console.log("Email:", email);
     console.log("Password:", password ? "***" : "empty");
-    console.log("Form data:", {
-      email,
-      password: password ? "provided" : "missing",
-    });
 
     try {
+      // Call login API directly to check for 2FA
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Login failed");
+      }
+
+      // 🆕 Check if 2FA is required
+      if (data.requires2FA) {
+        console.log("🔐 2FA required for:", data.email);
+        setPending2FAUserId(data.userId);
+        setPending2FAEmail(data.email);
+        setRequires2FA(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // Normal login (no 2FA) - use the auth context
       await login(email, password);
       toast({ title: "Welcome back!" });
       setLocation("/dashboard");
@@ -55,6 +83,26 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  // 🆕 If 2FA is required, show 2FA component instead
+  if (requires2FA) {
+    return (
+      <TwoFactorAuth
+        userId={pending2FAUserId}
+        email={pending2FAEmail}
+        onSuccess={(user) => {
+          toast({ title: "Welcome back!" });
+          setLocation("/dashboard");
+        }}
+        onBack={() => {
+          setRequires2FA(false);
+          setPending2FAUserId("");
+          setPending2FAEmail("");
+          setPassword("");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex">

@@ -1,5 +1,4 @@
 // server/auth.ts
-
 import { Router } from "express";
 import { db } from "./db";
 import { users } from "@shared/schema";
@@ -69,10 +68,10 @@ router.post("/api/auth/signup", async (req, res) => {
       // Don't fail signup if email fails
     }
 
-    // ✅✅✅ CRITICAL FIX: Set userId in session BEFORE saving
+    // Set userId in session
     (req.session as any).userId = newUser.id;
 
-    // ✅ Now save the session
+    // Save session
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
@@ -80,8 +79,6 @@ router.post("/api/auth/signup", async (req, res) => {
       }
 
       console.log("✅ User created and session saved:", newUser.email);
-      console.log("📋 Session ID:", req.sessionID);
-      console.log("📋 User ID in session:", (req.session as any).userId);
 
       res.json({
         user: {
@@ -100,12 +97,10 @@ router.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-// Login
+// 🆕 Login - Step 1: Verify credentials
 router.post("/api/auth/login", async (req, res) => {
   try {
     console.log("=== LOGIN BACKEND DEBUG ===");
-    console.log("Request body:", { email: req.body?.email, password: "***" });
-
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -136,20 +131,30 @@ router.post("/api/auth/login", async (req, res) => {
 
     console.log("✅ Password valid");
 
-    // ✅ OPTIONAL: Check email verification
-    // Uncomment these lines if you want to REQUIRE verification before login:
-    /*
-    if (!user.emailVerified) {
-      console.log("⚠️ Email not verified");
-      return res.status(403).json({ 
-        error: "Please verify your email before logging in",
-        emailNotVerified: true,
+    // 🆕 CHECK IF 2FA IS ENABLED
+    if (user.twoFactorEnabled) {
+      console.log("🔐 2FA required for user:", user.email);
+
+      // Store user ID temporarily for 2FA verification
+      (req.session as any).pending2FAUserId = user.id;
+      
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve(true);
+        });
+      });
+
+      // Don't create full session yet, return 2FA required
+      return res.json({
+        requires2FA: true,
+        userId: user.id, // Frontend needs this
         email: user.email,
+        message: "Please enter your 2FA code",
       });
     }
-    */
 
-    // Update login stats
+    // 🔓 NO 2FA - Complete login immediately
     await db
       .update(users)
       .set({
@@ -158,7 +163,7 @@ router.post("/api/auth/login", async (req, res) => {
       })
       .where(eq(users.id, user.id));
 
-    // Create session (use type assertion)
+    // Create session
     (req.session as any).userId = user.id;
 
     req.session.save((err) => {
@@ -167,10 +172,7 @@ router.post("/api/auth/login", async (req, res) => {
         return res.status(500).json({ error: "Failed to create session" });
       }
 
-      console.log("✅ Session saved successfully!");
-      console.log("📋 Session ID:", req.sessionID);
-      console.log("📋 User ID in session:", (req.session as any).userId);
-      console.log("🍪 Cookie will be set with name: sessionId");
+      console.log("✅ Login successful (no 2FA)!");
 
       res.json({
         user: {
@@ -178,14 +180,122 @@ router.post("/api/auth/login", async (req, res) => {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          phone: user.phone,
           role: user.role,
           emailVerified: user.emailVerified,
+          isTrialActive: user.isTrialActive,
+          trialEndsAt: user.trialEndsAt,
+          twoFactorEnabled: user.twoFactorEnabled,
         },
       });
     });
   } catch (error: any) {
     console.error("❌ Login error:", error);
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// 🆕 Login - Step 2: Verify 2FA code and complete login
+router.post("/api/auth/verify-2fa", async (req, res) => {
+  try {
+    const { userId, code, useBackupCode } = req.body;
+
+    if (!userId || !code) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify the pending 2FA matches
+    const pendingUserId = (req.session as any).pending2FAUserId;
+    if (pendingUserId !== userId) {
+      return res.status(401).json({ error: "Invalid session" });
+    }
+
+    // Get user
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ error: "2FA not enabled" });
+    }
+
+    // Verify 2FA code
+    const { verify2FACode, verifyBackupCode, decrypt2FASecret } = await import(
+      "./services/2fa-service"
+    );
+
+    let isValid = false;
+
+    if (useBackupCode) {
+      // Verify backup code
+      const result = await verifyBackupCode(
+        user.twoFactorBackupCodes as string[],
+        code
+      );
+      isValid = result.valid;
+
+      if (isValid) {
+        // Update remaining backup codes
+        await db
+          .update(users)
+          .set({
+            twoFactorBackupCodes: result.remainingCodes,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userId));
+
+        console.log("✅ Backup code used. Remaining:", result.remainingCodes.length);
+      }
+    } else {
+      // Decrypt secret and verify TOTP code
+      const decryptedSecret = decrypt2FASecret(user.twoFactorSecret);
+      isValid = verify2FACode(decryptedSecret, code);
+    }
+
+    if (!isValid) {
+      console.log("❌ Invalid 2FA code for user:", userId);
+      return res.status(401).json({ error: "Invalid verification code" });
+    }
+
+    console.log("✅ 2FA verification successful");
+
+    // Update login stats
+    await db
+      .update(users)
+      .set({
+        lastLoginAt: new Date(),
+        loginCount: (user.loginCount || 0) + 1,
+      })
+      .where(eq(users.id, userId));
+
+    // Clear pending 2FA and create full session
+    delete (req.session as any).pending2FAUserId;
+    (req.session as any).userId = user.id;
+
+    req.session.save((err) => {
+      if (err) {
+        console.error("❌ Session save error:", err);
+        return res.status(500).json({ error: "Failed to create session" });
+      }
+
+      console.log("✅ 2FA login complete!");
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phone,
+          role: user.role,
+          emailVerified: user.emailVerified,
+          isTrialActive: user.isTrialActive,
+          trialEndsAt: user.trialEndsAt,
+          twoFactorEnabled: user.twoFactorEnabled,
+        },
+      });
+    });
+  } catch (error: any) {
+    console.error("❌ 2FA verification error:", error);
+    res.status(500).json({ error: "2FA verification failed" });
   }
 });
 
@@ -221,12 +331,13 @@ router.get("/api/auth/me", async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        phone: user.phone, // 🆕 ADD THIS
+        phone: user.phone,
         role: user.role,
         emailVerified: user.emailVerified,
         isTrialActive: user.isTrialActive,
         trialEndsAt: user.trialEndsAt,
-        settings: user.settings || { // 🆕 ADD THIS WITH DEFAULTS
+        twoFactorEnabled: user.twoFactorEnabled, // 🆕 ADD THIS
+        settings: user.settings || {
           notifications: {
             email: true,
             whatsapp: true,
