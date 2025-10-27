@@ -153,6 +153,45 @@ export default function SOPs() {
   });
 
   // Create video SOP mutation
+  // const createVideoSOPMutation = useMutation({
+  //   mutationFn: async (data: CreateVideoSOPData) => {
+  //     const response = await apiRequest("POST", "/api/video-sops", {
+  //       ...data,
+  //       clientId: selectedClientId,
+  //     });
+  //     return response.json();
+  //   },
+  //   onSuccess: () => {
+  //     queryClient.invalidateQueries({
+  //       queryKey: ["/api/video-sops", selectedClientId],
+  //     });
+  //     setShowCreateVideoDialog(false);
+  //     videoForm.reset();
+  //     toast({
+  //       title: "Video SOP created!",
+  //       description: "Video SOP has been added successfully.",
+  //     });
+  //   },
+  //   onError: (error) => {
+  //     toast({
+  //       title: "Error",
+  //       description: error.message,
+  //       variant: "destructive",
+  //     });
+  //   },
+  // });
+
+  // const createVideoSOPMutation = useMutation({
+  //   mutationFn: async (data: CreateVideoSOPData) => {
+  //     const response = await apiRequest("POST", "/api/video-sops", {
+  //       ...data,
+  //       clientId: selectedClientId,
+  //       category: data.category || "training",
+  //     });
+  //     return response.json();
+  //   },
+  // });
+
   const createVideoSOPMutation = useMutation({
     mutationFn: async (data: CreateVideoSOPData) => {
       const response = await apiRequest("POST", "/api/video-sops", {
@@ -169,10 +208,10 @@ export default function SOPs() {
       videoForm.reset();
       toast({
         title: "Video SOP created!",
-        description: "Video SOP has been added successfully.",
+        description: "Your video is now being analyzed — please wait a bit.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message,
@@ -690,6 +729,53 @@ export default function SOPs() {
                         </Button>
                       </div>
                     </div>
+                    {/* 🧠 AI Summary */}
+                    {sop.ai_summary && (
+                      <div className="mt-4 border-t pt-3">
+                        <h4 className="font-semibold text-slate-800 mb-1">
+                          AI Summary
+                        </h4>
+                        <p className="text-sm text-slate-600">
+                          {sop.ai_summary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 📝 Transcript */}
+                    {sop.transcript && (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer text-sm text-blue-600 hover:underline">
+                          View Full Transcript
+                        </summary>
+                        <pre className="text-xs max-h-48 overflow-auto whitespace-pre-wrap mt-2 bg-slate-50 p-2 rounded-md border text-slate-700">
+                          {sop.transcript}
+                        </pre>
+                      </details>
+                    )}
+
+                    {/* ✅ Steps Breakdown */}
+                    {sop.ai_breakdown?.steps &&
+                      sop.ai_breakdown.steps.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="font-semibold text-slate-800 mb-1">
+                            Step-by-Step SOP
+                          </h4>
+                          <ol className="list-decimal pl-5 text-sm space-y-1 text-slate-700">
+                            {sop.ai_breakdown.steps.map(
+                              (step: string, i: number) => (
+                                <li key={i}>{step}</li>
+                              )
+                            )}
+                          </ol>
+                        </div>
+                      )}
+
+                    {/* ⏳ Status Message */}
+                    {!sop.ai_summary && sop.transcript_status === "pending" && (
+                      <p className="text-xs text-slate-400 italic mt-3">
+                        Analyzing video… please wait a few minutes.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               ))}
