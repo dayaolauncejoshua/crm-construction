@@ -36,24 +36,35 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  phone: varchar("phone"),
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role").default("user"), // user, super_admin
 
-  // ✅ ADD THESE NEW FIELDS:
+  // Email Verification
   emailVerified: boolean("email_verified").default(false).notNull(),
   verificationToken: text("verification_token"),
   passwordResetToken: text("password_reset_token"),
   passwordResetExpiry: timestamp("password_reset_expiry"),
 
-  stripeCustomerId: varchar("stripe_customer_id"),
+    // 🆕 Two-Factor Authentication
+  twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorBackupCodes: jsonb("two_factor_backup_codes").default(sql`'[]'::jsonb`),
 
+  // Subscription
+  stripeCustomerId: varchar("stripe_customer_id"),
   subscriptionType: varchar("subscription_type").default("trial"), // trial, pro, enterprise
   trialEndsAt: timestamp("trial_ends_at"),
   isTrialActive: boolean("is_trial_active").default(false),
   hasUnlockedTrial: boolean("has_unlocked_trial").default(false),
+
+  // Activity
   lastLoginAt: timestamp("last_login_at"),
   loginCount: integer("login_count").default(0),
   isActive: boolean("is_active").default(true),
+  settings: jsonb("settings").default(sql`'{}'::jsonb`),
+
+  // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -581,6 +592,11 @@ export const videoSOPs = pgTable("video_sops", {
   isPublic: boolean("is_public").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  transcript: text("transcript"), 
+  transcript_status: varchar("transcript_status").default("pending"),
+  ai_summary: text("ai_summary"),
+  ai_breakdown: jsonb("ai_breakdown"),
+  key_topics: jsonb().default("[]"),
 });
 
 // Notion SOPs table

@@ -83,6 +83,7 @@ export default function Navigation({
   selectedClientId = "",
   onClientChange,
 }: NavigationProps) {
+  const [, setLocation] = useLocation();
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -215,7 +216,10 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-                <AvatarImage src="/placeholder-avatar.jpg" alt={getUserDisplayName()} />
+                <AvatarImage
+                  src="/placeholder-avatar.jpg"
+                  alt={getUserDisplayName()}
+                />
                 <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>
@@ -258,14 +262,14 @@ export default function Navigation({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => window.location.href = "/subscription"}
+            onClick={() => setLocation("/settings")}
             className="cursor-pointer"
           >
             <User className="w-4 h-4 mr-2" />
             <span>Profile & Settings</span>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => window.location.href = "/subscription"}
+            onClick={() => (window.location.href = "/subscription")}
             className="cursor-pointer"
           >
             <CreditCard className="w-4 h-4 mr-2" />
@@ -314,7 +318,10 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-                <AvatarImage src="/placeholder-avatar.jpg" alt={getUserDisplayName()} />
+                <AvatarImage
+                  src="/placeholder-avatar.jpg"
+                  alt={getUserDisplayName()}
+                />
                 <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>
@@ -352,10 +359,7 @@ export default function Navigation({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => {
-              closeMobileMenu();
-              window.location.href = "/subscription";
-            }}
+            onClick={() => setLocation("/settings")}
             className="cursor-pointer"
           >
             <User className="w-4 h-4 mr-2" />
@@ -406,7 +410,10 @@ export default function Navigation({
           </div>
           <div className="flex items-center space-x-2 flex-shrink-0">
             {userRole !== "super_admin" && isTrialActive && (
-              <Badge variant="secondary" className="hidden xs:flex text-xs px-2 py-1">
+              <Badge
+                variant="secondary"
+                className="hidden xs:flex text-xs px-2 py-1"
+              >
                 {daysLeft}d
               </Badge>
             )}
@@ -458,7 +465,12 @@ export default function Navigation({
                     : "AI Lead System"}
                 </h1>
               </div>
-              <Button variant="ghost" size="sm" onClick={closeMobileMenu} className="flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeMobileMenu}
+                className="flex-shrink-0"
+              >
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -483,7 +495,10 @@ export default function Navigation({
                     <span className="font-medium truncate">{item.label}</span>
                   </div>
                   {item.badge && (
-                    <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">
+                    <Badge
+                      variant="secondary"
+                      className="text-xs ml-2 flex-shrink-0"
+                    >
                       {item.badge}
                     </Badge>
                   )}
@@ -563,7 +578,10 @@ export default function Navigation({
                     <span className="flex-shrink-0">{item.icon}</span>
                     <span className="ml-3 flex-1 truncate">{item.label}</span>
                     {item.badge && (
-                      <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+                      <Badge
+                        variant="secondary"
+                        className="ml-auto text-xs flex-shrink-0"
+                      >
                         {item.badge}
                       </Badge>
                     )}

@@ -3124,6 +3124,215 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
+  // ==================== USER PROFILE & SETTINGS ROUTES ====================
+// Update user profile
+app.patch("/api/user/profile", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const { firstName, lastName, phone, bio } = req.body;
+
+    console.log("📝 Updating profile for user:", userId);
+
+    // Update user
+    const updatedUser = await storage.updateUser(userId, {
+      firstName,
+      lastName,
+      phone,
+      // bio can be stored in a separate preferences table or ignored for now
+      updatedAt: new Date(),
+    });
+
+    // Log activity
+    await storage.logUserActivity(userId, "profile_updated", "user", {
+      fields: Object.keys(req.body),
+    });
+
+    console.log("✅ Profile updated successfully");
+    res.json({
+      success: true,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        phone: updatedUser.phone,
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Error updating profile:", error);
+    res.status(500).json({
+      message: error.message || "Failed to update profile",
+    });
+  }
+});
+
+// Change password (secure with bcrypt)
+app.post("/api/user/change-password", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const { currentPassword, newPassword } = req.body;
+
+    console.log("🔐 Password change requested for user:", userId);
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "Current password and new password are required",
+      });
+    }
+
+    // ✅ SECURITY: Validate new password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters long",
+      });
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        message: "Password must contain at least one uppercase letter",
+      });
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({
+        message: "Password must contain at least one lowercase letter",
+      });
+    }
+
+    if (!/[0-9]/.test(newPassword)) {
+      return res.status(400).json({
+        message: "Password must contain at least one number",
+      });
+    }
+
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      return res.status(400).json({
+        message: "Password must contain at least one special character",
+      });
+    }
+
+    // Get user from database
+    const user = await storage.getUserById(userId);
+    if (!user || !user.passwordHash) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // ✅ SECURITY: Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash
+    );
+
+    if (!isCurrentPasswordValid) {
+      console.log("❌ Current password is incorrect");
+      // Log failed attempt
+      await storage.logUserActivity(userId, "password_change_failed", "security", {
+        reason: "incorrect_current_password",
+      });
+      return res.status(401).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    // ✅ SECURITY: Check if new password is different from current
+    const isSameAsOld = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSameAsOld) {
+      return res.status(400).json({
+        message: "New password must be different from current password",
+      });
+    }
+
+    // ✅ SECURITY: Hash new password with bcrypt (salt rounds: 12 for security)
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    // Update password
+    await storage.updateUser(userId, {
+      passwordHash: newPasswordHash,
+      updatedAt: new Date(),
+    });
+
+    // Log successful password change
+    await storage.logUserActivity(userId, "password_changed", "security", {
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log("✅ Password changed successfully");
+    res.json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ Error changing password:", error);
+    res.status(500).json({
+      message: error.message || "Failed to change password",
+    });
+  }
+});
+
+// Update user preferences
+app.patch("/api/user/preferences", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const {
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports,
+      timezone,
+      language,
+    } = req.body;
+
+    console.log("⚙️ Updating preferences for user:", userId);
+
+    // For now, we'll store preferences in user settings JSONB field
+    // You could also create a separate preferences table
+    const user = await storage.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const currentSettings = (user.settings as any) || {};
+    const updatedSettings = {
+      ...currentSettings,
+      notifications: {
+        email: emailNotifications,
+        whatsapp: whatsappNotifications,
+        leads: leadNotifications,
+        bookings: bookingNotifications,
+        weeklyReports,
+      },
+      regional: {
+        timezone,
+        language,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    await storage.updateUser(userId, {
+      settings: updatedSettings,
+      updatedAt: new Date(),
+    });
+
+    // Log activity
+    await storage.logUserActivity(userId, "preferences_updated", "user", {
+      preferencesChanged: Object.keys(req.body),
+    });
+
+    console.log("✅ Preferences updated successfully");
+    res.json({
+      success: true,
+      message: "Preferences updated successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ Error updating preferences:", error);
+    res.status(500).json({
+      message: error.message || "Failed to update preferences",
+    });
+  }
+});
+
   // ==================== PASSWORD RESET ROUTES ====================
 
   // Request password reset

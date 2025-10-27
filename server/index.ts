@@ -9,20 +9,21 @@ import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
 import voice_AI_CallRouter from "./routes/twilio-call.route";
-import videoSOPsRouter from "./routes/videoSOPs.route";
-import notionSOPsRouter from "./routes/notionSOPs.route";
+// import videoSOPsRouter from "./routes/videoSOPs.route";
+// import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
 import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
+import twoFactorRoutes from "./routes/2fa";
 
-import transferRouter from "./routes/transfer.route";
-import leadsRouter from "./routes/leads.route";
-import transcriptsRouter from "./routes/transcripts.route";
+// import transferRouter from "./routes/transfer.route";
+// import leadsRouter from "./routes/leads.route";
+// import transcriptsRouter from "./routes/transcripts.route";
 
-import queueRouter from "./routes/queue.route";
-import callsRouter from "./routes/calls.route";
-import twilioRouter from "./routes/twilio.route";
+// import queueRouter from "./routes/queue.route";
+// import callsRouter from "./routes/calls.route";
+// import twilioRouter from "./routes/twilio.route";
 
 const { Pool } = pg;
 config();
@@ -82,17 +83,17 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api/video-sops", videoSOPsRouter);
-app.use("/api/notion-sops", notionSOPsRouter);
+// app.use("/api/video-sops", videoSOPsRouter);
+// app.use("/api/notion-sops", notionSOPsRouter);
 // ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
 const PgSession = connectPgSimple(session);
 const isProduction = process.env.NODE_ENV === "production";
 
 app.use("/api/twilioCall-webhook", express.raw({ type: "application/json" }));
 app.use("/api/twilioCall-webhook", voice_AI_CallRouter);
-app.use("/api/transfer-to-human", transferRouter);
-app.use("/api/leads", leadsRouter);
-app.use("/api/transcripts", transcriptsRouter);
+// app.use("/api/transfer-to-human", transferRouter);
+// app.use("/api/leads", leadsRouter);
+// app.use("/api/transcripts", transcriptsRouter);
 
 app.use(
   session({
@@ -125,6 +126,7 @@ app.use(loadUser);
 
 // Auth routes (login, signup, logout)
 app.use(authRouter);
+app.use(twoFactorRoutes);
 
 // Request logging middleware
 app.use((req, res, next) => {

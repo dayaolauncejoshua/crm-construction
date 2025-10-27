@@ -1,5 +1,4 @@
 // client/src/contexts/AuthContext.tsx
-
 import {
   createContext,
   useContext,
@@ -12,15 +11,34 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 
+// 🆕 User Settings interface
+interface UserSettings {
+  notifications?: {
+    email?: boolean;
+    whatsapp?: boolean;
+    leads?: boolean;
+    bookings?: boolean;
+    weeklyReports?: boolean;
+  };
+  regional?: {
+    timezone?: string;
+    language?: string;
+  };
+}
+
+// 🆕 Updated User interface with settings
 interface User {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
+  phone: string | null;
   role: string;
   emailVerified?: boolean;
   isTrialActive?: boolean;
   trialEndsAt?: Date | null;
+  settings?: UserSettings; // 🆕 ADD THIS LINE
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthContextType {
@@ -35,30 +53,30 @@ interface AuthContextType {
     lastName?: string
   ) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>; // 🆕 ADD THIS
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // ✅ Define public pages
-  const skipAuthRoutes = [
-    "/",
-    "/login",
-    "/signup",
-    "/landing",
-    "/verify-email",
-    "/forgot-password",
-    "/trial-unlock",
-    "/payment-success",
-  ];
+const skipAuthRoutes = [
+  "/",
+  "/login",
+  "/signup",
+  "/landing",
+  "/verify-email",
+  "/forgot-password",
+  "/trial-unlock",
+  "/payment-success",
+];
 
-  const shouldSkipAuth = (path: string) => {
+const shouldSkipAuth = (path: string) => {
   return (
     skipAuthRoutes.includes(path) ||
     path.startsWith("/verify/") ||
     path.startsWith("/reset-password/")
   );
 };
-
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -87,7 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     }
   }, [data]);
-   // ✅ Listen for cross-tab auth changes
+
+  // ✅ Listen for cross-tab auth changes
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "auth_updated" && shouldFetchUser) {
@@ -182,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: "POST",
         credentials: "include",
       });
+
       if (!response.ok) throw new Error("Logout failed");
       return response.json();
     },
@@ -192,6 +212,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("✅ Logged out successfully");
     },
   });
+
+  // 🆕 Refresh user data (for profile updates)
+  const refreshUser = async () => {
+    await refetch();
+  };
 
   return (
     <AuthContext.Provider
@@ -213,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout: async () => {
           await logoutMutation.mutateAsync();
         },
+        refreshUser, // 🆕 ADD THIS
       }}
     >
       {children}
