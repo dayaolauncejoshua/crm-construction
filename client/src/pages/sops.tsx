@@ -104,7 +104,7 @@ export default function SOPs() {
   const { data: clients } = useQuery({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
+      const response = await fetch(`/api/clients/${selectedClientId}`);
       return response.json();
     },
   });
