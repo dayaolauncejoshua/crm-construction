@@ -46,10 +46,12 @@ export const users = pgTable("users", {
   passwordResetToken: text("password_reset_token"),
   passwordResetExpiry: timestamp("password_reset_expiry"),
 
-    // 🆕 Two-Factor Authentication
+  // 🆕 Two-Factor Authentication
   twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
   twoFactorSecret: text("two_factor_secret"),
-  twoFactorBackupCodes: jsonb("two_factor_backup_codes").default(sql`'[]'::jsonb`),
+  twoFactorBackupCodes: jsonb("two_factor_backup_codes").default(
+    sql`'[]'::jsonb`
+  ),
 
   // Subscription
   stripeCustomerId: varchar("stripe_customer_id"),
@@ -230,7 +232,6 @@ export const clients = pgTable("clients", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   whatsappPhoneNumberId: text("whatsapp_phone_number_id"), // New field for WhatsApp Business API
-  
 });
 
 // Leads table
@@ -390,6 +391,8 @@ export const vsls = pgTable("vsls", {
     scale: 2,
   }).default("0.0"),
   isActive: boolean("is_active").default(true),
+  cloudinaryVideoId: varchar("cloudinary_video_id"),
+  cloudinaryThumbnailId: varchar("cloudinary_thumbnail_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -592,7 +595,7 @@ export const videoSOPs = pgTable("video_sops", {
   isPublic: boolean("is_public").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  transcript: text("transcript"), 
+  transcript: text("transcript"),
   transcript_status: varchar("transcript_status").default("pending"),
   ai_summary: text("ai_summary"),
   ai_breakdown: jsonb("ai_breakdown"),

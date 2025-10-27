@@ -1,5 +1,7 @@
+// server/controllers/vsl.controller.ts
 import { generateVSLScript } from "server/services/openai";
 import { vslGenerator } from "server/services/vsl-generator";
+import { cloudinaryService } from "server/services/cloudinary.service"; //
 import { storage } from "server/storage";
 
 // fetch clientID
@@ -102,10 +104,103 @@ export const updateVSL = async (req: any, res: any) => {
   }
 };
 
-// Delete VSL
+// ⬇️ UPDATED: Delete VSL - Now also deletes from Cloudinary
+// export const deleteVSL = async (req: any, res: any) => {
+//   try {
+//     const { vslId } = req.params;
+
+//     // Get VSL to retrieve Cloudinary public IDs
+//     const vsl = await storage.getVSL(vslId);
+
+//     if (vsl) {
+//       // Delete from Cloudinary if public IDs exist
+//       if (vsl.cloudinaryVideoId) {
+//         try {
+//           await cloudinaryService.deleteResource(
+//             vsl.cloudinaryVideoId,
+//             "video"
+//           );
+//           console.log(
+//             "✅ Video deleted from Cloudinary:",
+//             vsl.cloudinaryVideoId
+//           );
+//         } catch (error) {
+//           console.error("⚠️ Failed to delete video from Cloudinary:", error);
+//           // Continue with database deletion even if Cloudinary deletion fails
+//         }
+//       }
+
+//       if (vsl.cloudinaryThumbnailId) {
+//         try {
+//           await cloudinaryService.deleteResource(
+//             vsl.cloudinaryThumbnailId,
+//             "image"
+//           );
+//           console.log(
+//             "✅ Thumbnail deleted from Cloudinary:",
+//             vsl.cloudinaryThumbnailId
+//           );
+//         } catch (error) {
+//           console.error(
+//             "⚠️ Failed to delete thumbnail from Cloudinary:",
+//             error
+//           );
+//           // Continue with database deletion even if Cloudinary deletion fails
+//         }
+//       }
+//     }
+
+//     // Delete from database
+//     await storage.deleteVSL(vslId);
+//     res.json({ success: true });
+//   } catch (error) {
+//     console.error("Error deleting VSL:", error);
+//     res.status(500).json({ message: "Failed to delete VSL" });
+//   }
+// };
 export const deleteVSL = async (req: any, res: any) => {
   try {
     const { vslId } = req.params;
+
+    // Get VSL to retrieve Cloudinary public IDs
+    const vsl = await storage.getVSL(vslId);
+
+    if (vsl) {
+      // Delete from Cloudinary if public IDs exist
+      if (vsl.cloudinaryVideoId) {
+        try {
+          await cloudinaryService.deleteResource(
+            vsl.cloudinaryVideoId,
+            "video"
+          );
+          console.log(
+            "✅ Video deleted from Cloudinary:",
+            vsl.cloudinaryVideoId
+          );
+        } catch (error) {
+          console.error("⚠️ Failed to delete video from Cloudinary:", error);
+        }
+      }
+
+      if (vsl.cloudinaryThumbnailId) {
+        try {
+          await cloudinaryService.deleteResource(
+            vsl.cloudinaryThumbnailId,
+            "image"
+          );
+          console.log(
+            "✅ Thumbnail deleted from Cloudinary:",
+            vsl.cloudinaryThumbnailId
+          );
+        } catch (error) {
+          console.error(
+            "⚠️ Failed to delete thumbnail from Cloudinary:",
+            error
+          );
+        }
+      }
+    }
+
     await storage.deleteVSL(vslId);
     res.json({ success: true });
   } catch (error) {
@@ -113,7 +208,6 @@ export const deleteVSL = async (req: any, res: any) => {
     res.status(500).json({ message: "Failed to delete VSL" });
   }
 };
-
 //Track VSL view
 export const trackVSLView = async (req: any, res: any) => {
   try {
@@ -126,7 +220,7 @@ export const trackVSLView = async (req: any, res: any) => {
   }
 };
 
-// Async function to generate video in background
+// ⬇️ UPDATED: Async function to generate video in background
 async function generateVideoAsync(
   vslId: string,
   script: string,
@@ -136,19 +230,20 @@ async function generateVideoAsync(
   try {
     console.log("🎥 Starting video generation for VSL:", vslId);
 
-    const { videoUrl, thumbnailUrl, duration } = await vslGenerator.generateVSL(
-      {
-        script,
-        title,
-        niche,
-        clientId: vslId,
-      }
-    );
+    const result = await vslGenerator.generateVSL({
+      script,
+      title,
+      niche,
+      clientId: vslId,
+      vslId: vslId,
+    });
 
     await storage.updateVSL(vslId, {
-      videoUrl,
-      thumbnailUrl,
-      duration,
+      videoUrl: result.videoUrl,
+      thumbnailUrl: result.thumbnailUrl,
+      duration: result.duration,
+      cloudinaryVideoId: result.cloudinaryPublicIds?.video,
+      cloudinaryThumbnailId: result.cloudinaryPublicIds?.thumbnail,
     });
 
     console.log("✅ Video generation complete for VSL:", vslId);
