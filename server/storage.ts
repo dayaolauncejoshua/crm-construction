@@ -140,6 +140,18 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  
+  async updateUser(userId: string, updates: Partial<typeof users.$inferInsert>) {
+  const [updatedUser] = await db
+    .update(users)
+    .set({
+      ...updates,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId))
+    .returning();
+  return updatedUser;
+}
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));

@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "db:refresh": "drizzle-kit refresh",
     "setup": "npm install && npm run db:push"
   },
   "dependencies": {

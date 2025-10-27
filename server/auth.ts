@@ -221,10 +221,24 @@ router.get("/api/auth/me", async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        phone: user.phone, // 🆕 ADD THIS
         role: user.role,
-        emailVerified: user.emailVerified, // ✅ ADD THIS
+        emailVerified: user.emailVerified,
         isTrialActive: user.isTrialActive,
         trialEndsAt: user.trialEndsAt,
+        settings: user.settings || { // 🆕 ADD THIS WITH DEFAULTS
+          notifications: {
+            email: true,
+            whatsapp: true,
+            leads: true,
+            bookings: true,
+            weeklyReports: false,
+          },
+          regional: {
+            timezone: "UTC",
+            language: "en",
+          },
+        },
       },
     });
   } catch (error: any) {
