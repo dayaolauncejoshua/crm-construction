@@ -3336,13 +3336,34 @@ app.patch("/api/user/preferences", requireAuth, async (req, res) => {
 app.get("/api/user/activity", requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
-    console.log(`[API] Fetching activity log for user: ${userId}`);
+    const { type, startDate, endDate } = req.query;
 
-    const activities = await storage.getUserActivityLog(userId);
-    res.json({activities});
+    console.log(
+      `[API] Fetching activity log for user: ${userId} with filters:`,
+      { type, startDate, endDate }
+    );
+
+    const filters = {
+      type: type as string | undefined,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+    };
+
+    // Validate dates
+    if (filters.startDate && isNaN(filters.startDate.getTime())) {
+      filters.startDate = undefined;
+    }
+    if (filters.endDate && isNaN(filters.endDate.getTime())) {
+      filters.endDate = undefined;
+    }
+
+    // ✅ THIS IS THE FIX: Pass the 'filters' object as the second argument
+    const activities = await storage.getUserActivityLog(userId, filters);
+
+    res.json({ activities });
   } catch (error) {
     console.error("❌ Error fetching user activity:", error);
-    res.status(500).json({message: "Failed to fetch user activity log"});
+    res.status(500).json({ message: "Failed to fetch user activity log" });
   }
 });
 
