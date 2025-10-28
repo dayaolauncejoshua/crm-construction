@@ -40,6 +40,10 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role").default("user"), // user, super_admin
 
+  // OAuth fields
+  googleId: text("google_id").unique(),
+  oauthProvider: text("oauth_provider"),
+
   // Email Verification
   emailVerified: boolean("email_verified").default(false).notNull(),
   verificationToken: text("verification_token"),
@@ -756,6 +760,8 @@ export type InsertNotionSOP = z.infer<typeof insertNotionSOPSchema>;
 
 // Type exports
 export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+
 export type UpsertUser = typeof users.$inferInsert;
 export type TrialActivation = typeof trialActivations.$inferSelect;
 export type InsertTrialActivation = typeof trialActivations.$inferInsert;

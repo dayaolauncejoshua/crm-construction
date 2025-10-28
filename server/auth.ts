@@ -4,6 +4,8 @@ import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import passport from "./config/passport";
+
 
 const router = Router();
 const SALT_ROUNDS = 10;
@@ -357,5 +359,46 @@ router.get("/api/auth/me", async (req, res) => {
     res.status(500).json({ error: "Failed to get user" });
   }
 });
+
+// ==================== GOOGLE OAUTH ROUTES ====================
+
+// Initiate Google OAuth
+router.get(
+  "/api/auth/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+  })
+);
+
+// Google OAuth callback
+router.get(
+  "/api/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/login?error=google_auth_failed",
+  }),
+  (req, res) => {
+    // Success - create session
+    const user = req.user as any;
+
+    if (!user) {
+      console.error("❌ No user returned from Google OAuth");
+      return res.redirect("/login?error=auth_failed");
+    }
+
+    (req.session as any).userId = user.id;
+
+    req.session.save((err) => {
+      if (err) {
+        console.error("❌ Session save error:", err);
+        return res.redirect("/login?error=session_failed");
+      }
+
+      console.log("✅ Google OAuth login successful:", user.email);
+
+      // Redirect to dashboard
+      res.redirect("/dashboard");
+    });
+  }
+);
 
 export default router;

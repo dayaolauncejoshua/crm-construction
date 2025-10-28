@@ -16,6 +16,7 @@ import path from "path";
 import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
+import passport from "./config/passport";
 
 // import transferRouter from "./routes/transfer.route";
 // import leadsRouter from "./routes/leads.route";
@@ -120,6 +121,9 @@ app.use(
     },
   })
 );
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 // ✅ Load user from session (must be after session, before routes)
 app.use(loadUser);

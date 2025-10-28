@@ -39,6 +39,7 @@ interface User {
   trialEndsAt?: Date | null;
   settings?: UserSettings; // 🆕 ADD THIS LINE
   twoFactorEnabled?: boolean;
+  
 }
 
 interface AuthContextType {
