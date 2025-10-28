@@ -12,7 +12,7 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: unknown | undefined
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
@@ -31,9 +31,28 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // ✅ NEW, SMARTER LOGIC STARTS HERE
+    const [url, params] = queryKey;
+    let finalUrl = url as string;
+
+    if (params && typeof params === "object") {
+      // Filter out undefined values before creating search params
+      const filteredParams = Object.entries(
+        params as Record<string, any>
+      ).filter(([, value]) => value !== undefined);
+
+      if (filteredParams.length > 0) {
+        const searchParams = new URLSearchParams(
+          Object.fromEntries(filteredParams)
+        );
+        finalUrl = `${finalUrl}?${searchParams.toString()}`;
+      }
+    }
+
+    const res = await fetch(finalUrl, {
       credentials: "include",
     });
+    // ✅ LOGIC ENDS HERE
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

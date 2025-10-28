@@ -39,6 +39,8 @@ import Pricing from "@/pages/pricing";
 import PaymentSuccess from "@/pages/payment-success";
 import SubscriptionPage from "@/pages/SubscriptionPage";
 import Settings from "@/pages/settings";
+import ActivityLog from "./pages/activity";
+import { Activity } from "lucide-react";
 
 
 
@@ -236,7 +238,10 @@ function ProtectedRouter() {
             <Route path="/landing" component={Landing} />
             <Route path="/trial-unlock" component={TrialUnlock} />
             <Route path="/subscription" component={SubscriptionPage} />
+
             <Route path="/settings" component={ Settings }/>
+            <Route path="/settings/activity" component={ActivityLog}/>
+
             <Route path="/payment-success" component={PaymentSuccess} />
             <Route path="/pricing" component={Pricing}/>
             <Route path="/verify-email" component={VerifyEmail} />

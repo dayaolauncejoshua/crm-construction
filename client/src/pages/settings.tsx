@@ -24,6 +24,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1129,66 +1130,65 @@ export default function Settings() {
 
             {/* Activity Log */}
             <Card className="border-2">
-              <CardHeader>
-                <CardTitle className="text-lg">Activity Log</CardTitle>
-                <CardDescription>
-                  A log of recent security-related activity on your account.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isActivityLoading ? (
-                  <div className="flex items-center justify-center p-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                  </div>
-                ) : activityError ? (
-                  <div className="text-red-600 text-sm">
-                    Failed to load activity log.
-                  </div>
-                ) : activityData?.activities &&
-                  activityData.activities.length > 0 ? (
-                  <TooltipProvider>
-                    {/* ✅ This div now controls the scrolling */}
-                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                      {activityData.activities.map((activity) => (
-                        <div
-                          key={activity.id}
-                          className="flex items-start gap-4"
-                        >
-                          <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center mt-1">
-                            {getActivityIcon(activity.action)}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-800">
-                              {formatActionText(activity.action)}
-                            </p>
-                            {/* ✅ Timestamp with Tooltip */}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <p className="text-xs text-slate-500 cursor-default">
-                                  {formatDistanceToNow(
-                                    new Date(activity.createdAt),
-                                    {
-                                      addSuffix: true,
-                                    }
-                                  )}
-                                </p>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{formatFullDate(activity.createdAt)}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </TooltipProvider>
-                ) : (
-                  <p className="text-sm text-slate-500 text-center p-4">
-                    No recent activity found.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+  <CardHeader className="flex flex-row items-center justify-between">
+    <div className="space-y-1">
+      <CardTitle className="text-lg">Activity Log</CardTitle>
+      <CardDescription>
+        A log of recent security-related activity on your account.
+      </CardDescription>
+    </div>
+    <Button 
+        variant="outline" 
+        size="sm" 
+        onClick={() => setLocation('/settings/activity')}
+    >
+      View Full Log
+    </Button>
+  </CardHeader>
+  <CardContent>
+    {isActivityLoading ? (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+      </div>
+    ) : activityError ? (
+      <div className="text-red-600 text-sm">Failed to load activity log.</div>
+    ) : activityData?.activities && activityData.activities.length > 0 ? (
+      <TooltipProvider>
+        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
+          {activityData.activities.map((activity) => (
+            <div key={activity.id} className="flex items-start gap-4">
+              <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center mt-1">
+                {getActivityIcon(activity.action)}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-800">
+                  {formatActionText(activity.action)}
+                </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs text-slate-500 cursor-default">
+                      {formatDistanceToNow(new Date(activity.createdAt), {
+                        addSuffix: true,
+                      })}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{formatFullDate(activity.createdAt)}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          ))}
+        </div>
+      </TooltipProvider>
+    ) : (
+      <p className="text-sm text-slate-500 text-center p-4">
+        No recent activity found.
+      </p>
+    )}
+  </CardContent>
+  
+</Card>
           </TabsContent>
 
           {/* ========== NOTIFICATIONS TAB ========== */}

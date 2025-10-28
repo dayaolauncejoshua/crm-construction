@@ -204,8 +204,16 @@ export default function Login() {
           </div>
 
           {/* Social Login Placeholder */}
+          {/* Social Login */}
           <div className="grid grid-cols-2 gap-3">
-            <button className="flex items-center justify-center px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+            {/* 🆕 FUNCTIONAL GOOGLE BUTTON */}
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/api/auth/google";
+              }}
+              className="flex items-center justify-center px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -226,7 +234,9 @@ export default function Login() {
               </svg>
               <span className="text-sm font-medium text-slate-700">Google</span>
             </button>
-            <button className="flex items-center justify-center px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+
+            {/* Facebook button - keep as placeholder */}
+            <button className="flex items-center justify-center px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors opacity-50 cursor-not-allowed">
               <svg
                 className="w-5 h-5 mr-2 text-blue-600"
                 fill="currentColor"

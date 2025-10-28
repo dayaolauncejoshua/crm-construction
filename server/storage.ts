@@ -53,6 +53,7 @@ import {
   InsertLeadTag,
 } from "@shared/schema";
 import { l } from "node_modules/vite/dist/node/types.d-aGj9QkWt";
+import { availableFilters } from "fluent-ffmpeg";
 
 export interface IStorage {
   // User operations (required for auth)
@@ -1210,7 +1211,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Activity Log 
-  async getUserActivityLog(userId: string, limit = 50): Promise<any[]> {
+  async getUserActivityLog(
+    userId: string,
+    filters: { type?: string; startDate?: Date; endDate?: Date },
+    limit = 100
+  ): Promise<any[]> {
+    // Start building the query conditions array
+    const conditions = [eq(userActivities.userId, userId)];
+
+    // Add filters dynamically if they exist
+    if (filters.type && filters.type !== "all") {
+      conditions.push(eq(userActivities.action, filters.type));
+    }
+    if (filters.startDate) {
+      conditions.push(gte(userActivities.createdAt, filters.startDate));
+    }
+    if (filters.endDate) {
+      // Set to the end of the selected day for an inclusive search
+      const nextDay = new Date(filters.endDate);
+      nextDay.setHours(23, 59, 59, 999);
+      conditions.push(sql`${userActivities.createdAt} <= ${nextDay}`);
+    }
+
     return await db
       .select({
         id: userActivities.id,
@@ -1222,7 +1244,8 @@ export class DatabaseStorage implements IStorage {
         createdAt: userActivities.createdAt,
       })
       .from(userActivities)
-      .where(eq(userActivities.userId, userId))
+      // ✅ CORRECTED: This now uses all the conditions from the array.
+      .where(and(...conditions))
       .orderBy(desc(userActivities.createdAt))
       .limit(limit);
   }
