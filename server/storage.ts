@@ -1209,6 +1209,24 @@ export class DatabaseStorage implements IStorage {
     return activity;
   }
 
+  // Activity Log 
+  async getUserActivityLog(userId: string, limit = 50): Promise<any[]> {
+    return await db
+      .select({
+        id: userActivities.id,
+        action: userActivities.action,
+        resource: userActivities.resource,
+        details: userActivities.details,
+        ipAddress: userActivities.ipAddress,
+        userAgent: userActivities.userAgent,
+        createdAt: userActivities.createdAt,
+      })
+      .from(userActivities)
+      .where(eq(userActivities.userId, userId))
+      .orderBy(desc(userActivities.createdAt))
+      .limit(limit);
+  }
+
   // Super Admin Functions
   async getSuperAdminDashboard(): Promise<any> {
     const [metrics] = await db

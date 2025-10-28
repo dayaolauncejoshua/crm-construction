@@ -3333,6 +3333,19 @@ app.patch("/api/user/preferences", requireAuth, async (req, res) => {
   }
 });
 
+app.get("/api/user/activity", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    console.log(`[API] Fetching activity log for user: ${userId}`);
+
+    const activities = await storage.getUserActivityLog(userId);
+    res.json({activities});
+  } catch (error) {
+    console.error("❌ Error fetching user activity:", error);
+    res.status(500).json({message: "Failed to fetch user activity log"});
+  }
+});
+
   // ==================== PASSWORD RESET ROUTES ====================
 
   // Request password reset
