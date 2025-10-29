@@ -13,6 +13,8 @@ import {
   userActivities,
   systemMetrics,
   spamPatterns,
+  subscriptions,
+  payments,
   type User,
   type UpsertUser,
   type Client,
@@ -141,18 +143,20 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  
-  async updateUser(userId: string, updates: Partial<typeof users.$inferInsert>) {
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      ...updates,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId))
-    .returning();
-  return updatedUser;
-}
+  async updateUser(
+    userId: string,
+    updates: Partial<typeof users.$inferInsert>
+  ) {
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return updatedUser;
+  }
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -1210,7 +1214,7 @@ export class DatabaseStorage implements IStorage {
     return activity;
   }
 
-  // Activity Log 
+  // Activity Log
   async getUserActivityLog(
     userId: string,
     filters: { type?: string; startDate?: Date; endDate?: Date },
@@ -1438,6 +1442,144 @@ export class DatabaseStorage implements IStorage {
 
     // No where conditions - just group and order
     return await baseSelect.groupBy(users.id).orderBy(desc(users.createdAt));
+  }
+
+  /**
+   * ⚠️ DANGER ZONE: Hard delete user account with cascade
+   * This permanently deletes ALL user data across all tables
+   */
+  async deleteUserAccount(userId: string): Promise<void> {
+    console.log(
+      `⚠️ [DELETE ACCOUNT] Starting cascade deletion for user: ${userId}`
+    );
+
+    try {
+      // Step 1: Get all clients owned by this user
+      const userClients = await db
+        .select({ id: clients.id })
+        .from(clients)
+        .where(eq(clients.userId, userId));
+
+      const clientIds = userClients.map((c) => c.id);
+      console.log(`📊 Found ${clientIds.length} clients to delete`);
+
+      // Step 2: For each client, delete associated data
+      for (const clientId of clientIds) {
+        console.log(`🔄 Deleting data for client: ${clientId}`);
+
+        // Get all leads for this client
+        const clientLeads = await db
+          .select({ id: leads.id })
+          .from(leads)
+          .where(eq(leads.clientId, clientId));
+
+        const leadIds = clientLeads.map((l) => l.id);
+        console.log(`  📋 Found ${leadIds.length} leads`);
+
+        // Get all conversations for this client
+        const clientConversations = await db
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(eq(conversations.clientId, clientId));
+
+        const conversationIds = clientConversations.map((c) => c.id);
+        console.log(`  💬 Found ${conversationIds.length} conversations`);
+
+        // Delete messages for all conversations
+        for (const conversationId of conversationIds) {
+          await db
+            .delete(messages)
+            .where(eq(messages.conversationId, conversationId));
+        }
+        console.log(`  ✅ Deleted messages`);
+
+        // Delete conversations
+        await db
+          .delete(conversations)
+          .where(eq(conversations.clientId, clientId));
+        console.log(`  ✅ Deleted conversations`);
+
+        // Delete bookings
+        await db.delete(bookings).where(eq(bookings.clientId, clientId));
+        console.log(`  ✅ Deleted bookings`);
+
+        // Delete lead activity logs
+        for (const leadId of leadIds) {
+          await db
+            .delete(leadActivityLog)
+            .where(eq(leadActivityLog.leadId, leadId));
+        }
+        console.log(`  ✅ Deleted lead activity logs`);
+
+        // Delete leads
+        await db.delete(leads).where(eq(leads.clientId, clientId));
+        console.log(`  ✅ Deleted leads`);
+
+        // Delete VSLs
+        await db.delete(vsls).where(eq(vsls.clientId, clientId));
+        console.log(`  ✅ Deleted VSLs`);
+
+        // Delete video SOPs
+        await db.delete(videoSOPs).where(eq(videoSOPs.clientId, clientId));
+        console.log(`  ✅ Deleted video SOPs`);
+
+        // Delete Notion SOPs
+        await db.delete(notionSOPs).where(eq(notionSOPs.clientId, clientId));
+        console.log(`  ✅ Deleted Notion SOPs`);
+
+        // Delete quick reply templates
+        await db
+          .delete(quickReplyTemplates)
+          .where(eq(quickReplyTemplates.clientId, clientId));
+        console.log(`  ✅ Deleted quick reply templates`);
+
+        // Delete lead tags
+        await db.delete(leadTags).where(eq(leadTags.clientId, clientId));
+        console.log(`  ✅ Deleted lead tags`);
+
+        // Delete analytics
+        await db.delete(analytics).where(eq(analytics.clientId, clientId));
+        console.log(`  ✅ Deleted analytics`);
+      }
+
+      // Step 3: Delete all clients
+      await db.delete(clients).where(eq(clients.userId, userId));
+      console.log(`✅ Deleted all clients`);
+
+      // Step 4: Delete user-specific data
+
+      // Delete subscriptions
+      await db.delete(subscriptions).where(eq(subscriptions.userId, userId));
+      console.log(`✅ Deleted subscriptions`);
+
+      // Delete payments
+      await db.delete(payments).where(eq(payments.userId, userId));
+      console.log(`✅ Deleted payments`);
+
+      // Delete trial activations
+      await db
+        .delete(trialActivations)
+        .where(eq(trialActivations.userId, userId));
+      console.log(`✅ Deleted trial activations`);
+
+      // Delete user activities
+      await db.delete(userActivities).where(eq(userActivities.userId, userId));
+      console.log(`✅ Deleted user activities`);
+
+      // Step 5: Finally, delete the user
+      await db.delete(users).where(eq(users.id, userId));
+      console.log(`✅ Deleted user account`);
+
+      console.log(
+        `🎯 [DELETE ACCOUNT] Cascade deletion completed for user: ${userId}`
+      );
+    } catch (error) {
+      console.error(
+        `❌ [DELETE ACCOUNT] Error during cascade deletion:`,
+        error
+      );
+      throw new Error("Failed to delete account. Please contact support.");
+    }
   }
 
   async getRecentActivities(limit: number = 50): Promise<any[]> {

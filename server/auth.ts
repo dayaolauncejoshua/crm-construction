@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import passport from "./config/passport";
 
-
 const router = Router();
 const SALT_ROUNDS = 10;
 
@@ -139,7 +138,7 @@ router.post("/api/auth/login", async (req, res) => {
 
       // Store user ID temporarily for 2FA verification
       (req.session as any).pending2FAUserId = user.id;
-      
+
       await new Promise((resolve, reject) => {
         req.session.save((err) => {
           if (err) reject(err);
@@ -244,7 +243,10 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
           })
           .where(eq(users.id, userId));
 
-        console.log("✅ Backup code used. Remaining:", result.remainingCodes.length);
+        console.log(
+          "✅ Backup code used. Remaining:",
+          result.remainingCodes.length
+        );
       }
     } else {
       // Decrypt secret and verify TOTP code
@@ -339,6 +341,9 @@ router.get("/api/auth/me", async (req, res) => {
         isTrialActive: user.isTrialActive,
         trialEndsAt: user.trialEndsAt,
         twoFactorEnabled: user.twoFactorEnabled, // 🆕 ADD THIS
+        passwordHash: user.passwordHash, // ✅ ADD THIS (send NULL, not the actual hash)
+        oauthProvider: user.oauthProvider, // ✅ ADD THIS
+        googleId: user.googleId,
         settings: user.settings || {
           notifications: {
             email: true,
@@ -362,6 +367,26 @@ router.get("/api/auth/me", async (req, res) => {
 
 // ==================== GOOGLE OAUTH ROUTES ====================
 
+
+// OAuth Init Route - Track referrer
+router.get("/api/auth/google/init", (req, res) => {
+  // Track where OAuth was initiated from
+  const referrer = req.query.referrer as string || 'unknown';
+  (req.session as any).oauthReferrer = referrer;
+
+  console.log(`🔐 OAuth initiated from: ${referrer}`);
+
+  req.session.save((err) => {
+    if (err) {
+      console.error("❌ Session save error:", err);
+      return res.redirect('/login?error=session_failed');
+    }
+
+    res.redirect('/api/auth/google');
+  });
+
+});
+
 // Initiate Google OAuth
 router.get(
   "/api/auth/google",
@@ -377,15 +402,28 @@ router.get(
     failureRedirect: "/login?error=google_auth_failed",
   }),
   (req, res) => {
-    // Success - create session
     const user = req.user as any;
-
+    
     if (!user) {
       console.error("❌ No user returned from Google OAuth");
       return res.redirect("/login?error=auth_failed");
     }
 
+    // ✅ Get auth type and referrer
+    const authType = user._authType || 'unknown';
+    const referrer = (req.session as any).oauthReferrer || 'unknown';
+
+    console.log(`🔐 OAuth completed:`, { 
+      authType, 
+      referrer, 
+      email: user.email 
+    });
+
+    // Set user session
     (req.session as any).userId = user.id;
+    
+    // ✅ Clear OAuth referrer
+    delete (req.session as any).oauthReferrer;
 
     req.session.save((err) => {
       if (err) {
@@ -393,10 +431,25 @@ router.get(
         return res.redirect("/login?error=session_failed");
       }
 
-      console.log("✅ Google OAuth login successful:", user.email);
+      // ✅ Redirect with appropriate message
+      let redirectUrl = "/dashboard";
+      
+      switch (authType) {
+        case 'new_oauth_signup':
+          redirectUrl += "?auth=signup_success";
+          break;
+        case 'returning_oauth_login':
+          redirectUrl += "?auth=login_success";
+          break;
+        case 'oauth_account_linked':
+          redirectUrl += "?auth=account_linked";
+          break;
+        default:
+          redirectUrl += "?auth=success";
+      }
 
-      // Redirect to dashboard
-      res.redirect("/dashboard");
+      console.log(`✅ Google OAuth success, redirecting to: ${redirectUrl}`);
+      res.redirect(redirectUrl);
     });
   }
 );

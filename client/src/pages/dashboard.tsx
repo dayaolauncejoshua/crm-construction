@@ -52,6 +52,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { title } from "process";
+import { useToast } from "@/hooks/use-toast";
 
 
 
@@ -59,6 +61,52 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
+  const {toast} = useToast();
+
+  useEffect(() =>{
+    const params = new URLSearchParams(window.location.search);
+    const authStatus = params.get("auth");
+
+    if (authStatus) {
+      // Clear URL parameter
+      window.history.replaceState({}, "", window.location.pathname);
+
+      // Show appropriate message
+      switch (authStatus) {
+        case "signup_success":
+          toast({
+            title: "🎉 Welcome to LeadFlow CRM!",
+            description: "Your account has been created successfully with Google.",
+            duration: 5000,
+          });
+          break;
+        
+        case "login_success":
+          toast({
+            title: "👋 Welcome back!",
+            description: "You've been successfully logged in with Google.",
+            duration: 4000,
+          });
+          break;
+        
+        case "account_linked":
+          toast({
+            title: "🔗 Account Linked!",
+            description: "Your Google account has been connected to your existing account.",
+            duration: 5000,
+          });
+          break;
+
+        default:
+          toast({
+            title: "✅ Authentication Successful",
+            description: "You're now logged in.",
+            duration: 3000,
+          });
+      }
+    }
+
+  }, [toast])
 
   usePageTitle(
     user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard"

@@ -24,7 +24,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,16 @@ export default function Settings() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
+
+  //Account Deletion States
+  const [deletePassword, setDeletePassword] = useState("");
+  const [delete2FACode, setDelete2FACode] = useState("");
+  const [deleteConfirmChecked, setDeleteConfirmChecked] = useState(false);
+
+  const [showDeletionProgress, setShowDeletionProgress] = useState(false);
+  const [deletionStep, setDeletionStep] = useState(0);
+  const [deletionComplete, setDeletionComplete] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState(5);
 
   // Get user initials
   const getUserInitials = () => {
@@ -376,6 +386,78 @@ export default function Settings() {
         title: "Error",
         description: error.message,
         variant: "destructive",
+      });
+    },
+  });
+
+  // Enhanced Delete Account Mutation with Progress
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      // Show progress modal immediately
+      setShowDeletionProgress(true);
+      setDeletionStep(0);
+
+      // Simulate step progression for UX (actual deletion happens on backend)
+      const steps = [
+        "Verifying credentials...",
+        "Canceling subscription...",
+        "Deleting conversations...",
+        "Deleting leads and clients...",
+        "Removing bookings...",
+        "Clearing analytics...",
+        "Finalizing deletion...",
+      ];
+
+      // Progress through steps with delays for UX
+      for (let i = 0; i < steps.length; i++) {
+        setDeletionStep(i);
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+
+      // Make actual API call
+      const response = await fetch("/api/user/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: deletePassword,
+          twoFactorCode: user?.twoFactorEnabled ? delete2FACode : undefined,
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete account");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      setDeletionStep(7); // Final step
+      setDeletionComplete(true);
+
+      // Start countdown
+      let count = 5;
+      const countdownInterval = setInterval(() => {
+        count--;
+        setRedirectCountdown(count);
+
+        if (count <= 0) {
+          clearInterval(countdownInterval);
+          window.location.href = "/";
+        }
+      }, 1000);
+    },
+    onError: (error: Error) => {
+      setShowDeletionProgress(false);
+      setDeletionStep(0);
+      setDeletionComplete(false);
+
+      toast({
+        title: "Deletion Failed",
+        description: error.message,
+        variant: "destructive",
+        duration: 6000,
       });
     },
   });
@@ -1130,65 +1212,73 @@ export default function Settings() {
 
             {/* Activity Log */}
             <Card className="border-2">
-  <CardHeader className="flex flex-row items-center justify-between">
-    <div className="space-y-1">
-      <CardTitle className="text-lg">Activity Log</CardTitle>
-      <CardDescription>
-        A log of recent security-related activity on your account.
-      </CardDescription>
-    </div>
-    <Button 
-        variant="outline" 
-        size="sm" 
-        onClick={() => setLocation('/settings/activity')}
-    >
-      View Full Log
-    </Button>
-  </CardHeader>
-  <CardContent>
-    {isActivityLoading ? (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-      </div>
-    ) : activityError ? (
-      <div className="text-red-600 text-sm">Failed to load activity log.</div>
-    ) : activityData?.activities && activityData.activities.length > 0 ? (
-      <TooltipProvider>
-        <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
-          {activityData.activities.map((activity) => (
-            <div key={activity.id} className="flex items-start gap-4">
-              <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center mt-1">
-                {getActivityIcon(activity.action)}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-slate-800">
-                  {formatActionText(activity.action)}
-                </p>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <p className="text-xs text-slate-500 cursor-default">
-                      {formatDistanceToNow(new Date(activity.createdAt), {
-                        addSuffix: true,
-                      })}
-                    </p>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{formatFullDate(activity.createdAt)}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          ))}
-        </div>
-      </TooltipProvider>
-    ) : (
-      <p className="text-sm text-slate-500 text-center p-4">
-        No recent activity found.
-      </p>
-    )}
-  </CardContent>
-  
-</Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg">Activity Log</CardTitle>
+                  <CardDescription>
+                    A log of recent security-related activity on your account.
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocation("/settings/activity")}
+                >
+                  View Full Log
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {isActivityLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  </div>
+                ) : activityError ? (
+                  <div className="text-red-600 text-sm">
+                    Failed to load activity log.
+                  </div>
+                ) : activityData?.activities &&
+                  activityData.activities.length > 0 ? (
+                  <TooltipProvider>
+                    <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
+                      {activityData.activities.map((activity) => (
+                        <div
+                          key={activity.id}
+                          className="flex items-start gap-4"
+                        >
+                          <div className="w-8 h-8 flex-shrink-0 bg-slate-100 rounded-full flex items-center justify-center mt-1">
+                            {getActivityIcon(activity.action)}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-slate-800">
+                              {formatActionText(activity.action)}
+                            </p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <p className="text-xs text-slate-500 cursor-default">
+                                  {formatDistanceToNow(
+                                    new Date(activity.createdAt),
+                                    {
+                                      addSuffix: true,
+                                    }
+                                  )}
+                                </p>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{formatFullDate(activity.createdAt)}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TooltipProvider>
+                ) : (
+                  <p className="text-sm text-slate-500 text-center p-4">
+                    No recent activity found.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ========== NOTIFICATIONS TAB ========== */}
@@ -1449,7 +1539,7 @@ export default function Settings() {
                         Delete Account
                       </p>
                       <p className="text-sm text-slate-500">
-                        Permanently delete account and data
+                        Permanently delete account and all data
                       </p>
                     </div>
                     <AlertDialog>
@@ -1463,20 +1553,139 @@ export default function Settings() {
                           Delete Account
                         </Button>
                       </AlertDialogTrigger>
-                      <AlertDialogContent>
+                      <AlertDialogContent className="max-w-lg">
                         <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Are you absolutely sure?
+                          <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertCircle className="w-5 h-5" />
+                            Delete Account Permanently?
                           </AlertDialogTitle>
                           <AlertDialogDescription>
-                            This action cannot be undone. This will permanently
-                            delete your account and remove all your data.
+                            This action <strong>cannot be undone</strong>. This
+                            will permanently delete your account and remove all
+                            your data.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
+
+                        <div className="py-4 space-y-4">
+                          {/* Warning Box */}
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-xs font-semibold text-red-900 mb-2">
+                              ⚠️ What will be deleted:
+                            </p>
+                            <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
+                              <li>All personal information</li>
+                              <li>All clients and leads</li>
+                              <li>All conversations and messages</li>
+                              <li>All bookings and calendar data</li>
+                              <li>All analytics and reports</li>
+                              <li>Payment and subscription history</li>
+                            </ul>
+                          </div>
+
+                          {/* Password Input - Only show if user has password */}
+                          {(user as any)?.passwordHash !== null &&
+                          (user as any)?.passwordHash !== undefined ? (
+                            <div className="space-y-2">
+                              <Label htmlFor="deletePassword">
+                                Confirm Password
+                              </Label>
+                              <Input
+                                id="deletePassword"
+                                type="password"
+                                value={deletePassword}
+                                onChange={(e) =>
+                                  setDeletePassword(e.target.value)
+                                }
+                                placeholder="Enter your password"
+                              />
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <p className="text-sm text-blue-900">
+                                <strong>Note:</strong> You signed up with{" "}
+                                {(user as any)?.oauthProvider === "google"
+                                  ? "Google"
+                                  : "OAuth"}
+                                . No password verification required.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 2FA Input (conditional) */}
+                          {user?.twoFactorEnabled && (
+                            <div className="space-y-2">
+                              <Label htmlFor="delete2FACode">
+                                Two-Factor Code
+                              </Label>
+                              <Input
+                                id="delete2FACode"
+                                value={delete2FACode}
+                                onChange={(e) =>
+                                  setDelete2FACode(
+                                    e.target.value
+                                      .replace(/\D/g, "")
+                                      .slice(0, 6)
+                                  )
+                                }
+                                placeholder="000000"
+                                maxLength={6}
+                                className="text-center text-2xl tracking-widest font-mono"
+                              />
+                            </div>
+                          )}
+
+                          {/* Confirmation Checkbox */}
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              id="deleteConfirm"
+                              checked={deleteConfirmChecked}
+                              onChange={(e) =>
+                                setDeleteConfirmChecked(e.target.checked)
+                              }
+                              className="mt-1"
+                            />
+                            <Label
+                              htmlFor="deleteConfirm"
+                              className="text-sm cursor-pointer"
+                            >
+                              I understand this action is permanent and cannot
+                              be undone
+                            </Label>
+                          </div>
+                        </div>
+
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction className="bg-red-600 hover:bg-red-700">
-                            Delete Account
+                          <AlertDialogCancel
+                            onClick={() => {
+                              setDeletePassword("");
+                              setDelete2FACode("");
+                              setDeleteConfirmChecked(false);
+                            }}
+                          >
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteAccountMutation.mutate()}
+                            disabled={
+                              ((user as any)?.passwordHash !== null &&
+                                (user as any)?.passwordHash !== undefined &&
+                                !deletePassword) || // Only require password if account has one
+                              !deleteConfirmChecked ||
+                              (user?.twoFactorEnabled &&
+                                delete2FACode.length !== 6) ||
+                              deleteAccountMutation.isPending
+                            }
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            {deleteAccountMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                Deleting...
+                              </>
+                            ) : (
+                              "Delete My Account"
+                            )}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -1702,22 +1911,181 @@ export default function Settings() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => disable2FAMutation.mutate(disablePassword)}
-              disabled={!disablePassword || disable2FAMutation.isPending}
+              onClick={() => {
+                deleteAccountMutation.mutate();
+              }}
+              disabled={
+                !deletePassword ||
+                !deleteConfirmChecked ||
+                (user?.twoFactorEnabled && delete2FACode.length !== 6) ||
+                deleteAccountMutation.isPending
+              }
               className="bg-red-600 hover:bg-red-700"
             >
-              {disable2FAMutation.isPending ? (
+              {deleteAccountMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Disabling...
+                  Starting...
                 </>
               ) : (
-                "Disable 2FA"
+                "Delete My Account"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ✅ NEW: Deletion Progress Modal */}
+      <Dialog open={showDeletionProgress} onOpenChange={() => {}}>
+        <DialogContent
+          className="max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {deletionComplete ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  Account Deleted
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin text-red-600" />
+                  Deleting Your Account
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {deletionComplete
+                ? "Your account has been permanently deleted."
+                : "Please wait while we remove all your data..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-6 space-y-4">
+            {!deletionComplete ? (
+              <>
+                {/* Progress Steps */}
+                <div className="space-y-3">
+                  {[
+                    { icon: Shield, text: "Verifying credentials" },
+                    { icon: RefreshCw, text: "Canceling subscription" },
+                    { icon: MessageSquare, text: "Deleting conversations" },
+                    { icon: User, text: "Deleting leads and clients" },
+                    { icon: Calendar, text: "Removing bookings" },
+                    { icon: BarChart3, text: "Clearing analytics" },
+                    { icon: Zap, text: "Finalizing deletion" },
+                  ].map((step, index) => {
+                    const Icon = step.icon;
+                    const isActive = deletionStep === index;
+                    const isComplete = deletionStep > index;
+
+                    return (
+                      <div
+                        key={index}
+                        className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
+                          isActive
+                            ? "bg-red-50 border border-red-200"
+                            : isComplete
+                            ? "bg-green-50 border border-green-200"
+                            : "bg-slate-50 border border-slate-200"
+                        }`}
+                      >
+                        <div
+                          className={`flex-shrink-0 ${
+                            isActive
+                              ? "text-red-600"
+                              : isComplete
+                              ? "text-green-600"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {isComplete ? (
+                            <CheckCircle2 className="w-5 h-5" />
+                          ) : isActive ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Icon className="w-5 h-5" />
+                          )}
+                        </div>
+                        <span
+                          className={`text-sm font-medium ${
+                            isActive
+                              ? "text-red-900"
+                              : isComplete
+                              ? "text-green-900"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {step.text}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-500 ease-out"
+                    style={{ width: `${((deletionStep + 1) / 7) * 100}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Completion Screen */}
+                <div className="text-center space-y-4">
+                  <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="w-10 h-10 text-green-600" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold text-slate-900">
+                      All Done!
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Your account and all associated data have been permanently
+                      deleted.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                      <strong>Check your email</strong> for confirmation and
+                      details about what was deleted.
+                    </p>
+                  </div>
+
+                  {/* Countdown */}
+                  <div className="pt-4 space-y-2">
+                    <div className="flex items-center justify-center gap-2 text-slate-600">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">
+                        Redirecting in{" "}
+                        <strong className="text-slate-900">
+                          {redirectCountdown}
+                        </strong>{" "}
+                        seconds...
+                      </span>
+                    </div>
+
+                    <Button
+                      onClick={() => (window.location.href = "/")}
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                    >
+                      Go to Home Now
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -67,6 +67,10 @@ passport.use(
             })
             .where(eq(users.id, existingUser.id));
 
+          // ✅ Mark as returning user
+          (existingUser as any)._authType = "returning_oauth_login";
+          console.log("🔄 Auth type: returning_oauth_login");
+
           return done(null, existingUser);
         }
 
@@ -93,6 +97,10 @@ passport.use(
             .where(eq(users.id, existingUser.id))
             .returning();
 
+            // Mark as acount linking
+            (updatedUser as any)._authType = 'oauth_account_linked';
+            console.log("🔗 Auth type: oauth_account_linked");
+
           return done(null, updatedUser);
         }
 
@@ -116,6 +124,10 @@ passport.use(
           .returning();
 
         console.log("✅ New Google user created:", newUser.email);
+
+        // Mark as new signup
+        (newUser as any)._authType = 'new_oauth_signup';
+        console.log("🆕 Auth type: new_oauth_signup")
 
         return done(null, newUser);
       } catch (error: any) {

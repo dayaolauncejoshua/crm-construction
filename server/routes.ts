@@ -12,6 +12,8 @@ import {
   insertClientSchema,
   insertBookingSchema,
   messages,
+  subscriptions,
+  users,
 } from "@shared/schema";
 
 import { whatsappService } from "./services/whatsapp";
@@ -27,7 +29,7 @@ import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 
 import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 
 // import vslapp from "./routes/vsl.route2";
@@ -630,362 +632,418 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ============================ DASHBOARD ROUTES  ==============================
 
-// Dashboard data
-app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const requestUser = req.user!;
+  // Dashboard data
+  app.get("/api/dashboard/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
 
-    console.log(`\n========================================`);
-    console.log(`📊 [DASHBOARD] Fetching data for client: ${clientId}`);
-    console.log(`👤 [DASHBOARD] Requested by user: ${requestUser.id} (${requestUser.email})`);
-    console.log(`========================================\n`);
+      console.log(`\n========================================`);
+      console.log(`📊 [DASHBOARD] Fetching data for client: ${clientId}`);
+      console.log(
+        `👤 [DASHBOARD] Requested by user: ${requestUser.id} (${requestUser.email})`
+      );
+      console.log(`========================================\n`);
 
-    // Verify access
-    if (requestUser.role !== "super_admin") {
-      const client = await storage.getClient(clientId);
-      if (!client || client.userId !== requestUser.id) {
-        console.error(
-          `❌ [DASHBOARD] Access denied for user ${requestUser.id}`
+      // Verify access
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          console.error(
+            `❌ [DASHBOARD] Access denied for user ${requestUser.id}`
+          );
+          return res.status(403).json({ message: "Access denied" });
+        }
+        console.log(`✅ [DASHBOARD] Client verified: ${client.name}`);
+      }
+
+      // ✅ FIXED: Renamed to avoid collision
+      const rawLeads = await storage.getLeads(clientId, 1000);
+      const rawConversations = await storage.getConversations(clientId, 1000);
+      const rawBookings = await storage.getBookings(clientId);
+
+      console.log(`\n📊 [DASHBOARD] RAW DATA CHECK:`);
+      console.log(`  - Total Leads in DB: ${rawLeads.length}`);
+      console.log(`  - Total Conversations in DB: ${rawConversations.length}`);
+      console.log(`  - Total Bookings in DB: ${rawBookings.length}`);
+
+      if (rawLeads.length > 0) {
+        console.log(`\n🔍 [DASHBOARD] Sample Lead Data:`);
+        console.log(`  - First Lead ID: ${rawLeads[0].id}`);
+        console.log(
+          `  - First Lead Name: ${rawLeads[0].firstName} ${rawLeads[0].lastName}`
         );
-        return res.status(403).json({ message: "Access denied" });
-      }
-      console.log(`✅ [DASHBOARD] Client verified: ${client.name}`);
-    }
+        console.log(`  - First Lead Created: ${rawLeads[0].createdAt}`);
+        console.log(`  - First Lead Client ID: ${rawLeads[0].clientId}`);
+        console.log(`  - First Lead Status: ${rawLeads[0].status}`);
+        console.log(
+          `  - First Lead Response Time: ${rawLeads[0].responseTimeSeconds}s`
+        );
 
-    // ✅ FIXED: Renamed to avoid collision
-    const rawLeads = await storage.getLeads(clientId, 1000);
-    const rawConversations = await storage.getConversations(clientId, 1000);
-    const rawBookings = await storage.getBookings(clientId);
-    
-    console.log(`\n📊 [DASHBOARD] RAW DATA CHECK:`);
-    console.log(`  - Total Leads in DB: ${rawLeads.length}`);
-    console.log(`  - Total Conversations in DB: ${rawConversations.length}`);
-    console.log(`  - Total Bookings in DB: ${rawBookings.length}`);
-    
-    if (rawLeads.length > 0) {
-      console.log(`\n🔍 [DASHBOARD] Sample Lead Data:`);
-      console.log(`  - First Lead ID: ${rawLeads[0].id}`);
-      console.log(`  - First Lead Name: ${rawLeads[0].firstName} ${rawLeads[0].lastName}`);
-      console.log(`  - First Lead Created: ${rawLeads[0].createdAt}`);
-      console.log(`  - First Lead Client ID: ${rawLeads[0].clientId}`);
-      console.log(`  - First Lead Status: ${rawLeads[0].status}`);
-      console.log(`  - First Lead Response Time: ${rawLeads[0].responseTimeSeconds}s`);
-      
-      // ✅ FIXED: Check for null before creating Date
-      if (rawLeads[0].createdAt) {
-        const now = new Date();
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        const leadDate = new Date(rawLeads[0].createdAt);
-        const isWithin30Days = leadDate >= thirtyDaysAgo;
-        
-        console.log(`\n📅 [DASHBOARD] Date Check:`);
-        console.log(`  - Now: ${now.toISOString()}`);
-        console.log(`  - 30 Days Ago: ${thirtyDaysAgo.toISOString()}`);
-        console.log(`  - First Lead Date: ${leadDate.toISOString()}`);
-        console.log(`  - Is Within 30 Days? ${isWithin30Days ? '✅ YES' : '❌ NO'}`);
-      } else {
-        console.warn(`  - ⚠️ First Lead has no createdAt date!`);
-      }
-    }
-    console.log(`\n========================================\n`);
+        // ✅ FIXED: Check for null before creating Date
+        if (rawLeads[0].createdAt) {
+          const now = new Date();
+          const thirtyDaysAgo = new Date(
+            now.getTime() - 30 * 24 * 60 * 60 * 1000
+          );
+          const leadDate = new Date(rawLeads[0].createdAt);
+          const isWithin30Days = leadDate >= thirtyDaysAgo;
 
-    // Fetch dashboard data with error handling
-    const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
-      await Promise.all([
-        storage.getKPIs(clientId).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching KPIs:", err.message);
-          return {
-            totalLeads: 0,
-            conversionRate: 0,
-            avgResponseTime: 0,
-            aiHandledPercentage: 0,
-            totalLeadsChange: 0,
-            conversionRateChange: 0,
-            avgResponseTimeChange: 0,
-            aiHandledPercentageChange: 0,
-            convertedLeads: 0,
-            aiAvgResponseTime: 0,
-            humanAvgResponseTime: 0,
-          };
-        }),
-        storage.getConversations(clientId, 50).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching conversations:", err.message);
-          return [];
-        }),
-        storage.getHotLeads(clientId).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching hot leads:", err.message);
-          return [];
-        }),
-        storage.getRecentActivity(clientId).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching recent activity:", err.message);
-          return [];
-        }),
-        storage.getLeads(clientId, 100).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching leads:", err.message);
-          return [];
-        }),
-        storage.getBookings(clientId).catch((err) => {
-          console.error("❌ [DASHBOARD] Error fetching bookings:", err.message);
-          return [];
-        }),
+          console.log(`\n📅 [DASHBOARD] Date Check:`);
+          console.log(`  - Now: ${now.toISOString()}`);
+          console.log(`  - 30 Days Ago: ${thirtyDaysAgo.toISOString()}`);
+          console.log(`  - First Lead Date: ${leadDate.toISOString()}`);
+          console.log(
+            `  - Is Within 30 Days? ${isWithin30Days ? "✅ YES" : "❌ NO"}`
+          );
+        } else {
+          console.warn(`  - ⚠️ First Lead has no createdAt date!`);
+        }
+      }
+      console.log(`\n========================================\n`);
+
+      // Fetch dashboard data with error handling
+      const [kpis, conversations, hotLeads, recentActivity, leads, bookings] =
+        await Promise.all([
+          storage.getKPIs(clientId).catch((err) => {
+            console.error("❌ [DASHBOARD] Error fetching KPIs:", err.message);
+            return {
+              totalLeads: 0,
+              conversionRate: 0,
+              avgResponseTime: 0,
+              aiHandledPercentage: 0,
+              totalLeadsChange: 0,
+              conversionRateChange: 0,
+              avgResponseTimeChange: 0,
+              aiHandledPercentageChange: 0,
+              convertedLeads: 0,
+              aiAvgResponseTime: 0,
+              humanAvgResponseTime: 0,
+            };
+          }),
+          storage.getConversations(clientId, 50).catch((err) => {
+            console.error(
+              "❌ [DASHBOARD] Error fetching conversations:",
+              err.message
+            );
+            return [];
+          }),
+          storage.getHotLeads(clientId).catch((err) => {
+            console.error(
+              "❌ [DASHBOARD] Error fetching hot leads:",
+              err.message
+            );
+            return [];
+          }),
+          storage.getRecentActivity(clientId).catch((err) => {
+            console.error(
+              "❌ [DASHBOARD] Error fetching recent activity:",
+              err.message
+            );
+            return [];
+          }),
+          storage.getLeads(clientId, 100).catch((err) => {
+            console.error("❌ [DASHBOARD] Error fetching leads:", err.message);
+            return [];
+          }),
+          storage.getBookings(clientId).catch((err) => {
+            console.error(
+              "❌ [DASHBOARD] Error fetching bookings:",
+              err.message
+            );
+            return [];
+          }),
+        ]);
+
+      console.log("\n✅ [DASHBOARD] Data fetched successfully:");
+      console.log("  - KPIs:", JSON.stringify(kpis, null, 2));
+      console.log("  - Conversations:", conversations.length);
+      console.log("  - Hot Leads:", hotLeads.length);
+      console.log("  - Recent Activity:", recentActivity.length);
+      console.log("  - Leads:", leads.length);
+      console.log("  - Bookings:", bookings.length);
+      console.log("\n========================================\n");
+
+      const conversationMap = new Map(conversations.map((c) => [c.id, c]));
+      hotLeads.forEach((hl) => {
+        if (!conversationMap.has(hl.id)) {
+          conversationMap.set(hl.id, hl);
+        }
+      });
+
+      // ✅ FIXED: Different variable name
+      const allConversations = Array.from(conversationMap.values());
+
+      res.json({
+        kpis,
+        conversations: allConversations,
+        hotLeads,
+        recentActivity,
+        leads,
+        bookings,
+      });
+    } catch (error: any) {
+      console.error("❌ [DASHBOARD] Fatal error:", error);
+      console.error("Stack trace:", error.stack);
+      res.status(500).json({
+        error: error.message,
+        details:
+          process.env.NODE_ENV === "development" ? error.stack : undefined,
+      });
+    }
+  });
+
+  // =========================== ANALYTICS ROUTES =================================
+  // Analytics data endpoint
+  app.get("/api/analytics/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const { timeRange = "30" } = req.query; // days
+      const requestUser = req.user!;
+
+      console.log(
+        `📊 [ANALYTICS] Fetching for client: ${clientId}, range: ${timeRange} days`
+      );
+
+      // Verify access
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const days = parseInt(timeRange as string, 10);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      // Fetch all data
+      const [leads, conversations, bookings] = await Promise.all([
+        storage.getLeads(clientId, 1000),
+        storage.getAllConversations(clientId),
+        storage.getBookings(clientId),
       ]);
 
-    console.log("\n✅ [DASHBOARD] Data fetched successfully:");
-    console.log("  - KPIs:", JSON.stringify(kpis, null, 2));
-    console.log("  - Conversations:", conversations.length);
-    console.log("  - Hot Leads:", hotLeads.length);
-    console.log("  - Recent Activity:", recentActivity.length);
-    console.log("  - Leads:", leads.length);
-    console.log("  - Bookings:", bookings.length);
-    console.log("\n========================================\n");
+      // Filter by date range
+      const filteredLeads = leads.filter(
+        (l) => new Date(l.createdAt!) >= startDate
+      );
+      const filteredConversations = conversations.filter(
+        (c) => new Date(c.createdAt!) >= startDate
+      );
+      const filteredBookings = bookings.filter(
+        (b) => new Date(b.createdAt!) >= startDate
+      );
 
-    const conversationMap = new Map(conversations.map((c) => [c.id, c]));
-    hotLeads.forEach((hl) => {
-      if (!conversationMap.has(hl.id)) {
-        conversationMap.set(hl.id, hl);
-      }
-    });
-    
-    // ✅ FIXED: Different variable name
-    const allConversations = Array.from(conversationMap.values());
+      console.log(
+        `📊 [ANALYTICS] Filtered data: ${filteredLeads.length} leads, ${filteredConversations.length} conversations`
+      );
 
-    res.json({
-      kpis,
-      conversations: allConversations,
-      hotLeads,
-      recentActivity,
-      leads,
-      bookings,
-    });
-  } catch (error: any) {
-    console.error("❌ [DASHBOARD] Fatal error:", error);
-    console.error("Stack trace:", error.stack);
-    res.status(500).json({ 
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
+      // ===== 1. LEAD TREND (Daily) =====
+      const leadTrendMap = new Map<string, number>();
+      filteredLeads.forEach((lead) => {
+        const dateKey = new Date(lead.createdAt!).toISOString().split("T")[0];
+        leadTrendMap.set(dateKey, (leadTrendMap.get(dateKey) || 0) + 1);
+      });
 
- // =========================== ANALYTICS ROUTES =================================
- // Analytics data endpoint
-app.get("/api/analytics/:clientId", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const { timeRange = "30" } = req.query; // days
-    const requestUser = req.user!;
+      const leadTrend = Array.from(leadTrendMap.entries())
+        .map(([date, count]) => ({
+          date,
+          leads: count,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 
-    console.log(`📊 [ANALYTICS] Fetching for client: ${clientId}, range: ${timeRange} days`);
+      // ===== 2. RESPONSE TIME BY HOUR =====
+      const responseTimeByHour = Array.from({ length: 24 }, (_, i) => ({
+        hour: i,
+        hourLabel:
+          i === 0
+            ? "12 AM"
+            : i < 12
+            ? `${i} AM`
+            : i === 12
+            ? "12 PM"
+            : `${i - 12} PM`,
+        totalTime: 0,
+        count: 0,
+        avgTime: 0,
+      }));
 
-    // Verify access
-    if (requestUser.role !== "super_admin") {
-      const client = await storage.getClient(clientId);
-      if (!client || client.userId !== requestUser.id) {
-        return res.status(403).json({ message: "Access denied" });
-      }
-    }
+      filteredLeads.forEach((lead) => {
+        if (lead.responseTimeSeconds && lead.createdAt) {
+          const hour = new Date(lead.createdAt).getHours();
+          responseTimeByHour[hour].totalTime += lead.responseTimeSeconds;
+          responseTimeByHour[hour].count += 1;
+        }
+      });
 
-    const days = parseInt(timeRange as string, 10);
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+      responseTimeByHour.forEach((hourData) => {
+        hourData.avgTime =
+          hourData.count > 0
+            ? Math.round(hourData.totalTime / hourData.count)
+            : 0;
+      });
 
-    // Fetch all data
-    const [leads, conversations, bookings] = await Promise.all([
-      storage.getLeads(clientId, 1000),
-      storage.getAllConversations(clientId),
-      storage.getBookings(clientId),
-    ]);
-
-    // Filter by date range
-    const filteredLeads = leads.filter(
-      (l) => new Date(l.createdAt!) >= startDate
-    );
-    const filteredConversations = conversations.filter(
-      (c) => new Date(c.createdAt!) >= startDate
-    );
-    const filteredBookings = bookings.filter(
-      (b) => new Date(b.createdAt!) >= startDate
-    );
-
-    console.log(`📊 [ANALYTICS] Filtered data: ${filteredLeads.length} leads, ${filteredConversations.length} conversations`);
-
-    // ===== 1. LEAD TREND (Daily) =====
-    const leadTrendMap = new Map<string, number>();
-    filteredLeads.forEach((lead) => {
-      const dateKey = new Date(lead.createdAt!).toISOString().split("T")[0];
-      leadTrendMap.set(dateKey, (leadTrendMap.get(dateKey) || 0) + 1);
-    });
-
-    const leadTrend = Array.from(leadTrendMap.entries())
-      .map(([date, count]) => ({
-        date,
-        leads: count,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    // ===== 2. RESPONSE TIME BY HOUR =====
-    const responseTimeByHour = Array.from({ length: 24 }, (_, i) => ({
-      hour: i,
-      hourLabel: i === 0 ? "12 AM" : i < 12 ? `${i} AM` : i === 12 ? "12 PM" : `${i - 12} PM`,
-      totalTime: 0,
-      count: 0,
-      avgTime: 0,
-    }));
-
-    filteredLeads.forEach((lead) => {
-      if (lead.responseTimeSeconds && lead.createdAt) {
-        const hour = new Date(lead.createdAt).getHours();
-        responseTimeByHour[hour].totalTime += lead.responseTimeSeconds;
-        responseTimeByHour[hour].count += 1;
-      }
-    });
-
-    responseTimeByHour.forEach((hourData) => {
-      hourData.avgTime =
-        hourData.count > 0
-          ? Math.round(hourData.totalTime / hourData.count)
-          : 0;
-    });
-
-    // ===== 3. LEAD TEMPERATURE DISTRIBUTION =====
-    const temperatureMap = {
-      hot: 0,
-      warm: 0,
-      cold: 0,
-    };
-
-    filteredLeads.forEach((lead) => {
-      const temp = lead.temperature || "cold";
-      if (temp in temperatureMap) {
-        temperatureMap[temp as keyof typeof temperatureMap]++;
-      }
-    });
-
-    const temperatureData = [
-      { name: "Hot", value: temperatureMap.hot, color: "#ef4444" },
-      { name: "Warm", value: temperatureMap.warm, color: "#f59e0b" },
-      { name: "Cold", value: temperatureMap.cold, color: "#3b82f6" },
-    ];
-
-    // ===== 4. LEAD STATUS DISTRIBUTION =====
-    const statusMap = new Map<string, number>();
-    filteredLeads.forEach((lead) => {
-      const status = lead.status || "new";
-      statusMap.set(status, (statusMap.get(status) || 0) + 1);
-    });
-
-    const statusData = Array.from(statusMap.entries()).map(([status, count]) => ({
-      status,
-      count,
-      percentage: ((count / filteredLeads.length) * 100).toFixed(1),
-    }));
-
-    // ===== 5. AI PERFORMANCE METRICS =====
-    const aiConversations = filteredConversations.filter((c) => c.isAiHandled);
-    const humanConversations = filteredConversations.filter((c) => !c.isAiHandled);
-
-    const aiLeads = filteredLeads.filter((l) => {
-      const conv = filteredConversations.find((c) => c.leadId === l.id);
-      return conv?.isAiHandled;
-    });
-
-    const humanLeads = filteredLeads.filter((l) => {
-      const conv = filteredConversations.find((c) => c.leadId === l.id);
-      return conv && !conv.isAiHandled;
-    });
-
-    const aiAvgResponse =
-      aiLeads.length > 0
-        ? aiLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) / aiLeads.length
-        : 0;
-
-    const humanAvgResponse =
-      humanLeads.length > 0
-        ? humanLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) / humanLeads.length
-        : 0;
-
-    // AI Qualification Rate (leads with score >= 0.4)
-    const qualifiedByAI = aiLeads.filter(
-      (l) => parseFloat(l.qualificationScore || "0") >= 0.4
-    ).length;
-    const aiQualificationRate =
-      aiLeads.length > 0 ? (qualifiedByAI / aiLeads.length) * 100 : 0;
-
-    // Handoff Rate (% of AI conversations that became human)
-    const handoffCount = filteredConversations.filter(
-      (c) => c.isAiHandled === false && c.humanTakeoverAt
-    ).length;
-    const handoffRate =
-      filteredConversations.length > 0
-        ? (handoffCount / filteredConversations.length) * 100
-        : 0;
-
-    const aiPerformance = {
-      totalAiHandled: aiConversations.length,
-      totalHumanHandled: humanConversations.length,
-      aiPercentage:
-        filteredConversations.length > 0
-          ? ((aiConversations.length / filteredConversations.length) * 100).toFixed(1)
-          : "0",
-      aiAvgResponseTime: Math.round(aiAvgResponse),
-      humanAvgResponseTime: Math.round(humanAvgResponse),
-      aiQualificationRate: aiQualificationRate.toFixed(1),
-      handoffRate: handoffRate.toFixed(1),
-      aiSpeedAdvantage:
-        humanAvgResponse > 0
-          ? `${(((humanAvgResponse - aiAvgResponse) / humanAvgResponse) * 100).toFixed(0)}%`
-          : "N/A",
-    };
-
-    // ===== 6. BOOKING CONVERSION TIMELINE =====
-    const bookingTimeline = filteredBookings.map((booking) => {
-      const lead = leads.find((l) => l.id === booking.leadId);
-      if (!lead || !lead.createdAt) return null;
-
-      const leadCreated = new Date(lead.createdAt).getTime();
-      const bookingCreated = new Date(booking.createdAt!).getTime();
-      const hoursToBook = (bookingCreated - leadCreated) / (1000 * 60 * 60);
-
-      return {
-        leadId: lead.id,
-        leadName: `${lead.firstName} ${lead.lastName}`,
-        hoursToBook: Math.round(hoursToBook * 10) / 10,
-        bookingDate: booking.createdAt,
+      // ===== 3. LEAD TEMPERATURE DISTRIBUTION =====
+      const temperatureMap = {
+        hot: 0,
+        warm: 0,
+        cold: 0,
       };
-    }).filter(Boolean);
 
-    const avgTimeToBook =
-      bookingTimeline.length > 0
-        ? bookingTimeline.reduce((sum, b) => sum + (b?.hoursToBook || 0), 0) / bookingTimeline.length
-        : 0;
+      filteredLeads.forEach((lead) => {
+        const temp = lead.temperature || "cold";
+        if (temp in temperatureMap) {
+          temperatureMap[temp as keyof typeof temperatureMap]++;
+        }
+      });
 
-    console.log(`✅ [ANALYTICS] Data prepared successfully`);
+      const temperatureData = [
+        { name: "Hot", value: temperatureMap.hot, color: "#ef4444" },
+        { name: "Warm", value: temperatureMap.warm, color: "#f59e0b" },
+        { name: "Cold", value: temperatureMap.cold, color: "#3b82f6" },
+      ];
 
-    res.json({
-      timeRange: days,
-      summary: {
-        totalLeads: filteredLeads.length,
-        totalConversations: filteredConversations.length,
-        totalBookings: filteredBookings.length,
-        conversionRate:
-          filteredLeads.length > 0
-            ? ((filteredBookings.length / filteredLeads.length) * 100).toFixed(1)
+      // ===== 4. LEAD STATUS DISTRIBUTION =====
+      const statusMap = new Map<string, number>();
+      filteredLeads.forEach((lead) => {
+        const status = lead.status || "new";
+        statusMap.set(status, (statusMap.get(status) || 0) + 1);
+      });
+
+      const statusData = Array.from(statusMap.entries()).map(
+        ([status, count]) => ({
+          status,
+          count,
+          percentage: ((count / filteredLeads.length) * 100).toFixed(1),
+        })
+      );
+
+      // ===== 5. AI PERFORMANCE METRICS =====
+      const aiConversations = filteredConversations.filter(
+        (c) => c.isAiHandled
+      );
+      const humanConversations = filteredConversations.filter(
+        (c) => !c.isAiHandled
+      );
+
+      const aiLeads = filteredLeads.filter((l) => {
+        const conv = filteredConversations.find((c) => c.leadId === l.id);
+        return conv?.isAiHandled;
+      });
+
+      const humanLeads = filteredLeads.filter((l) => {
+        const conv = filteredConversations.find((c) => c.leadId === l.id);
+        return conv && !conv.isAiHandled;
+      });
+
+      const aiAvgResponse =
+        aiLeads.length > 0
+          ? aiLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) /
+            aiLeads.length
+          : 0;
+
+      const humanAvgResponse =
+        humanLeads.length > 0
+          ? humanLeads.reduce(
+              (sum, l) => sum + (l.responseTimeSeconds || 0),
+              0
+            ) / humanLeads.length
+          : 0;
+
+      // AI Qualification Rate (leads with score >= 0.4)
+      const qualifiedByAI = aiLeads.filter(
+        (l) => parseFloat(l.qualificationScore || "0") >= 0.4
+      ).length;
+      const aiQualificationRate =
+        aiLeads.length > 0 ? (qualifiedByAI / aiLeads.length) * 100 : 0;
+
+      // Handoff Rate (% of AI conversations that became human)
+      const handoffCount = filteredConversations.filter(
+        (c) => c.isAiHandled === false && c.humanTakeoverAt
+      ).length;
+      const handoffRate =
+        filteredConversations.length > 0
+          ? (handoffCount / filteredConversations.length) * 100
+          : 0;
+
+      const aiPerformance = {
+        totalAiHandled: aiConversations.length,
+        totalHumanHandled: humanConversations.length,
+        aiPercentage:
+          filteredConversations.length > 0
+            ? (
+                (aiConversations.length / filteredConversations.length) *
+                100
+              ).toFixed(1)
             : "0",
-        avgTimeToBook: avgTimeToBook.toFixed(1),
-      },
-      leadTrend,
-      responseTimeByHour: responseTimeByHour,
-      temperatureData,
-      statusData,
-      aiPerformance,
-      bookingTimeline: bookingTimeline.slice(0, 10), // Latest 10
-    });
-  } catch (error: any) {
-    console.error("❌ [ANALYTICS] Error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+        aiAvgResponseTime: Math.round(aiAvgResponse),
+        humanAvgResponseTime: Math.round(humanAvgResponse),
+        aiQualificationRate: aiQualificationRate.toFixed(1),
+        handoffRate: handoffRate.toFixed(1),
+        aiSpeedAdvantage:
+          humanAvgResponse > 0
+            ? `${(
+                ((humanAvgResponse - aiAvgResponse) / humanAvgResponse) *
+                100
+              ).toFixed(0)}%`
+            : "N/A",
+      };
+
+      // ===== 6. BOOKING CONVERSION TIMELINE =====
+      const bookingTimeline = filteredBookings
+        .map((booking) => {
+          const lead = leads.find((l) => l.id === booking.leadId);
+          if (!lead || !lead.createdAt) return null;
+
+          const leadCreated = new Date(lead.createdAt).getTime();
+          const bookingCreated = new Date(booking.createdAt!).getTime();
+          const hoursToBook = (bookingCreated - leadCreated) / (1000 * 60 * 60);
+
+          return {
+            leadId: lead.id,
+            leadName: `${lead.firstName} ${lead.lastName}`,
+            hoursToBook: Math.round(hoursToBook * 10) / 10,
+            bookingDate: booking.createdAt,
+          };
+        })
+        .filter(Boolean);
+
+      const avgTimeToBook =
+        bookingTimeline.length > 0
+          ? bookingTimeline.reduce((sum, b) => sum + (b?.hoursToBook || 0), 0) /
+            bookingTimeline.length
+          : 0;
+
+      console.log(`✅ [ANALYTICS] Data prepared successfully`);
+
+      res.json({
+        timeRange: days,
+        summary: {
+          totalLeads: filteredLeads.length,
+          totalConversations: filteredConversations.length,
+          totalBookings: filteredBookings.length,
+          conversionRate:
+            filteredLeads.length > 0
+              ? (
+                  (filteredBookings.length / filteredLeads.length) *
+                  100
+                ).toFixed(1)
+              : "0",
+          avgTimeToBook: avgTimeToBook.toFixed(1),
+        },
+        leadTrend,
+        responseTimeByHour: responseTimeByHour,
+        temperatureData,
+        statusData,
+        aiPerformance,
+        bookingTimeline: bookingTimeline.slice(0, 10), // Latest 10
+      });
+    } catch (error: any) {
+      console.error("❌ [ANALYTICS] Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // =========================== CONVERSATION ROUTES  =====================================
 
@@ -3125,245 +3183,426 @@ Could you suggest some alternative times that work for you? We'd love to find a 
   });
 
   // ==================== USER PROFILE & SETTINGS ROUTES ====================
-// Update user profile
-app.patch("/api/user/profile", requireAuth, async (req, res) => {
+  // Update user profile
+  app.patch("/api/user/profile", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { firstName, lastName, phone, bio } = req.body;
+
+      console.log("📝 Updating profile for user:", userId);
+
+      // Update user
+      const updatedUser = await storage.updateUser(userId, {
+        firstName,
+        lastName,
+        phone,
+        // bio can be stored in a separate preferences table or ignored for now
+        updatedAt: new Date(),
+      });
+
+      // Log activity
+      await storage.logUserActivity(userId, "profile_updated", "user", {
+        fields: Object.keys(req.body),
+      });
+
+      console.log("✅ Profile updated successfully");
+      res.json({
+        success: true,
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          phone: updatedUser.phone,
+        },
+      });
+    } catch (error: any) {
+      console.error("❌ Error updating profile:", error);
+      res.status(500).json({
+        message: error.message || "Failed to update profile",
+      });
+    }
+  });
+
+  // Change password (secure with bcrypt)
+  app.post("/api/user/change-password", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { currentPassword, newPassword } = req.body;
+
+      console.log("🔐 Password change requested for user:", userId);
+
+      // Validate input
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          message: "Current password and new password are required",
+        });
+      }
+
+      // ✅ SECURITY: Validate new password strength
+      if (newPassword.length < 8) {
+        return res.status(400).json({
+          message: "Password must be at least 8 characters long",
+        });
+      }
+
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({
+          message: "Password must contain at least one uppercase letter",
+        });
+      }
+
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({
+          message: "Password must contain at least one lowercase letter",
+        });
+      }
+
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({
+          message: "Password must contain at least one number",
+        });
+      }
+
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+        return res.status(400).json({
+          message: "Password must contain at least one special character",
+        });
+      }
+
+      // Get user from database
+      const user = await storage.getUserById(userId);
+      if (!user || !user.passwordHash) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // ✅ SECURITY: Verify current password
+      const isCurrentPasswordValid = await bcrypt.compare(
+        currentPassword,
+        user.passwordHash
+      );
+
+      if (!isCurrentPasswordValid) {
+        console.log("❌ Current password is incorrect");
+        // Log failed attempt
+        await storage.logUserActivity(
+          userId,
+          "password_change_failed",
+          "security",
+          {
+            reason: "incorrect_current_password",
+          }
+        );
+        return res.status(401).json({
+          message: "Current password is incorrect",
+        });
+      }
+
+      // ✅ SECURITY: Check if new password is different from current
+      const isSameAsOld = await bcrypt.compare(newPassword, user.passwordHash);
+      if (isSameAsOld) {
+        return res.status(400).json({
+          message: "New password must be different from current password",
+        });
+      }
+
+      // ✅ SECURITY: Hash new password with bcrypt (salt rounds: 12 for security)
+      const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+      // Update password
+      await storage.updateUser(userId, {
+        passwordHash: newPasswordHash,
+        updatedAt: new Date(),
+      });
+
+      // Log successful password change
+      await storage.logUserActivity(userId, "password_changed", "security", {
+        timestamp: new Date().toISOString(),
+      });
+
+      console.log("✅ Password changed successfully");
+      res.json({
+        success: true,
+        message: "Password changed successfully",
+      });
+    } catch (error: any) {
+      console.error("❌ Error changing password:", error);
+      res.status(500).json({
+        message: error.message || "Failed to change password",
+      });
+    }
+  });
+
+  // Update user preferences
+  app.patch("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const {
+        emailNotifications,
+        whatsappNotifications,
+        leadNotifications,
+        bookingNotifications,
+        weeklyReports,
+        timezone,
+        language,
+      } = req.body;
+
+      console.log("⚙️ Updating preferences for user:", userId);
+
+      // For now, we'll store preferences in user settings JSONB field
+      // You could also create a separate preferences table
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const currentSettings = (user.settings as any) || {};
+      const updatedSettings = {
+        ...currentSettings,
+        notifications: {
+          email: emailNotifications,
+          whatsapp: whatsappNotifications,
+          leads: leadNotifications,
+          bookings: bookingNotifications,
+          weeklyReports,
+        },
+        regional: {
+          timezone,
+          language,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+
+      await storage.updateUser(userId, {
+        settings: updatedSettings,
+        updatedAt: new Date(),
+      });
+
+      // Log activity
+      await storage.logUserActivity(userId, "preferences_updated", "user", {
+        preferencesChanged: Object.keys(req.body),
+      });
+
+      console.log("✅ Preferences updated successfully");
+      res.json({
+        success: true,
+        message: "Preferences updated successfully",
+      });
+    } catch (error: any) {
+      console.error("❌ Error updating preferences:", error);
+      res.status(500).json({
+        message: error.message || "Failed to update preferences",
+      });
+    }
+  });
+
+  app.get("/api/user/activity", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { type, startDate, endDate } = req.query;
+
+      console.log(
+        `[API] Fetching activity log for user: ${userId} with filters:`,
+        { type, startDate, endDate }
+      );
+
+      const filters = {
+        type: type as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      };
+
+      // Validate dates
+      if (filters.startDate && isNaN(filters.startDate.getTime())) {
+        filters.startDate = undefined;
+      }
+      if (filters.endDate && isNaN(filters.endDate.getTime())) {
+        filters.endDate = undefined;
+      }
+
+      // ✅ THIS IS THE FIX: Pass the 'filters' object as the second argument
+      const activities = await storage.getUserActivityLog(userId, filters);
+
+      res.json({ activities });
+    } catch (error) {
+      console.error("❌ Error fetching user activity:", error);
+      res.status(500).json({ message: "Failed to fetch user activity log" });
+    }
+  });
+
+ // ==================== ACCOUNT DELETION ROUTE ====================
+app.post("/api/user/delete-account", requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
-    const { firstName, lastName, phone, bio } = req.body;
+    const { password, twoFactorCode } = req.body;
 
-    console.log("📝 Updating profile for user:", userId);
-
-    // Update user
-    const updatedUser = await storage.updateUser(userId, {
-      firstName,
-      lastName,
-      phone,
-      // bio can be stored in a separate preferences table or ignored for now
-      updatedAt: new Date(),
-    });
-
-    // Log activity
-    await storage.logUserActivity(userId, "profile_updated", "user", {
-      fields: Object.keys(req.body),
-    });
-
-    console.log("✅ Profile updated successfully");
-    res.json({
-      success: true,
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        phone: updatedUser.phone,
-      },
-    });
-  } catch (error: any) {
-    console.error("❌ Error updating profile:", error);
-    res.status(500).json({
-      message: error.message || "Failed to update profile",
-    });
-  }
-});
-
-// Change password (secure with bcrypt)
-app.post("/api/user/change-password", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const { currentPassword, newPassword } = req.body;
-
-    console.log("🔐 Password change requested for user:", userId);
-
-    // Validate input
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        message: "Current password and new password are required",
-      });
-    }
-
-    // ✅ SECURITY: Validate new password strength
-    if (newPassword.length < 8) {
-      return res.status(400).json({
-        message: "Password must be at least 8 characters long",
-      });
-    }
-
-    if (!/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        message: "Password must contain at least one uppercase letter",
-      });
-    }
-
-    if (!/[a-z]/.test(newPassword)) {
-      return res.status(400).json({
-        message: "Password must contain at least one lowercase letter",
-      });
-    }
-
-    if (!/[0-9]/.test(newPassword)) {
-      return res.status(400).json({
-        message: "Password must contain at least one number",
-      });
-    }
-
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
-      return res.status(400).json({
-        message: "Password must contain at least one special character",
-      });
-    }
+    console.log(`🗑️ [DELETE ACCOUNT] Request received for user: ${userId}`);
 
     // Get user from database
-    const user = await storage.getUserById(userId);
-    if (!user || !user.passwordHash) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // ✅ SECURITY: Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(
-      currentPassword,
-      user.passwordHash
-    );
-
-    if (!isCurrentPasswordValid) {
-      console.log("❌ Current password is incorrect");
-      // Log failed attempt
-      await storage.logUserActivity(userId, "password_change_failed", "security", {
-        reason: "incorrect_current_password",
-      });
-      return res.status(401).json({
-        message: "Current password is incorrect",
-      });
-    }
-
-    // ✅ SECURITY: Check if new password is different from current
-    const isSameAsOld = await bcrypt.compare(newPassword, user.passwordHash);
-    if (isSameAsOld) {
-      return res.status(400).json({
-        message: "New password must be different from current password",
-      });
-    }
-
-    // ✅ SECURITY: Hash new password with bcrypt (salt rounds: 12 for security)
-    const newPasswordHash = await bcrypt.hash(newPassword, 12);
-
-    // Update password
-    await storage.updateUser(userId, {
-      passwordHash: newPasswordHash,
-      updatedAt: new Date(),
-    });
-
-    // Log successful password change
-    await storage.logUserActivity(userId, "password_changed", "security", {
-      timestamp: new Date().toISOString(),
-    });
-
-    console.log("✅ Password changed successfully");
-    res.json({
-      success: true,
-      message: "Password changed successfully",
-    });
-  } catch (error: any) {
-    console.error("❌ Error changing password:", error);
-    res.status(500).json({
-      message: error.message || "Failed to change password",
-    });
-  }
-});
-
-// Update user preferences
-app.patch("/api/user/preferences", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const {
-      emailNotifications,
-      whatsappNotifications,
-      leadNotifications,
-      bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
-    } = req.body;
-
-    console.log("⚙️ Updating preferences for user:", userId);
-
-    // For now, we'll store preferences in user settings JSONB field
-    // You could also create a separate preferences table
     const user = await storage.getUserById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const currentSettings = (user.settings as any) || {};
-    const updatedSettings = {
-      ...currentSettings,
-      notifications: {
-        email: emailNotifications,
-        whatsapp: whatsappNotifications,
-        leads: leadNotifications,
-        bookings: bookingNotifications,
-        weeklyReports,
-      },
-      regional: {
-        timezone,
-        language,
-      },
-      updatedAt: new Date().toISOString(),
-    };
-
-    await storage.updateUser(userId, {
-      settings: updatedSettings,
-      updatedAt: new Date(),
+    console.log(`🔍 [DELETE ACCOUNT] User info:`, {
+      email: user.email,
+      hasPassword: !!user.passwordHash,
+      oauthProvider: user.oauthProvider,
+      googleId: user.googleId,
     });
 
-    // Log activity
-    await storage.logUserActivity(userId, "preferences_updated", "user", {
-      preferencesChanged: Object.keys(req.body),
+    // ✅ IMPROVED: Determine authentication method
+    const isOAuthOnly = !user.passwordHash && (user.oauthProvider || user.googleId);
+    const hasPassword = !!user.passwordHash;
+
+    console.log(`🔐 [DELETE ACCOUNT] Auth type:`, {
+      isOAuthOnly,
+      hasPassword,
+      requiresPassword: hasPassword,
     });
 
-    console.log("✅ Preferences updated successfully");
+    // ✅ SECURITY CHECK 1: Verify password (if account has one)
+    if (hasPassword) {
+      if (!password) {
+        return res.status(400).json({
+          message: "Password is required to delete your account",
+        });
+      }
+
+      console.log(`🔐 [DELETE ACCOUNT] Verifying password...`);
+      
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash!);
+      
+      if (!isPasswordValid) {
+        console.log(`❌ [DELETE ACCOUNT] Invalid password for user: ${userId}`);
+        
+        // Log failed attempt
+        await storage.logUserActivity(userId, "account_deletion_failed", "security", {
+          reason: "incorrect_password",
+          timestamp: new Date().toISOString(),
+        });
+
+        return res.status(401).json({
+          message: "Incorrect password",
+        });
+      }
+
+      console.log(`✅ [DELETE ACCOUNT] Password verified`);
+    } else if (isOAuthOnly) {
+      // ✅ OAuth-only account: No password to verify
+      console.log(`✅ [DELETE ACCOUNT] OAuth-only account, skipping password check`);
+      
+      // For extra security, you could require them to re-authenticate via OAuth
+      // But for now, we'll allow deletion with just checkbox + 2FA (if enabled)
+    } else {
+      // Account has neither password nor OAuth? This shouldn't happen
+      console.error(`⚠️ [DELETE ACCOUNT] Account has no authentication method`);
+      return res.status(500).json({
+        message: "Account authentication error. Please contact support.",
+      });
+    }
+
+    // ✅ SECURITY CHECK 2: Verify 2FA if enabled
+    if (user.twoFactorEnabled) {
+      if (!twoFactorCode) {
+        return res.status(400).json({
+          message: "Two-factor authentication code is required",
+          requires2FA: true,
+        });
+      }
+
+      const { verify2FACode, decrypt2FASecret } = await import("./services/2fa-service");
+      
+      console.log(`🔐 [DELETE ACCOUNT] Decrypting 2FA secret...`);
+      const decryptedSecret = decrypt2FASecret(user.twoFactorSecret!);
+      
+      console.log(`🔍 [DELETE ACCOUNT] Verifying 2FA code...`);
+      const isValidCode = verify2FACode(decryptedSecret, twoFactorCode);
+
+      if (!isValidCode) {
+        console.log(`❌ [DELETE ACCOUNT] Invalid 2FA code for user: ${userId}`);
+        
+        await storage.logUserActivity(userId, "account_deletion_failed", "security", {
+          reason: "incorrect_2fa_code",
+          timestamp: new Date().toISOString(),
+        });
+
+        return res.status(401).json({
+          message: "Invalid two-factor authentication code",
+        });
+      }
+
+      console.log(`✅ [DELETE ACCOUNT] 2FA verified`);
+    }
+
+    // ✅ STEP 1: Cancel active Stripe subscription
+    try {
+      console.log(`💳 [DELETE ACCOUNT] Checking for active subscription...`);
+      
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.userId, userId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (subscription && subscription.stripeSubscriptionId && subscription.status === "active") {
+        console.log(`💳 [DELETE ACCOUNT] Canceling Stripe subscription: ${subscription.stripeSubscriptionId}`);
+        
+        const stripe = (await import("stripe")).default;
+        const stripeClient = new stripe(process.env.STRIPE_SECRET_KEY!);
+
+        await stripeClient.subscriptions.cancel(subscription.stripeSubscriptionId);
+        
+        console.log(`✅ [DELETE ACCOUNT] Stripe subscription canceled`);
+      } else {
+        console.log(`ℹ️ [DELETE ACCOUNT] No active subscription to cancel`);
+      }
+    } catch (stripeError) {
+      console.error(`⚠️ [DELETE ACCOUNT] Stripe cancellation error:`, stripeError);
+    }
+
+    // ✅ STEP 2: Send deletion confirmation email BEFORE deleting
+    try {
+      await emailService.sendAccountDeletionEmail({
+        to: user.email!,
+        toName: user.firstName || "User",
+      });
+      console.log(`✅ [DELETE ACCOUNT] Deletion email sent`);
+    } catch (emailError) {
+      console.error(`⚠️ [DELETE ACCOUNT] Email sending error:`, emailError);
+    }
+
+    // ✅ STEP 3: Log the deletion BEFORE actually deleting
+    await storage.logUserActivity(userId, "account_deleted", "user", {
+      email: user.email,
+      deletedAt: new Date().toISOString(),
+      authMethod: isOAuthOnly ? 'oauth_only' : hasPassword ? 'password' : 'unknown',
+      had2FA: user.twoFactorEnabled,
+      hadSubscription: !!user.stripeCustomerId,
+    });
+
+    // ✅ STEP 4: Cascade delete all user data
+    await storage.deleteUserAccount(userId);
+
+    // ✅ STEP 5: Destroy session
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Session destruction error:", err);
+      }
+    });
+
+    console.log(`🎯 [DELETE ACCOUNT] Account successfully deleted for user: ${userId}`);
+
     res.json({
       success: true,
-      message: "Preferences updated successfully",
+      message: "Your account has been permanently deleted",
     });
   } catch (error: any) {
-    console.error("❌ Error updating preferences:", error);
+    console.error(`❌ [DELETE ACCOUNT] Error:`, error);
     res.status(500).json({
-      message: error.message || "Failed to update preferences",
+      message: error.message || "Failed to delete account. Please contact support.",
     });
-  }
-});
-
-app.get("/api/user/activity", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const { type, startDate, endDate } = req.query;
-
-    console.log(
-      `[API] Fetching activity log for user: ${userId} with filters:`,
-      { type, startDate, endDate }
-    );
-
-    const filters = {
-      type: type as string | undefined,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-    };
-
-    // Validate dates
-    if (filters.startDate && isNaN(filters.startDate.getTime())) {
-      filters.startDate = undefined;
-    }
-    if (filters.endDate && isNaN(filters.endDate.getTime())) {
-      filters.endDate = undefined;
-    }
-
-    // ✅ THIS IS THE FIX: Pass the 'filters' object as the second argument
-    const activities = await storage.getUserActivityLog(userId, filters);
-
-    res.json({ activities });
-  } catch (error) {
-    console.error("❌ Error fetching user activity:", error);
-    res.status(500).json({ message: "Failed to fetch user activity log" });
   }
 });
 
