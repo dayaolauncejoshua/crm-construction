@@ -325,64 +325,103 @@ router.post(
   "/api/2fa/regenerate-backup-codes",
   requireAuth,
   async (req, res) => {
-    try {
-      const userId = (req.session as any).userId;
-      const { password } = req.body;
+   try{
+    const userId = (req.session as any).userId;
+    const { password, code } = req.body;
 
-      if (!password) {
-        return res.status(400).json({ error: "Password required" });
+    console.log(`🔄 [REGENERATE CODES] Request for user: ${userId}`);
+
+    // Get user
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found"});
+    }
+
+    if (!user.twoFactorEnabled || !user.twoFactorSecret){
+      return res.status(400).json({ error: "2FA is not enabled"});
+    }
+
+    // Determine account type
+    const isOAuthOnly = !user.passwordHash && user.oauthProvider;
+
+    console.log(`🔍 [REGENERATE CODES] Account type:`, {
+      hasPassword: !!user.passwordHash,
+      isOAuthOnly,
+    });
+
+    // ✅ STEP 1: Verify password (if account has one)
+    if (user.passwordHash){
+      if(!password) {
+         return res.status(400).json({ error: "Password required" });
       }
 
-      // Get user
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-
-      if (!user || !user.passwordHash) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      if (!user.twoFactorEnabled) {
-        return res.status(400).json({ error: "2FA is not enabled" });
-      }
-
-      // Verify password
       const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-      if (!isPasswordValid) {
+      if(!isPasswordValid){
+        console.log(`❌ [REGENERATE CODES] Invalid password`);
+
+        await storage.logUserActivity(userId, "backup_codes_regenerate_failed", "security", {
+          reason: "incorrect_password",
+          timestamp: new Date().toISOString(),
+        });
+
         return res.status(401).json({ error: "Incorrect password" });
       }
 
-      // Generate new backup codes
-      const { codes, hashedCodes } = await generateBackupCodes();
-
-      // Update backup codes
-      await db
-        .update(users)
-        .set({
-          twoFactorBackupCodes: hashedCodes,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
-
-      await storage.logUserActivity(
-        userId,
-        "2fa_backup_codes_regenerated",
-        "security",
-        {
-          timestamp: new Date().toISOString(),
-        }
-      );
-
-      console.log("✅ Backup codes regenerated for user:", userId);
-
-      res.json({
-        success: true,
-        backupCodes: codes,
-        message: "New backup codes generated",
-      });
-    } catch (error: any) {
-      console.error("❌ Backup codes regeneration error:", error);
-      res.status(500).json({ error: "Failed to regenerate backup codes" });
+      console.log(`✅ [REGENERATE CODES] Password verified`);
+    } else {
+      console.log(`ℹ️ [REGENERATE CODES] OAuth-only account, skipping password check`)
     }
-  }
-);
+
+    // ✅ STEP 2: Verify current 2FA code (REQUIRED for ALL accounts)
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ error: "Current 2FA code required" });
+    }
+
+    const decryptSecret = decrypt2FASecret(user.twoFactorSecret);
+    const isValidCode = verify2FACode(decryptSecret, code);
+
+    if (!isValidCode) {
+      console.log(`❌ [REGENERATE CODES] Invalid 2FA code`);
+
+      await storage.logUserActivity(userId, "backup_codes_regenerate_failed", "security", {
+        reason: "incorrect_2fa_code",
+        timestamp: new Date().toISOString(),
+      });
+
+      return res.status(401).json({ error: "Invalid 2FA code"});
+    }
+
+    console.log(`✅ [REGENERATE CODES] 2FA code verified`);
+
+    // Step 3: Generate new backup codes
+    const { codes, hashedCodes } = await generateBackupCodes();
+
+    // Update backup codes
+    await db.update(users).set({
+      twoFactorBackupCodes: hashedCodes,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId));
+
+    // Log the action
+    await storage.logUserActivity(userId, "2fa_backup_codes_regenerated", "security", {
+      timestamp: new Date().toISOString(),
+      accountType: isOAuthOnly ? "oauth" : "password",
+    });
+
+    console.log(`✅ [REGENERATE CODES] Backup codes regenerated for user: ${userId}`)
+
+    res.json({
+      success: true,
+      backupCodes: codes,
+      message: "New backup codes generated successfully",
+    });
+
+   } catch (error: any) {
+    console.error("❌ [REGENERATE CODES] Error:", error);
+    res.status(500).json({ error: "Failed to regenerate backup codes"});
+   }
+  
+});
 
 export default router;
