@@ -7,7 +7,7 @@ import { WebSocketServer } from "ws";
 import { spamPatternLearning } from "./spamPatternLearning";
 import { detectBookingIntent, extractLeadDetails } from "./openai";
 import type { InsertBooking } from "../../shared/schema";
-
+import { notificationService } from "./notification-sevice";
 // ✅ Constants
 const BOOKING_CONFIDENCE_THRESHOLD = 0.8;
 const BOOKING_INTEREST_THRESHOLD = 0.5;
@@ -175,8 +175,6 @@ function getSmartDaySuggestions(): string {
   }
 }
 
-
-
 // ✅ NEW: Validate booking details
 function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
   const missing: string[] = [];
@@ -275,58 +273,67 @@ export class LeadQualificationService {
   }
 
   private async trackResponseTime(
-  conversationId: string,
-  leadId: string,
-  sender: "ai" | "human"
-): Promise<void> {
-  try {
-    // Get all messages in conversation
-    const messages = await storage.getMessages(conversationId);
-    
-   // Find first lead message (filter out nulls)
-    const firstLeadMessage = messages
-      .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
-      .sort((a, b) => {
-        // ✅ Safe: we already filtered out nulls above
-        const timeA = new Date(a.sentAt!).getTime();
-        const timeB = new Date(b.sentAt!).getTime();
-        return timeA - timeB;
-      })[0];
-    
-     // Find first response (AI or human) - filter out nulls
-    const firstResponse = messages
-      .filter((m) => (m.sender === "ai" || m.sender === "human") && m.sentAt !== null)
-      .sort((a, b) => {
-        const timeA = new Date(a.sentAt!).getTime();
-        const timeB = new Date(b.sentAt!).getTime();
-        return timeA - timeB;
-      })[0];
-    
-    // If this is the FIRST response to the lead
-    if (firstLeadMessage && !firstResponse) {
-      const sentAt = firstLeadMessage.sentAt;
-      if (!sentAt) {
-        console.log("⚠️ First lead message has no sentAt timestamp");
-        return;
+    conversationId: string,
+    leadId: string,
+    sender: "ai" | "human"
+  ): Promise<void> {
+    try {
+      // Get all messages in conversation
+      const messages = await storage.getMessages(conversationId);
+
+      // Find first lead message (filter out nulls)
+      const firstLeadMessage = messages
+        .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
+        .sort((a, b) => {
+          // ✅ Safe: we already filtered out nulls above
+          const timeA = new Date(a.sentAt!).getTime();
+          const timeB = new Date(b.sentAt!).getTime();
+          return timeA - timeB;
+        })[0];
+
+      // Find first response (AI or human) - filter out nulls
+      const firstResponse = messages
+        .filter(
+          (m) =>
+            (m.sender === "ai" || m.sender === "human") && m.sentAt !== null
+        )
+        .sort((a, b) => {
+          const timeA = new Date(a.sentAt!).getTime();
+          const timeB = new Date(b.sentAt!).getTime();
+          return timeA - timeB;
+        })[0];
+
+      // If this is the FIRST response to the lead
+      if (firstLeadMessage && !firstResponse) {
+        const sentAt = firstLeadMessage.sentAt;
+        if (!sentAt) {
+          console.log("⚠️ First lead message has no sentAt timestamp");
+          return;
+        }
+
+        const leadMessageTime = new Date(sentAt);
+        const responseTime = new Date();
+        const responseTimeSeconds = Math.round(
+          (responseTime.getTime() - leadMessageTime.getTime()) / 1000
+        );
+
+        console.log(
+          `⏱️ ${sender.toUpperCase()} Response time: ${responseTimeSeconds}s (${(
+            responseTimeSeconds / 60
+          ).toFixed(1)} min)`
+        );
+
+        // Save to lead
+        await storage.updateLead(leadId, {
+          responseTimeSeconds,
+        });
+
+        console.log(`✅ Response time saved to lead ${leadId}`);
       }
-      
-      const leadMessageTime = new Date(sentAt);
-      const responseTime = new Date();
-      const responseTimeSeconds = Math.round((responseTime.getTime() - leadMessageTime.getTime()) / 1000);
-      
-      console.log(`⏱️ ${sender.toUpperCase()} Response time: ${responseTimeSeconds}s (${(responseTimeSeconds / 60).toFixed(1)} min)`);
-      
-      // Save to lead
-      await storage.updateLead(leadId, {
-        responseTimeSeconds,
-      });
-      
-      console.log(`✅ Response time saved to lead ${leadId}`);
+    } catch (error) {
+      console.error("❌ Error tracking response time:", error);
     }
-  } catch (error) {
-    console.error("❌ Error tracking response time:", error);
   }
-}
 
   async processNewLead(leadId: string): Promise<void> {
     try {
@@ -772,6 +779,8 @@ export class LeadQualificationService {
         // ============================================
         if (qualification.needsHumanAttention || qualification.score >= 0.7) {
           console.log("🔥 HOT LEAD - Immediate human handoff");
+          console.log("🔥 HOT LEAD SCORE:", qualification.score); // ✅ ADD THIS
+          console.log("🔥 QUALIFICATION:", qualification);
 
           await storage.updateConversation(conversation.id, {
             isAiHandled: false,
@@ -800,6 +809,36 @@ export class LeadQualificationService {
             },
             qualification,
           });
+
+          const client = await storage.getClient(lead.clientId);
+          if (client && client.userId) {
+            // ✅ Check userId exists
+            await notificationService.sendHotLeadAlert({
+              userId: client.userId,
+              lead: {
+                id: updatedLead?.id || "", // ✅ Fallback to original lead.id
+                firstName: updatedLead?.firstName || "",
+                lastName: updatedLead?.lastName || "",
+                email: updatedLead?.email || "",
+                phone: updatedLead?.phone || "",
+                company: updatedLead?.company || "",
+                qualificationScore: updatedLead?.qualificationScore || "0.7",
+                temperature: updatedLead?.temperature || "hot",
+              },
+              conversation: {
+                id: conversation.id, // ✅ Already a number
+                qualificationScore: qualification.score.toString(),
+              },
+              qualification: {
+                score: qualification.score,
+                reasoning: qualification.reasoning,
+              },
+            });
+          } else {
+            console.log(
+              "⚠️ Cannot send notification: client or userId missing"
+            );
+          }
 
           const handoffMessage =
             "Thanks for your message! You've been identified as a priority lead. A team member will respond within 5 minutes.";
@@ -1121,6 +1160,32 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
+            // ✅ ADD THIS: Send booking notifications
+            const client = await storage.getClient(lead.clientId);
+            if (client && client.userId) {
+              // ✅ Check userId exists
+              await notificationService.sendBookingAlert({
+                userId: client.userId, // ✅ Now guaranteed to be string
+                booking: {
+                  id: savedBooking.id, // ✅ Keep as number
+                  title: savedBooking.title || "", // ✅ Fallback
+                  scheduledFor: savedBooking.scheduledFor,
+                  location: savedBooking.location || "TBD",
+                  attendeeName: savedBooking.attendeeName || "", // ✅ Fallback
+                  attendeePhone: savedBooking.attendeePhone || "", // ✅ Fallback
+                  attendeeEmail: savedBooking.attendeeEmail || "", // ✅ Fallback
+                  meetingType: savedBooking.meetingType || "consultation", // ✅ Fallback
+                  aiConfidence: savedBooking.aiConfidence || "0.8",
+                },
+                lead: {
+                  firstName: lead.firstName || "",
+                  lastName: lead.lastName || "",
+                  company: lead.company || "",
+                  phone: lead.phone || "", // ✅ Fallback
+                },
+              });
+            }
+
             // Send confirmation to lead
             const confirmationMessage = `Excellent! I've requested a ${
               bookingIntent.meetingType === "site-visit"
@@ -1257,7 +1322,6 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
         );
 
         await this.trackResponseTime(conversation.id, lead.id, "ai");
-
 
         await storage.createMessage({
           conversationId: conversation.id,

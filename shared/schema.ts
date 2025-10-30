@@ -70,6 +70,12 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").default(true),
   settings: jsonb("settings").default(sql`'{}'::jsonb`),
 
+  emailNotifications: boolean("email_notifications").default(true),
+  whatsappNotifications: boolean("whatsapp_notifications").default(false),
+  leadNotifications: boolean("lead_notifications").default(true),
+  bookingNotifications: boolean("booking_notifications").default(true),
+  weeklyReports: boolean("weekly_reports").default(true),
+
   // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -5,14 +5,31 @@ class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
+
+    // ✅ FIX: Add explicit host configuration
+    const emailHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const emailPort = parseInt(process.env.EMAIL_PORT || "587");
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASSWORD;
+
+    console.log("📧 [EMAIL SERVICE] Initializing with:", {
+      host: emailHost,
+      port: emailPort,
+      user: emailUser,
+      secure: false,
+    });
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT || "587"),
+      host: emailHost,
+      port: emailPort,
       secure: false,
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
+        user: emailUser,
+        pass: emailPass,
       },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
   }
 
