@@ -113,6 +113,12 @@ export default function Settings() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // ✅ ADD THESE: Set Password States (for OAuth users)
+const [oauthNewPassword, setOauthNewPassword] = useState("");
+const [oauthConfirmPassword, setOauthConfirmPassword] = useState("");
+const [showOauthNewPassword, setShowOauthNewPassword] = useState(false);
+const [showOauthConfirmPassword, setShowOauthConfirmPassword] = useState(false);
+
   // Notification Preferences
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [whatsappNotifications, setWhatsappNotifications] = useState(true);
@@ -133,6 +139,7 @@ export default function Settings() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
+  const [disable2FACode, setDisable2FACode] = useState("");
 
   //Account Deletion States
   const [deletePassword, setDeletePassword] = useState("");
@@ -172,7 +179,7 @@ export default function Settings() {
     onSuccess: async () => {
       await refreshUser();
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-
+      refetchActivity();
       toast({
         title: "Success",
         description: "Your profile has been updated successfully.",
@@ -203,6 +210,7 @@ export default function Settings() {
       return response.json();
     },
     onSuccess: () => {
+      refetchActivity();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -212,8 +220,49 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
+      refetchActivity();
       toast({
         title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Set Password Mutation (for OAuth users)
+  const setPasswordMutation = useMutation({
+    mutationFn: async (data: { newPassword: string }) => {
+      const response = await fetch("/api/user/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to set password");
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      refetchActivity();
+      await refreshUser();
+
+      setOauthNewPassword("");
+      setOauthConfirmPassword("");
+
+      toast({
+        title: "Password Set Successfully!",
+        description: "You can now login with your email and password.",
+        duration: 5000,
+      });
+    },
+    onError: (error: Error) => {
+      refetchActivity();
+      toast({
+        title: "Failed to Set Password",
         description: error.message,
         variant: "destructive",
       });
@@ -237,6 +286,7 @@ export default function Settings() {
     },
     onSuccess: async () => {
       await refreshUser();
+      refetchActivity();
       toast({
         title: "Success",
         description: "Your preferences have been updated.",
@@ -309,6 +359,7 @@ export default function Settings() {
       return response.json();
     },
     onSuccess: async (data) => {
+      refetchActivity();
       setBackupCodes(data.backupCodes);
       setShowBackupCodes(true);
       setShow2FASetupModal(false);
@@ -319,6 +370,7 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
+      refetchActivity();
       toast({
         title: "Error",
         description: error.message,
@@ -328,12 +380,15 @@ export default function Settings() {
   });
 
   const disable2FAMutation = useMutation({
-    mutationFn: async (password: string) => {
+    mutationFn: async () => {
       const response = await fetch("/api/2fa/disable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          password: disablePassword,
+          code: disable2FACode,
+        }),
       });
       if (!response.ok) {
         const error = await response.json();
@@ -342,8 +397,10 @@ export default function Settings() {
       return response.json();
     },
     onSuccess: async () => {
+      refetchActivity();
       setShow2FADisableDialog(false);
       setDisablePassword("");
+      setDisable2FACode("");
       await refreshUser();
       toast({
         title: "2FA Disabled",
@@ -351,6 +408,7 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
+      refetchActivity();
       toast({
         title: "Error",
         description: error.message,
@@ -374,6 +432,7 @@ export default function Settings() {
       return response.json();
     },
     onSuccess: (data) => {
+      refetchActivity();
       setBackupCodes(data.backupCodes);
       setShowBackupCodes(true);
       toast({
@@ -449,6 +508,7 @@ export default function Settings() {
       }, 1000);
     },
     onError: (error: Error) => {
+      refetchActivity();
       setShowDeletionProgress(false);
       setDeletionStep(0);
       setDeletionComplete(false);
@@ -594,6 +654,7 @@ export default function Settings() {
     data: activityData,
     isLoading: isActivityLoading,
     error: activityError,
+    refetch: refetchActivity,
   } = useQuery<{ activities: any[] }>({
     queryKey: ["/api/user/activity"],
   });
@@ -874,167 +935,337 @@ export default function Settings() {
           {/* ========== SECURITY TAB ========== */}
           <TabsContent value="security" className="space-y-7">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Change Password Card */}
-              <Card className="border-2">
-                <CardHeader>
-                  <CardTitle className="text-lg">Change Password</CardTitle>
-                  <CardDescription>
-                    Update your password to keep your account secure
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Password Requirements Alert */}
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <Shield className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div className="text-xs text-blue-900">
-                        <p className="font-semibold mb-1">
-                          Password Requirements:
-                        </p>
-                        <ul className="space-y-0.5 text-xs">
-                          <li>• 8+ characters</li>
-                          <li>• Upper & lowercase letters</li>
-                          <li>• At least one number</li>
-                          <li>• At least one special character</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="currentPassword"
-                        type={showCurrentPassword ? "text" : "password"}
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="Enter current password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowCurrentPassword(!showCurrentPassword)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {showCurrentPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="newPassword"
-                        type={showNewPassword ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Enter new password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {showNewPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                    {newPassword && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-600">Strength:</span>
-                          <span
-                            className={`font-semibold ${passwordStrength.color}`}
-                          >
-                            {passwordStrength.strength}
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${
-                              passwordStrength.percentage < 40
-                                ? "bg-red-500"
-                                : passwordStrength.percentage < 70
-                                ? "bg-yellow-500"
-                                : "bg-green-500"
-                            }`}
-                            style={{ width: `${passwordStrength.percentage}%` }}
-                          />
+              {/* ========== CHANGE PASSWORD OR SET PASSWORD CARD ========== */}
+              {(user as any)?.passwordHash ? (
+                // ✅ EXISTING: Change Password Card (for users with password)
+                <Card className="border-2">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Change Password</CardTitle>
+                    <CardDescription>
+                      Update your password to keep your account secure
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Password Requirements Alert */}
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Shield className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-blue-900">
+                          <p className="font-semibold mb-1">
+                            Password Requirements:
+                          </p>
+                          <ul className="space-y-0.5 text-xs">
+                            <li>• 8+ characters</li>
+                            <li>• Upper & lowercase letters</li>
+                            <li>• At least one number</li>
+                            <li>• At least one special character</li>
+                          </ul>
                         </div>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">
-                      Confirm New Password
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="confirmPassword"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm new password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowConfirmPassword(!showConfirmPassword)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
                     </div>
-                    {confirmPassword && newPassword !== confirmPassword && (
-                      <p className="text-xs text-red-600">
-                        Passwords do not match
-                      </p>
-                    )}
-                  </div>
 
-                  <div className="flex justify-end pt-4 border-t">
-                    <Button
-                      onClick={handleChangePassword}
-                      disabled={
-                        changePasswordMutation.isPending ||
-                        !currentPassword ||
-                        !newPassword ||
-                        !confirmPassword ||
-                        newPassword !== confirmPassword
-                      }
-                      className="bg-gradient-construction hover:opacity-90 text-white gap-2"
-                    >
-                      {changePasswordMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-4 h-4" />
-                          Update Password
-                        </>
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="currentPassword"
+                          type={showCurrentPassword ? "text" : "password"}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          placeholder="Enter current password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowCurrentPassword(!showCurrentPassword)
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showCurrentPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="newPassword"
+                          type={showNewPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showNewPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      {newPassword && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-600">Strength:</span>
+                            <span
+                              className={`font-semibold ${passwordStrength.color}`}
+                            >
+                              {passwordStrength.strength}
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${
+                                passwordStrength.percentage < 40
+                                  ? "bg-red-500"
+                                  : passwordStrength.percentage < 70
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
+                              }`}
+                              style={{
+                                width: `${passwordStrength.percentage}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">
+                        Confirm New Password
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowConfirmPassword(!showConfirmPassword)
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      {confirmPassword && newPassword !== confirmPassword && (
+                        <p className="text-xs text-red-600">
+                          Passwords do not match
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t">
+                      <Button
+                        onClick={handleChangePassword}
+                        disabled={
+                          changePasswordMutation.isPending ||
+                          !currentPassword ||
+                          !newPassword ||
+                          !confirmPassword ||
+                          newPassword !== confirmPassword
+                        }
+                        className="bg-gradient-construction hover:opacity-90 text-white gap-2"
+                      >
+                        {changePasswordMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4" />
+                            Update Password
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+  // ✅ NEW: Set Password Card (for OAuth users without password)
+  <Card className="border-2">
+    <CardHeader>
+      <CardTitle className="text-lg">Set a Password</CardTitle>
+      <CardDescription>
+        Add password login as backup authentication method
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {/* Info Box - Why set password */}
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-start gap-2">
+          <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-blue-900">
+            <p className="font-semibold mb-1">Why set a password?</p>
+            <ul className="space-y-0.5">
+              <li>• Login with email if Google is unavailable</li>
+              <li>• Backup authentication method</li>
+              <li>• More account recovery options</li>
+              <li>• You can still use Google sign-in</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Password Requirements */}
+      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+        <p className="text-xs font-semibold text-slate-700 mb-1">
+          Password Requirements:
+        </p>
+        <ul className="space-y-0.5 text-xs text-slate-600">
+          <li>• 8+ characters</li>
+          <li>• Upper & lowercase letters</li>
+          <li>• At least one number</li>
+          <li>• At least one special character</li>
+        </ul>
+      </div>
+
+      {/* New Password Input */}
+      <div className="space-y-2">
+        <Label htmlFor="oauthNewPassword">New Password</Label>
+        <div className="relative">
+          <Input
+            id="oauthNewPassword"
+            type={showOauthNewPassword ? "text" : "password"}
+            value={oauthNewPassword}
+            onChange={(e) => setOauthNewPassword(e.target.value)}
+            placeholder="Enter new password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowOauthNewPassword(!showOauthNewPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            {showOauthNewPassword ? (
+              <EyeOff className="w-4 h-4" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+        {oauthNewPassword && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-600">Strength:</span>
+              <span className={`font-semibold ${getPasswordStrength(oauthNewPassword).color}`}>
+                {getPasswordStrength(oauthNewPassword).strength}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  getPasswordStrength(oauthNewPassword).percentage < 40
+                    ? "bg-red-500"
+                    : getPasswordStrength(oauthNewPassword).percentage < 70
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
+                }`}
+                style={{ width: `${getPasswordStrength(oauthNewPassword).percentage}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm Password Input */}
+      <div className="space-y-2">
+        <Label htmlFor="oauthConfirmPassword">Confirm Password</Label>
+        <div className="relative">
+          <Input
+            id="oauthConfirmPassword"
+            type={showOauthConfirmPassword ? "text" : "password"}
+            value={oauthConfirmPassword}
+            onChange={(e) => setOauthConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowOauthConfirmPassword(!showOauthConfirmPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            {showOauthConfirmPassword ? (
+              <EyeOff className="w-4 h-4" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+        {oauthConfirmPassword && oauthNewPassword !== oauthConfirmPassword && (
+          <p className="text-xs text-red-600">Passwords do not match</p>
+        )}
+      </div>
+
+      {/* Submit Button */}
+      <div className="flex justify-end pt-4 border-t">
+        <Button
+          onClick={() => {
+            // Validate password
+            const validation = validatePassword(oauthNewPassword);
+            if (!validation.valid) {
+              toast({
+                title: "Invalid Password",
+                description: validation.message,
+                variant: "destructive",
+              });
+              return;
+            }
+
+            // Check passwords match
+            if (oauthNewPassword !== oauthConfirmPassword) {
+              toast({
+                title: "Error",
+                description: "Passwords do not match",
+                variant: "destructive",
+              });
+              return;
+            }
+
+            // Submit
+            setPasswordMutation.mutate({ newPassword: oauthNewPassword });
+          }}
+          disabled={
+            setPasswordMutation.isPending ||
+            !oauthNewPassword ||
+            !oauthConfirmPassword ||
+            oauthNewPassword !== oauthConfirmPassword
+          }
+          className="bg-gradient-construction hover:opacity-90 text-white gap-2"
+        >
+          {setPasswordMutation.isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Setting Password...
+            </>
+          ) : (
+            <>
+              <Lock className="w-4 h-4" />
+              Set Password
+            </>
+          )}
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+)}
 
               {/* 🆕 Two-Factor Authentication Card */}
               <Card className="border-2">
@@ -1889,46 +2120,91 @@ export default function Settings() {
               Disable Two-Factor Authentication?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will make your account less secure. Enter your password to
-              confirm.
+              This will make your account less secure. Please verify your
+              identity.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="py-4">
-            <Label htmlFor="disablePassword">Password</Label>
-            <Input
-              id="disablePassword"
-              type="password"
-              value={disablePassword}
-              onChange={(e) => setDisablePassword(e.target.value)}
-              placeholder="Enter your password"
-              className="mt-2"
-            />
+          <div className="py-4 space-y-4">
+            {/* ✅ Security Notice */}
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Shield className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-yellow-900">
+                  <p className="font-semibold mb-1">
+                    Security Verification Required
+                  </p>
+                  <p>
+                    {(user as any)?.passwordHash
+                      ? "Enter your password and current 2FA code to confirm."
+                      : "Enter your current 2FA code to confirm (no password needed for Google accounts)."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ✅ Password Input (only if account has password) */}
+            {(user as any)?.passwordHash && (
+              <div className="space-y-2">
+                <Label htmlFor="disablePassword">Password</Label>
+                <Input
+                  id="disablePassword"
+                  type="password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+              </div>
+            )}
+
+            {/* ✅ 2FA Code Input (REQUIRED for ALL accounts) */}
+            <div className="space-y-2">
+              <Label htmlFor="disable2FACode">Current 2FA Code</Label>
+              <Input
+                id="disable2FACode"
+                value={disable2FACode}
+                onChange={(e) =>
+                  setDisable2FACode(
+                    e.target.value.replace(/\D/g, "").slice(0, 6)
+                  )
+                }
+                placeholder="000000"
+                maxLength={6}
+                className="text-center text-2xl tracking-widest font-mono"
+              />
+              <p className="text-xs text-slate-500">
+                Enter the 6-digit code from your authenticator app
+              </p>
+            </div>
           </div>
 
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDisablePassword("")}>
+            <AlertDialogCancel
+              onClick={() => {
+                setDisablePassword("");
+                setDisable2FACode("");
+              }}
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                deleteAccountMutation.mutate();
+                disable2FAMutation.mutate();
               }}
               disabled={
-                !deletePassword ||
-                !deleteConfirmChecked ||
-                (user?.twoFactorEnabled && delete2FACode.length !== 6) ||
-                deleteAccountMutation.isPending
+                ((user as any)?.passwordHash && !disablePassword) || // Password required if account has one
+                disable2FACode.length !== 6 || // 2FA code always required
+                disable2FAMutation.isPending
               }
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleteAccountMutation.isPending ? (
+              {disable2FAMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Starting...
+                  Disabling...
                 </>
               ) : (
-                "Delete My Account"
+                "Disable 2FA"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

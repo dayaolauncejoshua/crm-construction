@@ -4,6 +4,7 @@ import { db } from "../db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import { storage } from "../storage";
 import {
   generate2FASecret,
   verify2FACode,
@@ -12,6 +13,7 @@ import {
   encrypt2FASecret,
   decrypt2FASecret,
 } from "../services/2fa-service";
+import { timestamp } from "drizzle-orm/mysql-core";
 
 const router = Router();
 
@@ -38,9 +40,10 @@ router.post("/api/2fa/setup", requireAuth, async (req, res) => {
 
     // Check if 2FA already enabled
     if (user.twoFactorEnabled) {
-      return res.status(400).json({ 
-        error: "2FA is already enabled. Please disable it first to set up again.",
-        alreadyEnabled: true 
+      return res.status(400).json({
+        error:
+          "2FA is already enabled. Please disable it first to set up again.",
+        alreadyEnabled: true,
       });
     }
 
@@ -93,6 +96,11 @@ router.post("/api/2fa/verify-setup", requireAuth, async (req, res) => {
     const isValid = verify2FACode(pendingSecret, code);
 
     if (!isValid) {
+      await storage.logUserActivity(userId, "2fa_enable_failed", "security", {
+        reason: "incorrect_code",
+        timestamp: new Date().toISOString(),
+      });
+
       return res.status(401).json({ error: "Invalid verification code" });
     }
 
@@ -112,6 +120,12 @@ router.post("/api/2fa/verify-setup", requireAuth, async (req, res) => {
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
+
+    // Add this: Log 2FA enable action
+    await storage.logUserActivity(userId, "2fa_enabled", "security", {
+      timestamp: new Date().toISOString(),
+      method: "totp",
+    });
 
     // Clear pending secret from session
     delete (req.session as any).pendingTwoFactorSecret;
@@ -169,7 +183,10 @@ router.post("/api/2fa/verify", async (req, res) => {
           })
           .where(eq(users.id, userId));
 
-        console.log("✅ Backup code used. Remaining:", result.remainingCodes.length);
+        console.log(
+          "✅ Backup code used. Remaining:",
+          result.remainingCodes.length
+        );
       }
     } else {
       // Decrypt secret and verify TOTP code
@@ -198,26 +215,81 @@ router.post("/api/2fa/verify", async (req, res) => {
 router.post("/api/2fa/disable", requireAuth, async (req, res) => {
   try {
     const userId = (req.session as any).userId;
-    const { password } = req.body;
+    const { password, code } = req.body; // ✅ ADD: code parameter
 
-    if (!password) {
-      return res.status(400).json({ error: "Password required" });
-    }
+    console.log(`🔐 [2FA DISABLE] Request for user: ${userId}`);
 
     // Get user
     const [user] = await db.select().from(users).where(eq(users.id, userId));
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Incorrect password" });
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ error: "2FA is not enabled" });
     }
 
-    // Disable 2FA
+    // ✅ Determine account type
+    const isOAuthOnly = !user.passwordHash && user.oauthProvider;
+
+    console.log(`🔍 [2FA DISABLE] Account type:`, {
+      hasPassword: !!user.passwordHash,
+      isOAuthOnly,
+    });
+
+    // ✅ STEP 1: Verify password (if account has one)
+    if (user.passwordHash) {
+      if (!password) {
+        return res.status(400).json({ error: "Password required" });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        console.log(`❌ [2FA DISABLE] Invalid password`);
+
+        await storage.logUserActivity(
+          userId,
+          "2fa_disable_failed",
+          "security",
+          {
+            reason: "incorrect_password",
+            timestamp: new Date().toISOString(),
+          }
+        );
+
+        return res.status(401).json({ error: "Incorrect password" });
+      }
+
+      console.log(`✅ [2FA DISABLE] Password verified`);
+    } else {
+      console.log(
+        `ℹ️ [2FA DISABLE] OAuth-only account, skipping password check`
+      );
+    }
+
+    // ✅ STEP 2: Verify current 2FA code (REQUIRED for ALL accounts)
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ error: "Current 2FA code required" });
+    }
+
+    const decryptedSecret = decrypt2FASecret(user.twoFactorSecret);
+    const isValidCode = verify2FACode(decryptedSecret, code);
+
+    if (!isValidCode) {
+      console.log(`❌ [2FA DISABLE] Invalid 2FA code`);
+
+      await storage.logUserActivity(userId, "2fa_disable_failed", "security", {
+        reason: "incorrect_2fa_code",
+        timestamp: new Date().toISOString(),
+      });
+
+      return res.status(401).json({ error: "Invalid 2FA code" });
+    }
+
+    console.log(`✅ [2FA DISABLE] 2FA code verified`);
+
+    // ✅ STEP 3: Disable 2FA
     await db
       .update(users)
       .set({
@@ -228,68 +300,89 @@ router.post("/api/2fa/disable", requireAuth, async (req, res) => {
       })
       .where(eq(users.id, userId));
 
-    console.log("✅ 2FA disabled for user:", userId);
+    // ✅ Log the action
+    await storage.logUserActivity(userId, "2fa_disabled", "security", {
+      timestamp: new Date().toISOString(),
+      accountType: isOAuthOnly ? "oauth" : "password",
+    });
+
+    console.log(
+      `✅ [2FA DISABLE] 2FA disabled successfully for user: ${userId}`
+    );
 
     res.json({
       success: true,
-      message: "2FA has been disabled",
+      message: "Two-factor authentication has been disabled",
     });
   } catch (error: any) {
-    console.error("❌ 2FA disable error:", error);
+    console.error("❌ [2FA DISABLE] Error:", error);
     res.status(500).json({ error: "Failed to disable 2FA" });
   }
 });
 
 // ==================== REGENERATE BACKUP CODES ====================
-router.post("/api/2fa/regenerate-backup-codes", requireAuth, async (req, res) => {
-  try {
-    const userId = (req.session as any).userId;
-    const { password } = req.body;
+router.post(
+  "/api/2fa/regenerate-backup-codes",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { password } = req.body;
 
-    if (!password) {
-      return res.status(400).json({ error: "Password required" });
+      if (!password) {
+        return res.status(400).json({ error: "Password required" });
+      }
+
+      // Get user
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+      if (!user || !user.passwordHash) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (!user.twoFactorEnabled) {
+        return res.status(400).json({ error: "2FA is not enabled" });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
+
+      // Generate new backup codes
+      const { codes, hashedCodes } = await generateBackupCodes();
+
+      // Update backup codes
+      await db
+        .update(users)
+        .set({
+          twoFactorBackupCodes: hashedCodes,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      await storage.logUserActivity(
+        userId,
+        "2fa_backup_codes_regenerated",
+        "security",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      console.log("✅ Backup codes regenerated for user:", userId);
+
+      res.json({
+        success: true,
+        backupCodes: codes,
+        message: "New backup codes generated",
+      });
+    } catch (error: any) {
+      console.error("❌ Backup codes regeneration error:", error);
+      res.status(500).json({ error: "Failed to regenerate backup codes" });
     }
-
-    // Get user
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
-
-    if (!user || !user.passwordHash) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    if (!user.twoFactorEnabled) {
-      return res.status(400).json({ error: "2FA is not enabled" });
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Incorrect password" });
-    }
-
-    // Generate new backup codes
-    const { codes, hashedCodes } = await generateBackupCodes();
-
-    // Update backup codes
-    await db
-      .update(users)
-      .set({
-        twoFactorBackupCodes: hashedCodes,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
-
-    console.log("✅ Backup codes regenerated for user:", userId);
-
-    res.json({
-      success: true,
-      backupCodes: codes,
-      message: "New backup codes generated",
-    });
-  } catch (error: any) {
-    console.error("❌ Backup codes regeneration error:", error);
-    res.status(500).json({ error: "Failed to regenerate backup codes" });
   }
-});
+);
 
 export default router;

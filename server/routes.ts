@@ -3291,6 +3291,7 @@ Could you suggest some alternative times that work for you? We'd love to find a 
           "security",
           {
             reason: "incorrect_current_password",
+            timestamp: new Date().toISOString(),
           }
         );
         return res.status(401).json({
@@ -3718,6 +3719,96 @@ app.post("/api/user/delete-account", requireAuth, async (req, res) => {
       }
 
       res.status(500).json({ message: "Password reset failed" });
+    }
+  });
+
+  // ==================== SET PASSWORD (OAuth Users) ====================
+
+  app.post("/api/user/set-password", requireAuth, async (req,res) => {
+    try {
+      const userId = req.user!.id;
+      const { newPassword } = req.body;
+
+      console.log(`🔐 [SET PASSWORD] Request for user: ${userId}`);
+
+      // Get user
+      const user = await storage.getUserById(userId);
+      if(!user) {
+        return res.status(404).json({message: "User not found"});
+      }
+
+      // Check if user already has password
+
+      if (user.passwordHash){
+        console.log(`❌ [SET PASSWORD] User already has password`);
+        return res.status(400).json({
+          message: "Password already set. Use 'Change Password' instead"
+        });
+      }
+
+      // Validate password
+      if (!newPassword) {
+         return res.status(400).json({ message: "New password is required" });
+      }
+
+      if (newPassword.length < 8){
+        return res.status(400).json({
+          message: "Password must be at least 8 characters long"
+        });
+      }
+
+      // Password strength validation
+      if (!/[A-Z]/.test(newPassword)){
+        return res.status(400).json({
+          message: "Password must contain at least one uppercase letter"
+        });
+      }
+
+      if (!/[a-z]/.test(newPassword)){
+        return res.status(400).json({
+          message: "Password must contain at least one lowercase letter"
+        });
+      }
+
+      if (!/[0-9]/.test(newPassword)){
+        return res.status(400).json({
+          message: "Password must contain at least one number"
+        });
+      }
+
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      return res.status(400).json({ 
+        message: "Password must contain at least one special character" 
+      });
+    }
+
+    console.log(`✅ [SET PASSWORD] Password validation passed`);
+
+    // Hash and set password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await db.update(users).set({
+      passwordHash,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId));
+
+    // Log the action
+    await storage.logUserActivity(userId, "password_set", "security", {
+      timestamp: new Date().toISOString(),
+      accountType: user.oauthProvider || "unknown",
+    });
+
+    console.log(`✅ [SET PASSWORD] Password set successfully for user: ${userId}`);
+
+    res.json({
+      success: true,
+      message: "Password set successfully. You can now login with your email and password.",
+    });
+    } catch (error: any) {
+      console.error("❌ [SET PASSWORD] Error:", error);
+      res.status(500).json({
+        message: error.message || "Failed to set password"
+      });
     }
   });
 

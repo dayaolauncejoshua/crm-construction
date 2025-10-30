@@ -167,13 +167,13 @@ export default function Signup() {
             </div>
             <div className="relative flex justify-center text-sm">
               <span className="px-4 bg-white text-slate-500">
-                Or sign up with
+                Or
               </span>
             </div>
           </div>
 
           {/* Social Signup */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {/* 🆕 FUNCTIONAL GOOGLE BUTTON */}
             <button
               type="button"
