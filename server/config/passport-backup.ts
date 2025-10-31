@@ -5,53 +5,11 @@ import { db } from "../db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-// ✅ DYNAMIC CALLBACK URL DETECTION
-const getCallbackURL = (): string => {
-  // Priority 1: Use explicit GOOGLE_CALLBACK_URL if set
-  if (process.env.GOOGLE_CALLBACK_URL) {
-    console.log("📍 Using explicit GOOGLE_CALLBACK_URL");
-    return process.env.GOOGLE_CALLBACK_URL;
-  }
-
-  // Priority 2: Construct from BASE_URL
-  if (process.env.BASE_URL) {
-    const url = `${process.env.BASE_URL}/api/auth/google/callback`;
-    console.log("📍 Constructing callback URL from BASE_URL");
-    return url;
-  }
-
-  // Priority 3: Construct from FRONTEND_URL (fallback)
-  if (process.env.FRONTEND_URL) {
-    const url = `${process.env.FRONTEND_URL}/api/auth/google/callback`;
-    console.log("📍 Constructing callback URL from FRONTEND_URL");
-    return url;
-  }
-
-  // Priority 4: Detect from NODE_ENV
-  if (process.env.NODE_ENV === "production") {
-    console.log("📍 Using production fallback URL");
-    // Fallback to Render domain (update with your actual domain)
-    return "https://construction-ai-lead-system.onrender.com/api/auth/google/callback";
-  }
-
-  // Priority 5: Default to localhost for development
-  console.log("📍 Using localhost default URL");
-  return "http://localhost:5000/api/auth/google/callback";
-};
-
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const GOOGLE_CALLBACK_URL = getCallbackURL(); // ✅ Dynamic detection
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL!;
 
-// ✅ Enhanced logging
-console.log("🔐 [GOOGLE OAUTH] Configuration:");
-console.log("  Client ID:", GOOGLE_CLIENT_ID ? "✅ Set" : "❌ Missing");
-console.log("  Client Secret:", GOOGLE_CLIENT_SECRET ? "✅ Set" : "❌ Missing");
-console.log("  Callback URL:", GOOGLE_CALLBACK_URL);
-console.log("  Environment:", process.env.NODE_ENV || "development");
-console.log("  BASE_URL:", process.env.BASE_URL || "not set");
-
-if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_CALLBACK_URL) {
   console.warn("⚠️ Google OAuth credentials missing in .env");
 }
 
@@ -76,20 +34,18 @@ passport.use(
     {
       clientID: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      callbackURL: GOOGLE_CALLBACK_URL, // ✅ Using dynamic URL
+      callbackURL: GOOGLE_CALLBACK_URL,
       scope: ["profile", "email"],
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        console.log("🔍 [GOOGLE OAUTH] Callback received");
-        console.log("  Profile email:", profile.emails?.[0]?.value);
-        console.log("  Google ID:", profile.id);
+        console.log("🔍 Google OAuth callback received");
+        console.log("Profile email:", profile.emails?.[0]?.value);
 
         const googleEmail = profile.emails?.[0]?.value?.toLowerCase();
         const googleId = profile.id;
 
         if (!googleEmail) {
-          console.error("❌ No email from Google profile");
           return done(new Error("No email from Google"), undefined);
         }
 
@@ -141,9 +97,9 @@ passport.use(
             .where(eq(users.id, existingUser.id))
             .returning();
 
-          // Mark as account linking
-          (updatedUser as any)._authType = "oauth_account_linked";
-          console.log("🔗 Auth type: oauth_account_linked");
+            // Mark as acount linking
+            (updatedUser as any)._authType = 'oauth_account_linked';
+            console.log("🔗 Auth type: oauth_account_linked");
 
           return done(null, updatedUser);
         }
@@ -170,12 +126,12 @@ passport.use(
         console.log("✅ New Google user created:", newUser.email);
 
         // Mark as new signup
-        (newUser as any)._authType = "new_oauth_signup";
-        console.log("🆕 Auth type: new_oauth_signup");
+        (newUser as any)._authType = 'new_oauth_signup';
+        console.log("🆕 Auth type: new_oauth_signup")
 
         return done(null, newUser);
       } catch (error: any) {
-        console.error("❌ [GOOGLE OAUTH] Error:", error);
+        console.error("❌ Google OAuth error:", error);
         return done(error, undefined);
       }
     }
