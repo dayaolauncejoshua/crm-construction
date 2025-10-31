@@ -1,3 +1,5 @@
+// server/services/email-template.ts
+
 export function getMeetingReminderEmail(booking: any, timeframe: "24h" | "1h") {
   const scheduledDate = new Date(booking.scheduledFor);
   const formattedDate = scheduledDate.toLocaleDateString("en-US", {

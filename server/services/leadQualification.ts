@@ -1146,6 +1146,11 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
 
             console.log("✅ Booking saved:", savedBooking.id);
 
+            // ============================================
+            // ✅ STEP 1: SEND BOOKING NOTIFICATION
+            // ============================================
+            console.log("📅 Sending booking notification...");
+
             // Broadcast to agents
             this.broadcastUpdate({
               type: eventType,
@@ -1160,30 +1165,30 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
-            // ✅ ADD THIS: Send booking notifications
+            // Send booking notification
             const client = await storage.getClient(lead.clientId);
             if (client && client.userId) {
-              // ✅ Check userId exists
               await notificationService.sendBookingAlert({
-                userId: client.userId, // ✅ Now guaranteed to be string
+                userId: client.userId,
                 booking: {
-                  id: savedBooking.id, // ✅ Keep as number
-                  title: savedBooking.title || "", // ✅ Fallback
+                  id: savedBooking.id,
+                  title: savedBooking.title || "",
                   scheduledFor: savedBooking.scheduledFor,
                   location: savedBooking.location || "TBD",
-                  attendeeName: savedBooking.attendeeName || "", // ✅ Fallback
-                  attendeePhone: savedBooking.attendeePhone || "", // ✅ Fallback
-                  attendeeEmail: savedBooking.attendeeEmail || "", // ✅ Fallback
-                  meetingType: savedBooking.meetingType || "consultation", // ✅ Fallback
+                  attendeeName: savedBooking.attendeeName || "",
+                  attendeePhone: savedBooking.attendeePhone || "",
+                  attendeeEmail: savedBooking.attendeeEmail || "",
+                  meetingType: savedBooking.meetingType || "consultation",
                   aiConfidence: savedBooking.aiConfidence || "0.8",
                 },
                 lead: {
                   firstName: lead.firstName || "",
                   lastName: lead.lastName || "",
                   company: lead.company || "",
-                  phone: lead.phone || "", // ✅ Fallback
+                  phone: lead.phone || "",
                 },
               });
+              console.log("✅ Booking notification sent");
             }
 
             // Send confirmation to lead
@@ -1226,29 +1231,63 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
             console.log("✅ Confirmation sent to lead");
 
             // ============================================
-            // STEP 4: ESCALATE TO HOT LEAD + HUMAN TAKEOVER
+            // ✅ STEP 2: UPDATE LEAD TO HOT & SEND HOT LEAD ALERT
             // ============================================
-            console.log("🔥 Escalating to HOT LEAD with human takeover");
+            console.log("🔥 Marking lead as HOT and sending hot lead alert...");
 
+            // Update lead to hot status
             await storage.updateLead(lead.id, {
               qualificationScore: "0.85",
               temperature: "hot",
               status: "qualified",
             });
 
+            // Update conversation
             await storage.updateConversation(conversation.id, {
               qualificationScore: "0.85",
-              isAiHandled: false, // ✅ CRITICAL: Stop AI
+              isAiHandled: false, // ✅ Stop AI
               humanTakeoverAt: new Date(),
             });
 
-            const escalatedLead = await storage.getLead(lead.id);
+            // Refresh lead data with hot status
+            const hotLead = await storage.getLead(lead.id);
 
+            // ✅ SEND HOT LEAD ALERT (in addition to booking alert)
+            if (client && client.userId && hotLead) {
+              console.log("🔥 Sending hot lead alert...");
+
+              await notificationService.sendHotLeadAlert({
+                userId: client.userId,
+                lead: {
+                  id: hotLead.id || "",
+                  firstName: hotLead.firstName || "",
+                  lastName: hotLead.lastName || "",
+                  email: hotLead.email || "",
+                  phone: hotLead.phone || "",
+                  company: hotLead.company || "",
+                  qualificationScore: "0.85",
+                  temperature: "hot",
+                },
+                conversation: {
+                  id: conversation.id,
+                  qualificationScore: "0.85",
+                },
+                qualification: {
+                  score: 0.85,
+                  reasoning:
+                    "Booking confirmed - high-value lead requires immediate attention. AI proposed meeting successfully.",
+                },
+              });
+
+              console.log("✅ Hot lead alert sent");
+            }
+
+            // Broadcast updates to dashboard
             this.broadcastUpdate({
               type: "hot_lead_alert",
               conversation: {
                 ...conversation,
-                lead: escalatedLead,
+                lead: hotLead,
                 qualificationScore: "0.85",
               },
               qualification: {
@@ -1262,7 +1301,7 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
 
             this.broadcastUpdate({
               type: "lead_updated",
-              lead: escalatedLead,
+              lead: hotLead,
               conversationId: conversation.id,
             });
 
@@ -1273,19 +1312,12 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
             });
 
             console.log(
-              "✅ Booking complete, AI stopped, human takeover active"
+              "✅ Booking complete, lead marked hot, BOTH notifications sent, AI stopped"
             );
-            return; // ✅ CRITICAL: Stop processing immediately
+            return; // ✅ Stop processing immediately
           } catch (error) {
             console.error("❌ Error creating booking:", error);
           }
-        } else if (
-          bookingIntent.wantsToBook &&
-          bookingIntent.confidence > BOOKING_INTEREST_THRESHOLD
-        ) {
-          console.log(
-            `ℹ️ Booking interest (${bookingIntent.confidence}) but not confirmed yet`
-          );
         }
 
         // ============================================

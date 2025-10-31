@@ -28,23 +28,13 @@ async function loadUser(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = (req.session as any)?.userId;
 
-    // ✅ DEBUG LOGGING (remove after fixing)
-    console.log("🔍 Auth Check:", {
-      path: req.path,
-      method: req.method,
-      hasSession: !!req.session,
-      sessionID: req.sessionID,
-      userId: userId,
-      hasCookie: !!req.headers.cookie,
-    });
-
     if (userId) {
       const [user] = await db.select().from(users).where(eq(users.id, userId));
 
       if (user) {
         // ✅ Set the full user object from schema
         req.user = user;
-        console.log("✅ User loaded:", user.email, user.role);
+        
       } else {
         console.log("❌ User not found in DB for userId:", userId);
       }

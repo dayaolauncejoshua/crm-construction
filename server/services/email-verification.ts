@@ -1,3 +1,5 @@
+//server/services/email-verification.ts
+
 import { config } from "dotenv";
 config();
 

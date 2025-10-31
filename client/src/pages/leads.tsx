@@ -1,7 +1,7 @@
 // client/src/pages/leads.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClient } from "@/contexts/ClientContext";
@@ -34,10 +34,22 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   User,
@@ -58,7 +70,10 @@ import {
   Flame,
   Snowflake,
   Wind,
+  Trash2, // ✅ Add Trash2 icon
+  Loader2,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Leads() {
   usePageTitle("Leads");
@@ -66,11 +81,16 @@ export default function Leads() {
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
+  const { toast } = useToast(); // ✅ Add toast
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+
+  // ✅ 2. Add state for the confirmation dialog
+  const [leadToDelete, setLeadToDelete] = useState<any | null>(null);
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
@@ -111,6 +131,45 @@ export default function Leads() {
       return response.json();
     },
     enabled: !!selectedClientId,
+  });
+
+  // ✅ 3. Add the deleteLead mutation hook
+  const deleteLeadMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete lead");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Lead Deleted",
+        description: "The lead and all associated data have been deleted.",
+      });
+      // Refresh the leads list automatically
+      queryClient.invalidateQueries({
+        queryKey: ["/api/leads", selectedClientId],
+      });
+      // Also refresh the dashboard data
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error Deleting Lead",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setLeadToDelete(null); // Close the dialog
+    },
   });
 
   // Fetch conversations to link leads
@@ -488,6 +547,18 @@ export default function Leads() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
+
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-red-600"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // This stops the click from bubbling to the card
+                                    setLeadToDelete(lead);
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete Lead
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
@@ -630,7 +701,49 @@ export default function Leads() {
           )}
         </Tabs>
       </main>
-
+      <AlertDialog
+        open={!!leadToDelete}
+        onOpenChange={() => setLeadToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              lead{" "}
+              <strong className="text-slate-900">
+                {leadToDelete?.firstName} {leadToDelete?.lastName}
+              </strong>{" "}
+              and all of their associated data, including conversations,
+              messages, and bookings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={(e) => {
+                e.stopPropagation();
+                setLeadToDelete(null);
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteLeadMutation.mutate(leadToDelete.id);
+              }}
+              disabled={deleteLeadMutation.isPending}
+            >
+              {deleteLeadMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Delete Lead"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <TranscriptModal
         callId={selectedCallId}
         onClose={() => setSelectedCallId(null)}

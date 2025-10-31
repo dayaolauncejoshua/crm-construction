@@ -1751,8 +1751,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Delete lead
-  async deleteLead(id: string): Promise<void> {
-    await db.delete(leads).where(eq(leads.id, id));
+   // ✅ NEW: Add this robust cascade delete function
+  async deleteLeadAndAssociations(leadId: string): Promise<void> {
+    console.log(
+      `🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`
+    );
+    try {
+      // 1. Find all conversations for this lead
+      const leadConversations = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.leadId, leadId));
+      
+      const conversationIds = leadConversations.map((c) => c.id);
+      if (conversationIds.length > 0) {
+        console.log(`  Deleting ${conversationIds.length} conversations...`);
+        // 2. Delete all messages for those conversations
+        await db.delete(messages).where(
+          sql`${messages.conversationId} = ANY(ARRAY[${sql.join(
+            conversationIds.map((id) => sql`${id}`),
+            sql`, `
+          )}])`
+        );
+        console.log(`  ✅ Deleted messages.`);
+        
+        // 3. Delete the conversations
+        await db.delete(conversations).where(eq(conversations.leadId, leadId));
+        console.log(`  ✅ Deleted conversations.`);
+      }
+
+      // 4. Delete all bookings for this lead
+      await db.delete(bookings).where(eq(bookings.leadId, leadId));
+      console.log(`  ✅ Deleted bookings.`);
+
+      // 5. Delete all lead activity logs for this lead
+      await db.delete(leadActivityLog).where(eq(leadActivityLog.leadId, leadId));
+      console.log(`  ✅ Deleted lead activity logs.`);
+
+      // 6. Finally, delete the lead
+      await db.delete(leads).where(eq(leads.id, leadId));
+      console.log(`  ✅ Deleted lead.`);
+      
+    } catch (error) {
+      console.error(`❌ [Cascade Delete] Error deleting lead ${leadId}:`, error!);
+      
+    }
   }
 
   // Analytics operations
@@ -1773,7 +1816,7 @@ export class DatabaseStorage implements IStorage {
     humanAvgResponseTime: number;
   }> {
     try {
-      console.log(`📊 [getKPIs] Starting for client: ${clientId}`);
+     
 
       // ✅ SAFETY CHECK: Verify client exists first
       const [clientExists] = await db
@@ -1801,7 +1844,7 @@ export class DatabaseStorage implements IStorage {
         };
       }
 
-      console.log(`✅ [getKPIs] Client verified, fetching metrics...`);
+    
 
       // Current period: Last 30 days
       const thirtyDaysAgo = new Date();
@@ -1812,9 +1855,7 @@ export class DatabaseStorage implements IStorage {
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
       // ==================CURRENT PERIOD=======================
-      console.log(
-        `📊 [getKPIs] Fetching current period stats (last 30 days)...`
-      );
+
 
       // Total leads in last 30 days
       const [currentLeadsResult] = await db
@@ -1824,23 +1865,11 @@ export class DatabaseStorage implements IStorage {
           and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
         );
 
-      // ✅ DEBUG: Show what we found
-      console.log(
-        `📊 [getKPIs] Query result - Current leads: ${currentLeadsResult.count}`
-      );
-      console.log(
-        `📊 [getKPIs] Date filter: createdAt >= ${thirtyDaysAgo.toISOString()}`
-      );
-
       // ✅ DEBUG: Get sample of ALL leads for this client (no date filter)
       const [allLeadsForClient] = await db
         .select({ count: count() })
         .from(leads)
         .where(eq(leads.clientId, clientId));
-
-      console.log(
-        `📊 [getKPIs] Total leads for client (all time): ${allLeadsForClient.count}`
-      );
 
       if (allLeadsForClient.count > 0 && currentLeadsResult.count === 0) {
         console.warn(
@@ -1910,14 +1939,10 @@ export class DatabaseStorage implements IStorage {
           )
         );
 
-      console.log(
-        `📊 [getKPIs] Current period - Leads: ${currentLeadsResult.count}, Conversions: ${currentConversionsResult.count}`
-      );
+     
 
       // ================= PREVIOUS PERIOD ====================
-      console.log(
-        `📊 [getKPIs] Fetching previous period stats (31-60 days ago)...`
-      );
+      
 
       const [previousLeadsResult] = await db
         .select({ count: count() })
@@ -1979,9 +2004,7 @@ export class DatabaseStorage implements IStorage {
           )
         );
 
-      console.log(
-        `📊 [getKPIs] Previous period - Leads: ${previousLeadsResult.count}, Conversions: ${previousConversionsResult.count}`
-      );
+     
 
       // ============================== CALCULATE CURRENT VALUES ===============================
       const totalLeads = currentLeadsResult.count;
@@ -1998,17 +2021,6 @@ export class DatabaseStorage implements IStorage {
               currentTotalConversationsResult.count) *
             100
           : 0;
-
-      // ✅ DEBUG: Log the actual values
-      console.log(`📊 [getKPIs] Current values:`, {
-        totalLeads,
-        convertedLeads,
-        conversionRate,
-        avgResponseTime: avgResponseTime,
-        avgResponseTimeType: typeof avgResponseTime,
-        rawAvgValue: currentAvgResponseResult.avg,
-        rawAvgType: typeof currentAvgResponseResult.avg,
-      });
 
       // ============================== CALCULATE PREVIOUS VALUES ==============================
       const previousTotalLeads = previousLeadsResult.count;
@@ -2049,7 +2061,6 @@ export class DatabaseStorage implements IStorage {
           ? aiHandledPercentage - previousAiHandledPercentage
           : 0;
 
-      console.log(`📊 [getKPIs] Fetching AI vs Human response times...`);
 
       // ============================ AI vs HUMAN RESPONSE TIME =========================
       // Get AI response times (from conversations where AI handled first)
@@ -2120,7 +2131,6 @@ export class DatabaseStorage implements IStorage {
         ),
       };
 
-      console.log(`✅ [getKPIs] Successfully calculated KPIs:`, result);
 
       return result;
     } catch (error: any) {

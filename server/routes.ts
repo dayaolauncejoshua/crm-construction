@@ -303,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/leads/:leadId", async (req, res) => {
     try {
       const { leadId } = req.params;
-      await storage.deleteLead(leadId);
+      await storage.deleteLeadAndAssociations(leadId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting lead:", error);
@@ -638,13 +638,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { clientId } = req.params;
       const requestUser = req.user!;
 
-      console.log(`\n========================================`);
-      console.log(`📊 [DASHBOARD] Fetching data for client: ${clientId}`);
-      console.log(
-        `👤 [DASHBOARD] Requested by user: ${requestUser.id} (${requestUser.email})`
-      );
-      console.log(`========================================\n`);
-
       // Verify access
       if (requestUser.role !== "super_admin") {
         const client = await storage.getClient(clientId);
@@ -662,23 +655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawConversations = await storage.getConversations(clientId, 1000);
       const rawBookings = await storage.getBookings(clientId);
 
-      console.log(`\n📊 [DASHBOARD] RAW DATA CHECK:`);
-      console.log(`  - Total Leads in DB: ${rawLeads.length}`);
-      console.log(`  - Total Conversations in DB: ${rawConversations.length}`);
-      console.log(`  - Total Bookings in DB: ${rawBookings.length}`);
-
       if (rawLeads.length > 0) {
-        console.log(`\n🔍 [DASHBOARD] Sample Lead Data:`);
-        console.log(`  - First Lead ID: ${rawLeads[0].id}`);
-        console.log(
-          `  - First Lead Name: ${rawLeads[0].firstName} ${rawLeads[0].lastName}`
-        );
-        console.log(`  - First Lead Created: ${rawLeads[0].createdAt}`);
-        console.log(`  - First Lead Client ID: ${rawLeads[0].clientId}`);
-        console.log(`  - First Lead Status: ${rawLeads[0].status}`);
-        console.log(
-          `  - First Lead Response Time: ${rawLeads[0].responseTimeSeconds}s`
-        );
 
         // ✅ FIXED: Check for null before creating Date
         if (rawLeads[0].createdAt) {
@@ -688,14 +665,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           const leadDate = new Date(rawLeads[0].createdAt);
           const isWithin30Days = leadDate >= thirtyDaysAgo;
-
-          console.log(`\n📅 [DASHBOARD] Date Check:`);
-          console.log(`  - Now: ${now.toISOString()}`);
-          console.log(`  - 30 Days Ago: ${thirtyDaysAgo.toISOString()}`);
-          console.log(`  - First Lead Date: ${leadDate.toISOString()}`);
-          console.log(
-            `  - Is Within 30 Days? ${isWithin30Days ? "✅ YES" : "❌ NO"}`
-          );
         } else {
           console.warn(`  - ⚠️ First Lead has no createdAt date!`);
         }
@@ -754,15 +723,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return [];
           }),
         ]);
-
-      console.log("\n✅ [DASHBOARD] Data fetched successfully:");
-      console.log("  - KPIs:", JSON.stringify(kpis, null, 2));
-      console.log("  - Conversations:", conversations.length);
-      console.log("  - Hot Leads:", hotLeads.length);
-      console.log("  - Recent Activity:", recentActivity.length);
-      console.log("  - Leads:", leads.length);
-      console.log("  - Bookings:", bookings.length);
-      console.log("\n========================================\n");
 
       const conversationMap = new Map(conversations.map((c) => [c.id, c]));
       hotLeads.forEach((hl) => {
