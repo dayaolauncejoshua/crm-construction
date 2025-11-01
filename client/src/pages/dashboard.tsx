@@ -354,16 +354,24 @@ export default function Dashboard() {
     }));
 
     conversations.forEach((conv: any) => {
-      if (conv.lead?.responseTimeSeconds) {
-        const createdAt = new Date(conv.createdAt);
-        const dayIndex = createdAt.getDay();
-        const timeInMinutes = conv.lead.responseTimeSeconds / 60;
+      const createdAt = new Date(conv.createdAt);
+      const dayIndex = createdAt.getDay();
 
-        if (conv.isAiHandled) {
-          weekData[dayIndex].aiTime += timeInMinutes;
-          weekData[dayIndex].aiCount++;
-        } else {
-          weekData[dayIndex].humanTime += timeInMinutes;
+      // ✅ FIX: AI response time = initial responseTimeSeconds (AI ALWAYS responds first)
+      if (conv.lead?.responseTimeSeconds) {
+        const aiTimeInMinutes = conv.lead.responseTimeSeconds / 60;
+        weekData[dayIndex].aiTime += aiTimeInMinutes;
+        weekData[dayIndex].aiCount++;
+      }
+
+      // ✅ FIX: Human response time = time from lead creation to human takeover
+      if (conv.humanTakeoverAt && conv.lead?.createdAt) {
+        const leadCreated = new Date(conv.lead.createdAt).getTime();
+        const humanTookOver = new Date(conv.humanTakeoverAt).getTime();
+        const humanTimeInMinutes = (humanTookOver - leadCreated) / (1000 * 60);
+
+        if (humanTimeInMinutes > 0) {
+          weekData[dayIndex].humanTime += humanTimeInMinutes;
           weekData[dayIndex].humanCount++;
         }
       }
