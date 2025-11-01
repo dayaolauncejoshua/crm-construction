@@ -25,9 +25,8 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  
   Legend,
-  Tooltip
+  Tooltip,
 } from "recharts";
 import {
   Bot,
@@ -44,7 +43,7 @@ import {
   UserPlus,
   ArrowRight,
   HardHat,
-  BarChart3
+  BarChart3,
 } from "lucide-react";
 import {
   Tooltip as Tooltip1,
@@ -55,15 +54,13 @@ import {
 import { title } from "process";
 import { useToast } from "@/hooks/use-toast";
 
-
-
 export default function Dashboard() {
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
-  const {toast} = useToast();
+  const { toast } = useToast();
 
-  useEffect(() =>{
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get("auth");
 
@@ -76,11 +73,12 @@ export default function Dashboard() {
         case "signup_success":
           toast({
             title: "🎉 Welcome to LeadFlow CRM!",
-            description: "Your account has been created successfully with Google.",
+            description:
+              "Your account has been created successfully with Google.",
             duration: 5000,
           });
           break;
-        
+
         case "login_success":
           toast({
             title: "👋 Welcome back!",
@@ -88,11 +86,12 @@ export default function Dashboard() {
             duration: 4000,
           });
           break;
-        
+
         case "account_linked":
           toast({
             title: "🔗 Account Linked!",
-            description: "Your Google account has been connected to your existing account.",
+            description:
+              "Your Google account has been connected to your existing account.",
             duration: 5000,
           });
           break;
@@ -105,8 +104,7 @@ export default function Dashboard() {
           });
       }
     }
-
-  }, [toast])
+  }, [toast]);
 
   usePageTitle(
     user?.firstName ? `Dashboard - ${user?.firstName}` : "Dashboard"
@@ -277,8 +275,12 @@ export default function Dashboard() {
         weeklyData[weekIndex].leads++;
 
         // ✅ NEW: Check if this lead has a booking (conversion)
-        const hasBooking = bookings.some((b: any) => b.leadId === lead.id);
-        if (hasBooking) {
+        const hasConfirmedBooking = bookings.some(
+          (b: any) =>
+            b.leadId === lead.id &&
+            (b.status === "scheduled" || b.status === "confirmed")
+        );
+        if (hasConfirmedBooking) {
           weeklyData[weekIndex].conversions++;
         }
       }
@@ -415,196 +417,198 @@ export default function Dashboard() {
       <VerificationBanner />
 
       <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
-  {/* DESKTOP HEADER (md and up) */}
-  <div className="hidden md:block px-4 lg:px-6 py-4">
-    <div className="flex items-center justify-between gap-4">
-      {/* Left: Welcome Section */}
-      <div className="flex-1 min-w-0">
-        <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
-          Welcome back, {user?.firstName || "User"}! 👋
-        </h2>
-        <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
-          Here's what's happening with your leads today
-        </p>
-      </div>
+        {/* DESKTOP HEADER (md and up) */}
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Welcome Section */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                Welcome back, {user?.firstName || "User"}! 👋
+              </h2>
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                Here's what's happening with your leads today
+              </p>
+            </div>
 
-      {/* Right: Action Buttons + Status */}
-      <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
-        {/* Conversations Button */}
-        <TooltipProvider delayDuration={300}>
-          <Tooltip1>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLocation("/conversations")}
-                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+            {/* Right: Action Buttons + Status */}
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              {/* Conversations Button */}
+              <TooltipProvider delayDuration={300}>
+                <Tooltip1>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation("/conversations")}
+                      className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+                    >
+                      <MessageCircle className="w-4 h-4 flex-shrink-0" />
+                      <span className="hidden lg:inline">Conversations</span>
+                      {conversations.length > 0 && (
+                        <Badge variant="secondary" className="text-xs ml-1">
+                          {conversations.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">View all conversations</p>
+                  </TooltipContent>
+                </Tooltip1>
+              </TooltipProvider>
+
+              {/* Leads Button */}
+              <TooltipProvider delayDuration={300}>
+                <Tooltip1>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation("/leads")}
+                      className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+                    >
+                      <Users className="w-4 h-4 flex-shrink-0" />
+                      <span className="hidden lg:inline">Leads</span>
+                      {kpis.totalLeads > 0 && (
+                        <Badge variant="secondary" className="text-xs ml-1">
+                          {kpis.totalLeads}
+                        </Badge>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Manage your leads</p>
+                  </TooltipContent>
+                </Tooltip1>
+              </TooltipProvider>
+
+              {/* Calendar Button */}
+              <TooltipProvider delayDuration={300}>
+                <Tooltip1>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation("/calendar")}
+                      className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
+                    >
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      <span className="hidden xl:inline">Calendar</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">View calendar</p>
+                  </TooltipContent>
+                </Tooltip1>
+              </TooltipProvider>
+
+              {/* Status Indicator */}
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
+                  isConnected
+                    ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                }`}
               >
-                <MessageCircle className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden lg:inline">Conversations</span>
-                {conversations.length > 0 && (
-                  <Badge variant="secondary" className="text-xs ml-1">
-                    {conversations.length}
-                  </Badge>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">View all conversations</p>
-            </TooltipContent>
-          </Tooltip1>
-        </TooltipProvider>
-
-        {/* Leads Button */}
-        <TooltipProvider delayDuration={300}>
-          <Tooltip1>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLocation("/leads")}
-                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
-              >
-                <Users className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden lg:inline">Leads</span>
-                {kpis.totalLeads > 0 && (
-                  <Badge variant="secondary" className="text-xs ml-1">
-                    {kpis.totalLeads}
-                  </Badge>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Manage your leads</p>
-            </TooltipContent>
-          </Tooltip1>
-        </TooltipProvider>
-
-        {/* Calendar Button */}
-        <TooltipProvider delayDuration={300}>
-          <Tooltip1>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLocation("/calendar")}
-                className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 transition-all"
-              >
-                <Calendar className="w-4 h-4 flex-shrink-0" />
-                <span className="hidden xl:inline">Calendar</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">View calendar</p>
-            </TooltipContent>
-          </Tooltip1>
-        </TooltipProvider>
-
-        {/* Status Indicator */}
-        <div
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-            isConnected
-              ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
-              : "bg-red-50 text-red-700 border border-red-200"
-          }`}
-        >
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isConnected ? "bg-construction animate-pulse" : "bg-red-500"
-            }`}
-          ></div>
-          <span className="hidden xl:inline">
-            {isConnected ? "Live" : "Offline"}
-          </span>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? "bg-construction animate-pulse" : "bg-red-500"
+                  }`}
+                ></div>
+                <span className="hidden xl:inline">
+                  {isConnected ? "Live" : "Offline"}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
 
-  {/* MOBILE/TABLET HEADER (below md) */}
-  <div className="md:hidden px-4 py-3 space-y-3">
-    {/* Row 1: Welcome + Status */}
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex-1 min-w-0">
-        <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-          Welcome, {user?.firstName || "User"}! 👋
-        </h2>
-        <p className="text-xs text-slate-600 mt-0.5 truncate">
-          Track your leads today
-        </p>
-      </div>
-      
-      {/* Compact Status Indicator */}
-      <div
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm flex-shrink-0 ${
-          isConnected
-            ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
-            : "bg-red-50 text-red-700 border border-red-200"
-        }`}
-      >
-        <div
-          className={`w-1.5 h-1.5 rounded-full ${
-            isConnected ? "bg-construction animate-pulse" : "bg-red-500"
-          }`}
-        ></div>
-        <span className="whitespace-nowrap">{isConnected ? "Live" : "Off"}</span>
-      </div>
-    </div>
+        {/* MOBILE/TABLET HEADER (below md) */}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          {/* Row 1: Welcome + Status */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                Welcome, {user?.firstName || "User"}! 👋
+              </h2>
+              <p className="text-xs text-slate-600 mt-0.5 truncate">
+                Track your leads today
+              </p>
+            </div>
 
-    {/* Row 2: Action Buttons - Horizontal Scroll */}
-    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLocation("/conversations")}
-        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
-      >
-        <MessageCircle className="w-4 h-4" />
-        <span className="text-xs font-medium">Chats</span>
-        {conversations.length > 0 && (
-          <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
-            {conversations.length}
-          </Badge>
-        )}
-      </Button>
+            {/* Compact Status Indicator */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm flex-shrink-0 ${
+                isConnected
+                  ? "bg-gradient-to-r from-blue-50 to-orange-50 text-construction border border-construction/20"
+                  : "bg-red-50 text-red-700 border border-red-200"
+              }`}
+            >
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isConnected ? "bg-construction animate-pulse" : "bg-red-500"
+                }`}
+              ></div>
+              <span className="whitespace-nowrap">
+                {isConnected ? "Live" : "Off"}
+              </span>
+            </div>
+          </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLocation("/leads")}
-        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
-      >
-        <Users className="w-4 h-4" />
-        <span className="text-xs font-medium">Leads</span>
-        {kpis.totalLeads > 0 && (
-          <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
-            {kpis.totalLeads}
-          </Badge>
-        )}
-      </Button>
+          {/* Row 2: Action Buttons - Horizontal Scroll */}
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/conversations")}
+              className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span className="text-xs font-medium">Chats</span>
+              {conversations.length > 0 && (
+                <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
+                  {conversations.length}
+                </Badge>
+              )}
+            </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLocation("/calendar")}
-        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
-      >
-        <Calendar className="w-4 h-4" />
-        <span className="text-xs font-medium">Calendar</span>
-      </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/leads")}
+              className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+            >
+              <Users className="w-4 h-4" />
+              <span className="text-xs font-medium">Leads</span>
+              {kpis.totalLeads > 0 && (
+                <Badge variant="secondary" className="text-xs h-5 px-1.5 ml-1">
+                  {kpis.totalLeads}
+                </Badge>
+              )}
+            </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => setLocation("/analytics")}
-        className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
-      >
-        <BarChart3 className="w-4 h-4" />
-        <span className="text-xs font-medium">Analytics</span>
-      </Button>
-    </div>
-  </div>
-</header>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/calendar")}
+              className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="text-xs font-medium">Calendar</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/analytics")}
+              className="gap-2 border-2 hover:border-construction/30 hover:bg-construction/5 flex-shrink-0 min-w-fit"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="text-xs font-medium">Analytics</span>
+            </Button>
+          </div>
+        </div>
+      </header>
 
       <main className="flex-1 overflow-hidden">
         {!hasData ? (

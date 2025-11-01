@@ -1751,18 +1751,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Delete lead
-   // ✅ NEW: Add this robust cascade delete function
+  // ✅ NEW: Add this robust cascade delete function
   async deleteLeadAndAssociations(leadId: string): Promise<void> {
-    console.log(
-      `🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`
-    );
+    console.log(`🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`);
     try {
       // 1. Find all conversations for this lead
       const leadConversations = await db
         .select({ id: conversations.id })
         .from(conversations)
         .where(eq(conversations.leadId, leadId));
-      
+
       const conversationIds = leadConversations.map((c) => c.id);
       if (conversationIds.length > 0) {
         console.log(`  Deleting ${conversationIds.length} conversations...`);
@@ -1774,7 +1772,7 @@ export class DatabaseStorage implements IStorage {
           )}])`
         );
         console.log(`  ✅ Deleted messages.`);
-        
+
         // 3. Delete the conversations
         await db.delete(conversations).where(eq(conversations.leadId, leadId));
         console.log(`  ✅ Deleted conversations.`);
@@ -1785,16 +1783,19 @@ export class DatabaseStorage implements IStorage {
       console.log(`  ✅ Deleted bookings.`);
 
       // 5. Delete all lead activity logs for this lead
-      await db.delete(leadActivityLog).where(eq(leadActivityLog.leadId, leadId));
+      await db
+        .delete(leadActivityLog)
+        .where(eq(leadActivityLog.leadId, leadId));
       console.log(`  ✅ Deleted lead activity logs.`);
 
       // 6. Finally, delete the lead
       await db.delete(leads).where(eq(leads.id, leadId));
       console.log(`  ✅ Deleted lead.`);
-      
     } catch (error) {
-      console.error(`❌ [Cascade Delete] Error deleting lead ${leadId}:`, error!);
-      
+      console.error(
+        `❌ [Cascade Delete] Error deleting lead ${leadId}:`,
+        error!
+      );
     }
   }
 
@@ -1816,8 +1817,6 @@ export class DatabaseStorage implements IStorage {
     humanAvgResponseTime: number;
   }> {
     try {
-     
-
       // ✅ SAFETY CHECK: Verify client exists first
       const [clientExists] = await db
         .select({ id: clients.id })
@@ -1844,8 +1843,6 @@ export class DatabaseStorage implements IStorage {
         };
       }
 
-    
-
       // Current period: Last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1855,7 +1852,6 @@ export class DatabaseStorage implements IStorage {
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
       // ==================CURRENT PERIOD=======================
-
 
       // Total leads in last 30 days
       const [currentLeadsResult] = await db
@@ -1900,7 +1896,11 @@ export class DatabaseStorage implements IStorage {
         .from(leads)
         .innerJoin(bookings, eq(leads.id, bookings.leadId))
         .where(
-          and(eq(leads.clientId, clientId), gte(leads.createdAt, thirtyDaysAgo))
+          and(
+            eq(leads.clientId, clientId),
+            gte(leads.createdAt, thirtyDaysAgo),
+            sql`${bookings.status} IN ('scheduled', 'confirmed')` // ✅ Only confirmed bookings
+          )
         );
 
       // Average response time (all)
@@ -1939,10 +1939,7 @@ export class DatabaseStorage implements IStorage {
           )
         );
 
-     
-
       // ================= PREVIOUS PERIOD ====================
-      
 
       const [previousLeadsResult] = await db
         .select({ count: count() })
@@ -1963,7 +1960,8 @@ export class DatabaseStorage implements IStorage {
           and(
             eq(leads.clientId, clientId),
             gte(leads.createdAt, sixtyDaysAgo),
-            sql`${leads.createdAt} < ${thirtyDaysAgo}`
+            sql`${leads.createdAt} < ${thirtyDaysAgo}`,
+            sql`${bookings.status} IN ('scheduled', 'confirmed')` // ✅ Only confirmed bookings
           )
         );
 
@@ -2003,8 +2001,6 @@ export class DatabaseStorage implements IStorage {
             sql`${conversations.createdAt} < ${thirtyDaysAgo}`
           )
         );
-
-     
 
       // ============================== CALCULATE CURRENT VALUES ===============================
       const totalLeads = currentLeadsResult.count;
@@ -2061,7 +2057,6 @@ export class DatabaseStorage implements IStorage {
           ? aiHandledPercentage - previousAiHandledPercentage
           : 0;
 
-
       // ============================ AI vs HUMAN RESPONSE TIME =========================
       // Get AI response times (from conversations where AI handled first)
       const [aiResponseResult] = await db
@@ -2069,11 +2064,9 @@ export class DatabaseStorage implements IStorage {
           avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
         })
         .from(leads)
-        .innerJoin(conversations, eq(leads.id, conversations.leadId))
         .where(
           and(
             eq(leads.clientId, clientId),
-            eq(conversations.isAiHandled, true),
             gte(leads.createdAt, thirtyDaysAgo),
             sql`${leads.responseTimeSeconds} IS NOT NULL`
           )
@@ -2082,16 +2075,15 @@ export class DatabaseStorage implements IStorage {
       // Get Human response times (from conversations where human took over immediately)
       const [humanResponseResult] = await db
         .select({
-          avg: sql<number>`AVG(${leads.responseTimeSeconds})`,
+          avg: sql<number>`AVG(EXTRACT(EPOCH FROM (${conversations.humanTakeoverAt} - ${leads.createdAt})))`,
         })
         .from(leads)
         .innerJoin(conversations, eq(leads.id, conversations.leadId))
         .where(
           and(
             eq(leads.clientId, clientId),
-            eq(conversations.isAiHandled, false),
             gte(leads.createdAt, thirtyDaysAgo),
-            sql`${leads.responseTimeSeconds} IS NOT NULL`
+            sql`${conversations.humanTakeoverAt} IS NOT NULL`
           )
         );
 
@@ -2131,7 +2123,6 @@ export class DatabaseStorage implements IStorage {
         ),
       };
 
-
       return result;
     } catch (error: any) {
       console.error(
@@ -2169,7 +2160,12 @@ export class DatabaseStorage implements IStorage {
       })
       .from(bookings)
       .innerJoin(leads, eq(bookings.leadId, leads.id))
-      .where(eq(leads.clientId, clientId))
+      .where(
+        and(
+          eq(leads.clientId, clientId),
+          sql`${bookings.status} IN ('scheduled', 'confirmed')` // ✅ Only confirmed bookings
+        )
+      )
       .orderBy(desc(bookings.createdAt))
       .limit(5);
 

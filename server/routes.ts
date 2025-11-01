@@ -656,7 +656,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rawBookings = await storage.getBookings(clientId);
 
       if (rawLeads.length > 0) {
-
         // ✅ FIXED: Check for null before creating Date
         if (rawLeads[0].createdAt) {
           const now = new Date();
@@ -792,7 +791,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (c) => new Date(c.createdAt!) >= startDate
       );
       const filteredBookings = bookings.filter(
-        (b) => new Date(b.createdAt!) >= startDate
+        (b) =>
+          new Date(b.createdAt!) >= startDate &&
+          (b.status === "scheduled" || b.status === "confirmed")
       );
 
       console.log(
@@ -3294,92 +3295,92 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
-// Update user preferences
-app.patch("/api/user/preferences", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const {
-      emailNotifications,
-      whatsappNotifications,
-      leadNotifications,
-      bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
-    } = req.body;
+  // Update user preferences
+  app.patch("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const {
+        emailNotifications,
+        whatsappNotifications,
+        leadNotifications,
+        bookingNotifications,
+        weeklyReports,
+        timezone,
+        language,
+      } = req.body;
 
-    console.log("⚙️ Updating preferences for user:", userId);
-    console.log("📊 Notification preferences:", {
-      emailNotifications,
-      whatsappNotifications,
-      leadNotifications,
-      bookingNotifications,
-      weeklyReports,
-    });
+      console.log("⚙️ Updating preferences for user:", userId);
+      console.log("📊 Notification preferences:", {
+        emailNotifications,
+        whatsappNotifications,
+        leadNotifications,
+        bookingNotifications,
+        weeklyReports,
+      });
 
-    // Get current user
-    const user = await storage.getUserById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+      // Get current user
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
 
-    // ✅ FIX: Update notification preferences in dedicated columns
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
-
-    // Update notification columns (if provided)
-    if (emailNotifications !== undefined) {
-      updateData.emailNotifications = emailNotifications;
-    }
-    if (whatsappNotifications !== undefined) {
-      updateData.whatsappNotifications = whatsappNotifications;
-    }
-    if (leadNotifications !== undefined) {
-      updateData.leadNotifications = leadNotifications;
-    }
-    if (bookingNotifications !== undefined) {
-      updateData.bookingNotifications = bookingNotifications;
-    }
-    if (weeklyReports !== undefined) {
-      updateData.weeklyReports = weeklyReports;
-    }
-
-    // ✅ ALSO: Update settings JSONB for regional preferences
-    if (timezone || language) {
-      const currentSettings = (user.settings as any) || {};
-      updateData.settings = {
-        ...currentSettings,
-        regional: {
-          timezone: timezone || currentSettings.regional?.timezone,
-          language: language || currentSettings.regional?.language,
-        },
-        updatedAt: new Date().toISOString(),
+      // ✅ FIX: Update notification preferences in dedicated columns
+      const updateData: any = {
+        updatedAt: new Date(),
       };
+
+      // Update notification columns (if provided)
+      if (emailNotifications !== undefined) {
+        updateData.emailNotifications = emailNotifications;
+      }
+      if (whatsappNotifications !== undefined) {
+        updateData.whatsappNotifications = whatsappNotifications;
+      }
+      if (leadNotifications !== undefined) {
+        updateData.leadNotifications = leadNotifications;
+      }
+      if (bookingNotifications !== undefined) {
+        updateData.bookingNotifications = bookingNotifications;
+      }
+      if (weeklyReports !== undefined) {
+        updateData.weeklyReports = weeklyReports;
+      }
+
+      // ✅ ALSO: Update settings JSONB for regional preferences
+      if (timezone || language) {
+        const currentSettings = (user.settings as any) || {};
+        updateData.settings = {
+          ...currentSettings,
+          regional: {
+            timezone: timezone || currentSettings.regional?.timezone,
+            language: language || currentSettings.regional?.language,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      // Update user
+      await storage.updateUser(userId, updateData);
+
+      // Log activity
+      await storage.logUserActivity(userId, "preferences_updated", "user", {
+        preferencesChanged: Object.keys(req.body),
+      });
+
+      console.log("✅ Preferences updated successfully");
+      console.log("📊 Updated values:", updateData);
+
+      res.json({
+        success: true,
+        message: "Preferences updated successfully",
+      });
+    } catch (error: any) {
+      console.error("❌ Error updating preferences:", error);
+      res.status(500).json({
+        message: error.message || "Failed to update preferences",
+      });
     }
-
-    // Update user
-    await storage.updateUser(userId, updateData);
-
-    // Log activity
-    await storage.logUserActivity(userId, "preferences_updated", "user", {
-      preferencesChanged: Object.keys(req.body),
-    });
-
-    console.log("✅ Preferences updated successfully");
-    console.log("📊 Updated values:", updateData);
-
-    res.json({
-      success: true,
-      message: "Preferences updated successfully",
-    });
-  } catch (error: any) {
-    console.error("❌ Error updating preferences:", error);
-    res.status(500).json({
-      message: error.message || "Failed to update preferences",
-    });
-  }
-});
+  });
 
   app.get("/api/user/activity", requireAuth, async (req, res) => {
     try {
@@ -3415,181 +3416,223 @@ app.patch("/api/user/preferences", requireAuth, async (req, res) => {
     }
   });
 
- // ==================== ACCOUNT DELETION ROUTE ====================
-app.post("/api/user/delete-account", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const { password, twoFactorCode } = req.body;
-
-    console.log(`🗑️ [DELETE ACCOUNT] Request received for user: ${userId}`);
-
-    // Get user from database
-    const user = await storage.getUserById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    console.log(`🔍 [DELETE ACCOUNT] User info:`, {
-      email: user.email,
-      hasPassword: !!user.passwordHash,
-      oauthProvider: user.oauthProvider,
-      googleId: user.googleId,
-    });
-
-    // ✅ IMPROVED: Determine authentication method
-    const isOAuthOnly = !user.passwordHash && (user.oauthProvider || user.googleId);
-    const hasPassword = !!user.passwordHash;
-
-    console.log(`🔐 [DELETE ACCOUNT] Auth type:`, {
-      isOAuthOnly,
-      hasPassword,
-      requiresPassword: hasPassword,
-    });
-
-    // ✅ SECURITY CHECK 1: Verify password (if account has one)
-    if (hasPassword) {
-      if (!password) {
-        return res.status(400).json({
-          message: "Password is required to delete your account",
-        });
-      }
-
-      console.log(`🔐 [DELETE ACCOUNT] Verifying password...`);
-      
-      const isPasswordValid = await bcrypt.compare(password, user.passwordHash!);
-      
-      if (!isPasswordValid) {
-        console.log(`❌ [DELETE ACCOUNT] Invalid password for user: ${userId}`);
-        
-        // Log failed attempt
-        await storage.logUserActivity(userId, "account_deletion_failed", "security", {
-          reason: "incorrect_password",
-          timestamp: new Date().toISOString(),
-        });
-
-        return res.status(401).json({
-          message: "Incorrect password",
-        });
-      }
-
-      console.log(`✅ [DELETE ACCOUNT] Password verified`);
-    } else if (isOAuthOnly) {
-      // ✅ OAuth-only account: No password to verify
-      console.log(`✅ [DELETE ACCOUNT] OAuth-only account, skipping password check`);
-      
-      // For extra security, you could require them to re-authenticate via OAuth
-      // But for now, we'll allow deletion with just checkbox + 2FA (if enabled)
-    } else {
-      // Account has neither password nor OAuth? This shouldn't happen
-      console.error(`⚠️ [DELETE ACCOUNT] Account has no authentication method`);
-      return res.status(500).json({
-        message: "Account authentication error. Please contact support.",
-      });
-    }
-
-    // ✅ SECURITY CHECK 2: Verify 2FA if enabled
-    if (user.twoFactorEnabled) {
-      if (!twoFactorCode) {
-        return res.status(400).json({
-          message: "Two-factor authentication code is required",
-          requires2FA: true,
-        });
-      }
-
-      const { verify2FACode, decrypt2FASecret } = await import("./services/2fa-service");
-      
-      console.log(`🔐 [DELETE ACCOUNT] Decrypting 2FA secret...`);
-      const decryptedSecret = decrypt2FASecret(user.twoFactorSecret!);
-      
-      console.log(`🔍 [DELETE ACCOUNT] Verifying 2FA code...`);
-      const isValidCode = verify2FACode(decryptedSecret, twoFactorCode);
-
-      if (!isValidCode) {
-        console.log(`❌ [DELETE ACCOUNT] Invalid 2FA code for user: ${userId}`);
-        
-        await storage.logUserActivity(userId, "account_deletion_failed", "security", {
-          reason: "incorrect_2fa_code",
-          timestamp: new Date().toISOString(),
-        });
-
-        return res.status(401).json({
-          message: "Invalid two-factor authentication code",
-        });
-      }
-
-      console.log(`✅ [DELETE ACCOUNT] 2FA verified`);
-    }
-
-    // ✅ STEP 1: Cancel active Stripe subscription
+  // ==================== ACCOUNT DELETION ROUTE ====================
+  app.post("/api/user/delete-account", requireAuth, async (req, res) => {
     try {
-      console.log(`💳 [DELETE ACCOUNT] Checking for active subscription...`);
-      
-      const [subscription] = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
+      const userId = req.user!.id;
+      const { password, twoFactorCode } = req.body;
 
-      if (subscription && subscription.stripeSubscriptionId && subscription.status === "active") {
-        console.log(`💳 [DELETE ACCOUNT] Canceling Stripe subscription: ${subscription.stripeSubscriptionId}`);
-        
-        const stripe = (await import("stripe")).default;
-        const stripeClient = new stripe(process.env.STRIPE_SECRET_KEY!);
+      console.log(`🗑️ [DELETE ACCOUNT] Request received for user: ${userId}`);
 
-        await stripeClient.subscriptions.cancel(subscription.stripeSubscriptionId);
-        
-        console.log(`✅ [DELETE ACCOUNT] Stripe subscription canceled`);
+      // Get user from database
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      console.log(`🔍 [DELETE ACCOUNT] User info:`, {
+        email: user.email,
+        hasPassword: !!user.passwordHash,
+        oauthProvider: user.oauthProvider,
+        googleId: user.googleId,
+      });
+
+      // ✅ IMPROVED: Determine authentication method
+      const isOAuthOnly =
+        !user.passwordHash && (user.oauthProvider || user.googleId);
+      const hasPassword = !!user.passwordHash;
+
+      console.log(`🔐 [DELETE ACCOUNT] Auth type:`, {
+        isOAuthOnly,
+        hasPassword,
+        requiresPassword: hasPassword,
+      });
+
+      // ✅ SECURITY CHECK 1: Verify password (if account has one)
+      if (hasPassword) {
+        if (!password) {
+          return res.status(400).json({
+            message: "Password is required to delete your account",
+          });
+        }
+
+        console.log(`🔐 [DELETE ACCOUNT] Verifying password...`);
+
+        const isPasswordValid = await bcrypt.compare(
+          password,
+          user.passwordHash!
+        );
+
+        if (!isPasswordValid) {
+          console.log(
+            `❌ [DELETE ACCOUNT] Invalid password for user: ${userId}`
+          );
+
+          // Log failed attempt
+          await storage.logUserActivity(
+            userId,
+            "account_deletion_failed",
+            "security",
+            {
+              reason: "incorrect_password",
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          return res.status(401).json({
+            message: "Incorrect password",
+          });
+        }
+
+        console.log(`✅ [DELETE ACCOUNT] Password verified`);
+      } else if (isOAuthOnly) {
+        // ✅ OAuth-only account: No password to verify
+        console.log(
+          `✅ [DELETE ACCOUNT] OAuth-only account, skipping password check`
+        );
+
+        // For extra security, you could require them to re-authenticate via OAuth
+        // But for now, we'll allow deletion with just checkbox + 2FA (if enabled)
       } else {
-        console.log(`ℹ️ [DELETE ACCOUNT] No active subscription to cancel`);
+        // Account has neither password nor OAuth? This shouldn't happen
+        console.error(
+          `⚠️ [DELETE ACCOUNT] Account has no authentication method`
+        );
+        return res.status(500).json({
+          message: "Account authentication error. Please contact support.",
+        });
       }
-    } catch (stripeError) {
-      console.error(`⚠️ [DELETE ACCOUNT] Stripe cancellation error:`, stripeError);
-    }
 
-    // ✅ STEP 2: Send deletion confirmation email BEFORE deleting
-    try {
-      await emailService.sendAccountDeletionEmail({
-        to: user.email!,
-        toName: user.firstName || "User",
+      // ✅ SECURITY CHECK 2: Verify 2FA if enabled
+      if (user.twoFactorEnabled) {
+        if (!twoFactorCode) {
+          return res.status(400).json({
+            message: "Two-factor authentication code is required",
+            requires2FA: true,
+          });
+        }
+
+        const { verify2FACode, decrypt2FASecret } = await import(
+          "./services/2fa-service"
+        );
+
+        console.log(`🔐 [DELETE ACCOUNT] Decrypting 2FA secret...`);
+        const decryptedSecret = decrypt2FASecret(user.twoFactorSecret!);
+
+        console.log(`🔍 [DELETE ACCOUNT] Verifying 2FA code...`);
+        const isValidCode = verify2FACode(decryptedSecret, twoFactorCode);
+
+        if (!isValidCode) {
+          console.log(
+            `❌ [DELETE ACCOUNT] Invalid 2FA code for user: ${userId}`
+          );
+
+          await storage.logUserActivity(
+            userId,
+            "account_deletion_failed",
+            "security",
+            {
+              reason: "incorrect_2fa_code",
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          return res.status(401).json({
+            message: "Invalid two-factor authentication code",
+          });
+        }
+
+        console.log(`✅ [DELETE ACCOUNT] 2FA verified`);
+      }
+
+      // ✅ STEP 1: Cancel active Stripe subscription
+      try {
+        console.log(`💳 [DELETE ACCOUNT] Checking for active subscription...`);
+
+        const [subscription] = await db
+          .select()
+          .from(subscriptions)
+          .where(eq(subscriptions.userId, userId))
+          .orderBy(desc(subscriptions.createdAt))
+          .limit(1);
+
+        if (
+          subscription &&
+          subscription.stripeSubscriptionId &&
+          subscription.status === "active"
+        ) {
+          console.log(
+            `💳 [DELETE ACCOUNT] Canceling Stripe subscription: ${subscription.stripeSubscriptionId}`
+          );
+
+          const stripe = (await import("stripe")).default;
+          const stripeClient = new stripe(process.env.STRIPE_SECRET_KEY!);
+
+          await stripeClient.subscriptions.cancel(
+            subscription.stripeSubscriptionId
+          );
+
+          console.log(`✅ [DELETE ACCOUNT] Stripe subscription canceled`);
+        } else {
+          console.log(`ℹ️ [DELETE ACCOUNT] No active subscription to cancel`);
+        }
+      } catch (stripeError) {
+        console.error(
+          `⚠️ [DELETE ACCOUNT] Stripe cancellation error:`,
+          stripeError
+        );
+      }
+
+      // ✅ STEP 2: Send deletion confirmation email BEFORE deleting
+      try {
+        await emailService.sendAccountDeletionEmail({
+          to: user.email!,
+          toName: user.firstName || "User",
+        });
+        console.log(`✅ [DELETE ACCOUNT] Deletion email sent`);
+      } catch (emailError) {
+        console.error(`⚠️ [DELETE ACCOUNT] Email sending error:`, emailError);
+      }
+
+      // ✅ STEP 3: Log the deletion BEFORE actually deleting
+      await storage.logUserActivity(userId, "account_deleted", "user", {
+        email: user.email,
+        deletedAt: new Date().toISOString(),
+        authMethod: isOAuthOnly
+          ? "oauth_only"
+          : hasPassword
+          ? "password"
+          : "unknown",
+        had2FA: user.twoFactorEnabled,
+        hadSubscription: !!user.stripeCustomerId,
       });
-      console.log(`✅ [DELETE ACCOUNT] Deletion email sent`);
-    } catch (emailError) {
-      console.error(`⚠️ [DELETE ACCOUNT] Email sending error:`, emailError);
+
+      // ✅ STEP 4: Cascade delete all user data
+      await storage.deleteUserAccount(userId);
+
+      // ✅ STEP 5: Destroy session
+      req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destruction error:", err);
+        }
+      });
+
+      console.log(
+        `🎯 [DELETE ACCOUNT] Account successfully deleted for user: ${userId}`
+      );
+
+      res.json({
+        success: true,
+        message: "Your account has been permanently deleted",
+      });
+    } catch (error: any) {
+      console.error(`❌ [DELETE ACCOUNT] Error:`, error);
+      res.status(500).json({
+        message:
+          error.message || "Failed to delete account. Please contact support.",
+      });
     }
-
-    // ✅ STEP 3: Log the deletion BEFORE actually deleting
-    await storage.logUserActivity(userId, "account_deleted", "user", {
-      email: user.email,
-      deletedAt: new Date().toISOString(),
-      authMethod: isOAuthOnly ? 'oauth_only' : hasPassword ? 'password' : 'unknown',
-      had2FA: user.twoFactorEnabled,
-      hadSubscription: !!user.stripeCustomerId,
-    });
-
-    // ✅ STEP 4: Cascade delete all user data
-    await storage.deleteUserAccount(userId);
-
-    // ✅ STEP 5: Destroy session
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Session destruction error:", err);
-      }
-    });
-
-    console.log(`🎯 [DELETE ACCOUNT] Account successfully deleted for user: ${userId}`);
-
-    res.json({
-      success: true,
-      message: "Your account has been permanently deleted",
-    });
-  } catch (error: any) {
-    console.error(`❌ [DELETE ACCOUNT] Error:`, error);
-    res.status(500).json({
-      message: error.message || "Failed to delete account. Please contact support.",
-    });
-  }
-});
+  });
 
   // ==================== PASSWORD RESET ROUTES ====================
 
@@ -3708,7 +3751,7 @@ app.post("/api/user/delete-account", requireAuth, async (req, res) => {
 
   // ==================== SET PASSWORD (OAuth Users) ====================
 
-  app.post("/api/user/set-password", requireAuth, async (req,res) => {
+  app.post("/api/user/set-password", requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
       const { newPassword } = req.body;
@@ -3717,81 +3760,87 @@ app.post("/api/user/delete-account", requireAuth, async (req, res) => {
 
       // Get user
       const user = await storage.getUserById(userId);
-      if(!user) {
-        return res.status(404).json({message: "User not found"});
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
       }
 
       // Check if user already has password
 
-      if (user.passwordHash){
+      if (user.passwordHash) {
         console.log(`❌ [SET PASSWORD] User already has password`);
         return res.status(400).json({
-          message: "Password already set. Use 'Change Password' instead"
+          message: "Password already set. Use 'Change Password' instead",
         });
       }
 
       // Validate password
       if (!newPassword) {
-         return res.status(400).json({ message: "New password is required" });
+        return res.status(400).json({ message: "New password is required" });
       }
 
-      if (newPassword.length < 8){
+      if (newPassword.length < 8) {
         return res.status(400).json({
-          message: "Password must be at least 8 characters long"
+          message: "Password must be at least 8 characters long",
         });
       }
 
       // Password strength validation
-      if (!/[A-Z]/.test(newPassword)){
+      if (!/[A-Z]/.test(newPassword)) {
         return res.status(400).json({
-          message: "Password must contain at least one uppercase letter"
+          message: "Password must contain at least one uppercase letter",
         });
       }
 
-      if (!/[a-z]/.test(newPassword)){
+      if (!/[a-z]/.test(newPassword)) {
         return res.status(400).json({
-          message: "Password must contain at least one lowercase letter"
+          message: "Password must contain at least one lowercase letter",
         });
       }
 
-      if (!/[0-9]/.test(newPassword)){
+      if (!/[0-9]/.test(newPassword)) {
         return res.status(400).json({
-          message: "Password must contain at least one number"
+          message: "Password must contain at least one number",
         });
       }
 
       if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
-      return res.status(400).json({ 
-        message: "Password must contain at least one special character" 
+        return res.status(400).json({
+          message: "Password must contain at least one special character",
+        });
+      }
+
+      console.log(`✅ [SET PASSWORD] Password validation passed`);
+
+      // Hash and set password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+
+      await db
+        .update(users)
+        .set({
+          passwordHash,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      // Log the action
+      await storage.logUserActivity(userId, "password_set", "security", {
+        timestamp: new Date().toISOString(),
+        accountType: user.oauthProvider || "unknown",
       });
-    }
 
-    console.log(`✅ [SET PASSWORD] Password validation passed`);
+      console.log(
+        `✅ [SET PASSWORD] Password set successfully for user: ${userId}`
+      );
 
-    // Hash and set password
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-
-    await db.update(users).set({
-      passwordHash,
-      updatedAt: new Date(),
-    }).where(eq(users.id, userId));
-
-    // Log the action
-    await storage.logUserActivity(userId, "password_set", "security", {
-      timestamp: new Date().toISOString(),
-      accountType: user.oauthProvider || "unknown",
-    });
-
-    console.log(`✅ [SET PASSWORD] Password set successfully for user: ${userId}`);
-
-    res.json({
-      success: true,
-      message: "Password set successfully. You can now login with your email and password.",
-    });
+      res.json({
+        success: true,
+        message:
+          "Password set successfully. You can now login with your email and password.",
+      });
     } catch (error: any) {
       console.error("❌ [SET PASSWORD] Error:", error);
       res.status(500).json({
-        message: error.message || "Failed to set password"
+        message: error.message || "Failed to set password",
       });
     }
   });
@@ -3822,24 +3871,24 @@ app.post("/api/user/delete-account", requireAuth, async (req, res) => {
   });
 
   // ==================== SENDGRID TEST (TEMPORARY - Remove after testing) ====================
-app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
-  try {
-    const user = req.user!;
-    
-    console.log("📧 [SENDGRID TEST] Starting...");
-    console.log("📧 Sending to:", user.email);
-    console.log("📧 From:", process.env.EMAIL_FROM);
-    console.log("📧 Host:", process.env.EMAIL_HOST);
-    console.log("📧 Port:", process.env.EMAIL_PORT);
-    console.log("📧 User:", process.env.EMAIL_USER);
-    
-    const testTime = new Date().toLocaleString();
-    
-    await emailService.sendEmail({
-      to: user.email!,
-      toName: `${user.firstName} ${user.lastName}`,
-      subject: "✅ SendGrid Test - Email Working!",
-      htmlBody: `
+  app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+
+      console.log("📧 [SENDGRID TEST] Starting...");
+      console.log("📧 Sending to:", user.email);
+      console.log("📧 From:", process.env.EMAIL_FROM);
+      console.log("📧 Host:", process.env.EMAIL_HOST);
+      console.log("📧 Port:", process.env.EMAIL_PORT);
+      console.log("📧 User:", process.env.EMAIL_USER);
+
+      const testTime = new Date().toLocaleString();
+
+      await emailService.sendEmail({
+        to: user.email!,
+        toName: `${user.firstName} ${user.lastName}`,
+        subject: "✅ SendGrid Test - Email Working!",
+        htmlBody: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
             <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Email is Working!</h1>
@@ -3865,26 +3914,26 @@ app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
           </div>
         </div>
       `,
-      textBody: `EMAIL IS WORKING! 🎉\n\nCongratulations! SendGrid is configured correctly.\n\nTest Details:\nSent at: ${testTime}\nTo: ${user.email}\nVia: SendGrid SMTP`,
-    });
+        textBody: `EMAIL IS WORKING! 🎉\n\nCongratulations! SendGrid is configured correctly.\n\nTest Details:\nSent at: ${testTime}\nTo: ${user.email}\nVia: SendGrid SMTP`,
+      });
 
-    console.log("✅ [SENDGRID TEST] Email sent successfully!");
-    
-    res.json({ 
-      success: true, 
-      message: `Test email sent to ${user.email}. Check your inbox!`,
-      sentAt: testTime,
-    });
-  } catch (error: any) {
-    console.error("❌ [SENDGRID TEST] Failed:", error);
-    
-    res.status(500).json({ 
-      success: false,
-      error: error.message,
-      code: error.code,
-    });
-  }
-});
+      console.log("✅ [SENDGRID TEST] Email sent successfully!");
+
+      res.json({
+        success: true,
+        message: `Test email sent to ${user.email}. Check your inbox!`,
+        sentAt: testTime,
+      });
+    } catch (error: any) {
+      console.error("❌ [SENDGRID TEST] Failed:", error);
+
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
+  });
 
   setBroadcastFunction(broadcastUpdate);
   startReminderCron();
