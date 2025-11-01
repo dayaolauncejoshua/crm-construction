@@ -1,3 +1,5 @@
+//server/services/notification-service.ts
+
 import { emailService } from "./email";
 import { whatsappService } from "./whatsapp";
 import { storage } from "../storage";
@@ -71,10 +73,12 @@ class NotificationService {
       });
 
       // Check if lead notifications are enabled
-      if (!user.leadNotifications) {
+      if (user.leadNotifications === false) {
         console.log(`⏭️ Lead notifications disabled for user ${data.userId}`);
         return;
       }
+
+      console.log(`✅ Lead notifications enabled for user ${data.userId}`);
 
       const { lead, qualification } = data;
 
@@ -176,12 +180,14 @@ class NotificationService {
       });
 
       // Check if booking notifications are enabled
-      if (!user.bookingNotifications) {
+      if (user.bookingNotifications === false) {
         console.log(
           `⏭️ Booking notifications disabled for user ${data.userId}`
         );
         return;
       }
+
+      console.log(`✅ Booking notifications enabled for user ${data.userId}`);
 
       const { booking, lead } = data;
 

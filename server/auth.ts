@@ -340,18 +340,20 @@ router.get("/api/auth/me", async (req, res) => {
         emailVerified: user.emailVerified,
         isTrialActive: user.isTrialActive,
         trialEndsAt: user.trialEndsAt,
-        twoFactorEnabled: user.twoFactorEnabled, // 🆕 ADD THIS
-        passwordHash: user.passwordHash, // ✅ ADD THIS (send NULL, not the actual hash)
-        oauthProvider: user.oauthProvider, // ✅ ADD THIS
+        twoFactorEnabled: user.twoFactorEnabled,
+        passwordHash: user.passwordHash,
+        oauthProvider: user.oauthProvider,
         googleId: user.googleId,
+        
+        // notification preferences
+        emailNotifications: user.emailNotifications ?? true,
+        whatsappNotifications: user.whatsappNotifications ?? false,
+        leadNotifications: user.leadNotifications ?? true,
+        bookingNotifications: user.bookingNotifications ?? true,
+        weeklyReports: user.weeklyReports ?? true,
+        
+        // Settings JSONB (for regional preferences)
         settings: user.settings || {
-          notifications: {
-            email: true,
-            whatsapp: true,
-            leads: true,
-            bookings: true,
-            weeklyReports: false,
-          },
           regional: {
             timezone: "UTC",
             language: "en",

@@ -1,6 +1,6 @@
 // client/src/pages/settings.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
@@ -121,11 +121,31 @@ export default function Settings() {
     useState(false);
 
   // Notification Preferences
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [whatsappNotifications, setWhatsappNotifications] = useState(true);
-  const [leadNotifications, setLeadNotifications] = useState(true);
-  const [bookingNotifications, setBookingNotifications] = useState(true);
-  const [weeklyReports, setWeeklyReports] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(
+    user?.emailNotifications ?? true
+  );
+  const [whatsappNotifications, setWhatsappNotifications] = useState(
+    user?.whatsappNotifications ?? false
+  );
+  const [leadNotifications, setLeadNotifications] = useState(
+    user?.leadNotifications ?? true
+  );
+  const [bookingNotifications, setBookingNotifications] = useState(
+    user?.bookingNotifications ?? true
+  );
+  const [weeklyReports, setWeeklyReports] = useState(
+    user?.weeklyReports ?? true
+  );
+
+  useEffect(() => {
+    if (user) {
+      setEmailNotifications(user.emailNotifications ?? true);
+      setWhatsappNotifications(user.whatsappNotifications ?? false);
+      setLeadNotifications(user.leadNotifications ?? true);
+      setBookingNotifications(user.bookingNotifications ?? true);
+      setWeeklyReports(user.weeklyReports ?? true);
+    }
+  }, [user]);
 
   // Regional Settings
   const [timezone, setTimezone] = useState("America/New_York");
@@ -146,7 +166,9 @@ export default function Settings() {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [regeneratePassword, setRegeneratePassword] = useState("");
   const [regenerate2FACode, setRegenerate2FACode] = useState("");
-  const [regenerateStep, setRegenerateStep] = useState<'input' | 'display'>('input');
+  const [regenerateStep, setRegenerateStep] = useState<"input" | "display">(
+    "input"
+  );
 
   //Account Deletion States
   const [deletePassword, setDeletePassword] = useState("");
@@ -157,6 +179,72 @@ export default function Settings() {
   const [deletionStep, setDeletionStep] = useState(0);
   const [deletionComplete, setDeletionComplete] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(5);
+
+  // ✅ NEW: Individual toggle handlers for instant save
+  const handleToggleEmailNotifications = async (checked: boolean) => {
+    setEmailNotifications(checked);
+    updatePreferencesMutation.mutate({
+      emailNotifications: checked,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports,
+      timezone,
+      language,
+    });
+  };
+
+  const handleToggleWhatsAppNotifications = async (checked: boolean) => {
+    setWhatsappNotifications(checked);
+    updatePreferencesMutation.mutate({
+      emailNotifications,
+      whatsappNotifications: checked,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports,
+      timezone,
+      language,
+    });
+  };
+
+  const handleToggleLeadNotifications = async (checked: boolean) => {
+    setLeadNotifications(checked);
+    updatePreferencesMutation.mutate({
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications: checked,
+      bookingNotifications,
+      weeklyReports,
+      timezone,
+      language,
+    });
+  };
+
+  const handleToggleBookingNotifications = async (checked: boolean) => {
+    setBookingNotifications(checked);
+    updatePreferencesMutation.mutate({
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications: checked,
+      weeklyReports,
+      timezone,
+      language,
+    });
+  };
+
+  const handleToggleWeeklyReports = async (checked: boolean) => {
+    setWeeklyReports(checked);
+    updatePreferencesMutation.mutate({
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports: checked,
+      timezone,
+      language,
+    });
+  };
 
   // Get user initials
   const getUserInitials = () => {
@@ -1567,7 +1655,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
+                      onCheckedChange={handleToggleEmailNotifications}
+                      disabled={updatePreferencesMutation.isPending}
                     />
                   </div>
 
@@ -1589,7 +1678,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={whatsappNotifications}
-                      onCheckedChange={setWhatsappNotifications}
+                      onCheckedChange={handleToggleWhatsAppNotifications}
+                      disabled={updatePreferencesMutation.isPending}
                     />
                   </div>
 
@@ -1599,11 +1689,23 @@ export default function Settings() {
                     <div className="flex items-start gap-2">
                       <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-blue-900">
-                        <strong>How it works:</strong> Notifications are sent to
-                        your email and WhatsApp based on your preferences. You
-                        can customize which events trigger notifications below.
+                        <strong>How it works:</strong> You'll receive
+                        notifications for:
                       </p>
                     </div>
+                    <ul className="text-xs text-blue-800 mt-2 space-y-1 ml-6 list-disc">
+                      <li>
+                        <strong>Hot Leads:</strong> High-priority leads (score
+                        ≥70%)
+                      </li>
+                      <li>
+                        <strong>Booking Proposals:</strong> When AI schedules a
+                        meeting
+                      </li>
+                      <li>
+                        <strong>Weekly Reports:</strong> Performance summaries
+                      </li>
+                    </ul>
                   </div>
                 </CardContent>
               </Card>
@@ -1622,19 +1724,20 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-construction" />
+                      <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-red-600" />
                       </div>
                       <div className="space-y-0.5">
-                        <Label>New Lead Alerts</Label>
+                        <Label>🔥 Hot Lead Alerts</Label>
                         <p className="text-sm text-slate-500">
-                          When new leads come in
+                          When high-priority leads are detected
                         </p>
                       </div>
                     </div>
                     <Switch
                       checked={leadNotifications}
                       onCheckedChange={setLeadNotifications}
+                      disabled={updatePreferencesMutation.isPending}
                     />
                   </div>
 
@@ -1654,7 +1757,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={bookingNotifications}
-                      onCheckedChange={setBookingNotifications}
+                      onCheckedChange={handleToggleBookingNotifications}
+                      disabled={updatePreferencesMutation.isPending}
                     />
                   </div>
 
@@ -1674,7 +1778,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={weeklyReports}
-                      onCheckedChange={setWeeklyReports}
+                      onCheckedChange={handleToggleWeeklyReports}
+                      disabled={updatePreferencesMutation.isPending}
                     />
                   </div>
 
@@ -2239,254 +2344,264 @@ export default function Settings() {
       </AlertDialog>
 
       {/* ✅ NEW: Regenerate Backup Codes Modal */}
-<Dialog 
-  open={showRegenerateModal} 
-  onOpenChange={(open) => {
-    setShowRegenerateModal(open);
-    if (!open) {
-      // Reset on close
-      setRegenerateStep('input');
-      setRegeneratePassword("");
-      setRegenerate2FACode("");
-      setBackupCodes([]);
-    }
-  }}
->
-  <DialogContent className="max-w-md">
-    {regenerateStep === 'input' ? (
-      // ========== STEP 1: INPUT CREDENTIALS ==========
-      <>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 text-blue-600" />
-            Regenerate Backup Codes
-          </DialogTitle>
-          <DialogDescription>
-            Create new backup codes for your account
-          </DialogDescription>
-        </DialogHeader>
+      <Dialog
+        open={showRegenerateModal}
+        onOpenChange={(open) => {
+          setShowRegenerateModal(open);
+          if (!open) {
+            // Reset on close
+            setRegenerateStep("input");
+            setRegeneratePassword("");
+            setRegenerate2FACode("");
+            setBackupCodes([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          {regenerateStep === "input" ? (
+            // ========== STEP 1: INPUT CREDENTIALS ==========
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-blue-600" />
+                  Regenerate Backup Codes
+                </DialogTitle>
+                <DialogDescription>
+                  Create new backup codes for your account
+                </DialogDescription>
+              </DialogHeader>
 
-        <div className="space-y-4">
-          {/* ⚠️ Warning Box */}
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-yellow-900">
-                <p className="font-semibold mb-1">⚠️ Important:</p>
-                <p>
-                  This will <strong>invalidate all old backup codes</strong>. 
-                  Any unused codes will no longer work.
-                </p>
+              <div className="space-y-4">
+                {/* ⚠️ Warning Box */}
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-yellow-900">
+                      <p className="font-semibold mb-1">⚠️ Important:</p>
+                      <p>
+                        This will{" "}
+                        <strong>invalidate all old backup codes</strong>. Any
+                        unused codes will no longer work.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Security Notice */}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-900">
+                      <p className="font-semibold mb-1">
+                        Security Verification
+                      </p>
+                      <p>
+                        {(user as any)?.passwordHash
+                          ? "Enter your password and current 2FA code to confirm."
+                          : "Enter your current 2FA code to confirm (no password needed for Google accounts)."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Input (conditional) */}
+                {(user as any)?.passwordHash && (
+                  <div className="space-y-2">
+                    <Label htmlFor="regeneratePassword">Password</Label>
+                    <Input
+                      id="regeneratePassword"
+                      type="password"
+                      value={regeneratePassword}
+                      onChange={(e) => setRegeneratePassword(e.target.value)}
+                      placeholder="Enter your password"
+                    />
+                  </div>
+                )}
+
+                {/* 2FA Code Input (REQUIRED) */}
+                <div className="space-y-2">
+                  <Label htmlFor="regenerate2FACode">Current 2FA Code</Label>
+                  <Input
+                    id="regenerate2FACode"
+                    value={regenerate2FACode}
+                    onChange={(e) =>
+                      setRegenerate2FACode(
+                        e.target.value.replace(/\D/g, "").slice(0, 6)
+                      )
+                    }
+                    placeholder="000000"
+                    maxLength={6}
+                    className="text-center text-2xl tracking-widest font-mono"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Enter the 6-digit code from your authenticator app
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRegenerateModal(false);
+                      setRegeneratePassword("");
+                      setRegenerate2FACode("");
+                    }}
+                    className="flex-1"
+                    disabled={regenerateBackupCodesMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      regenerateBackupCodesMutation.mutate({
+                        password: (user as any)?.passwordHash
+                          ? regeneratePassword
+                          : undefined,
+                        code: regenerate2FACode,
+                      });
+                    }}
+                    disabled={
+                      ((user as any)?.passwordHash && !regeneratePassword) ||
+                      regenerate2FACode.length !== 6 ||
+                      regenerateBackupCodesMutation.isPending
+                    }
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {regenerateBackupCodesMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : (
+            // ========== STEP 2: DISPLAY NEW CODES ==========
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  New Backup Codes Generated!
+                </DialogTitle>
+                <DialogDescription>
+                  Save these codes in a secure place
+                </DialogDescription>
+              </DialogHeader>
 
-          {/* Security Notice */}
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <Shield className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-blue-900">
-                <p className="font-semibold mb-1">Security Verification</p>
-                <p>
-                  {(user as any)?.passwordHash 
-                    ? "Enter your password and current 2FA code to confirm."
-                    : "Enter your current 2FA code to confirm (no password needed for Google accounts)."}
-                </p>
+              <div className="space-y-4">
+                {/* Success Message */}
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-green-900">
+                      <p className="font-semibold mb-1">✅ Success!</p>
+                      <p>
+                        Your old backup codes have been invalidated. Use these
+                        new codes if you lose access to your authenticator.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warning */}
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-red-900">
+                      <p className="font-semibold mb-1">⚠️ Save These Now!</p>
+                      <p>
+                        These codes will only be shown once. Each code can be
+                        used only one time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Backup Codes Display */}
+                <div className="p-4 bg-slate-900 rounded-lg">
+                  <div className="grid grid-cols-2 gap-2">
+                    {backupCodes.map((code, index) => (
+                      <code
+                        key={index}
+                        className="text-sm font-mono text-white"
+                      >
+                        {code}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const text = backupCodes.join("\n");
+                      navigator.clipboard.writeText(text);
+                      toast({
+                        title: "Copied!",
+                        description: "Backup codes copied to clipboard",
+                      });
+                    }}
+                    className="flex-1 gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Copy Codes
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowRegenerateModal(false);
+                      setBackupCodes([]);
+                      setRegeneratePassword("");
+                      setRegenerate2FACode("");
+                      setRegenerateStep("input");
+                    }}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    I've Saved Them
+                  </Button>
+                </div>
+
+                {/* Optional: Download as file */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const text = `LeadFlow CRM - Backup Codes\nGenerated: ${new Date().toLocaleString()}\n\n${backupCodes.join(
+                      "\n"
+                    )}\n\n⚠️ Keep these codes secure. Each code can only be used once.`;
+                    const blob = new Blob([text], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `leadflow-backup-codes-${Date.now()}.txt`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    toast({
+                      title: "Downloaded!",
+                      description: "Backup codes saved to file",
+                    });
+                  }}
+                  className="w-full text-xs"
+                >
+                  💾 Download as Text File
+                </Button>
               </div>
-            </div>
-          </div>
-
-          {/* Password Input (conditional) */}
-          {(user as any)?.passwordHash && (
-            <div className="space-y-2">
-              <Label htmlFor="regeneratePassword">Password</Label>
-              <Input
-                id="regeneratePassword"
-                type="password"
-                value={regeneratePassword}
-                onChange={(e) => setRegeneratePassword(e.target.value)}
-                placeholder="Enter your password"
-              />
-            </div>
+            </>
           )}
-
-          {/* 2FA Code Input (REQUIRED) */}
-          <div className="space-y-2">
-            <Label htmlFor="regenerate2FACode">Current 2FA Code</Label>
-            <Input
-              id="regenerate2FACode"
-              value={regenerate2FACode}
-              onChange={(e) =>
-                setRegenerate2FACode(
-                  e.target.value.replace(/\D/g, "").slice(0, 6)
-                )
-              }
-              placeholder="000000"
-              maxLength={6}
-              className="text-center text-2xl tracking-widest font-mono"
-            />
-            <p className="text-xs text-slate-500">
-              Enter the 6-digit code from your authenticator app
-            </p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowRegenerateModal(false);
-                setRegeneratePassword("");
-                setRegenerate2FACode("");
-              }}
-              className="flex-1"
-              disabled={regenerateBackupCodesMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                regenerateBackupCodesMutation.mutate({
-                  password: (user as any)?.passwordHash ? regeneratePassword : undefined,
-                  code: regenerate2FACode,
-                });
-              }}
-              disabled={
-                ((user as any)?.passwordHash && !regeneratePassword) ||
-                regenerate2FACode.length !== 6 ||
-                regenerateBackupCodesMutation.isPending
-              }
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              {regenerateBackupCodesMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Regenerate
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </>
-    ) : (
-      // ========== STEP 2: DISPLAY NEW CODES ==========
-      <>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
-            New Backup Codes Generated!
-          </DialogTitle>
-          <DialogDescription>
-            Save these codes in a secure place
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Success Message */}
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-green-900">
-                <p className="font-semibold mb-1">✅ Success!</p>
-                <p>
-                  Your old backup codes have been invalidated. 
-                  Use these new codes if you lose access to your authenticator.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Warning */}
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-red-900">
-                <p className="font-semibold mb-1">⚠️ Save These Now!</p>
-                <p>
-                  These codes will only be shown once. 
-                  Each code can be used only one time.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Backup Codes Display */}
-          <div className="p-4 bg-slate-900 rounded-lg">
-            <div className="grid grid-cols-2 gap-2">
-              {backupCodes.map((code, index) => (
-                <code key={index} className="text-sm font-mono text-white">
-                  {code}
-                </code>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                const text = backupCodes.join("\n");
-                navigator.clipboard.writeText(text);
-                toast({
-                  title: "Copied!",
-                  description: "Backup codes copied to clipboard",
-                });
-              }}
-              className="flex-1 gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Copy Codes
-            </Button>
-            <Button
-              onClick={() => {
-                setShowRegenerateModal(false);
-                setBackupCodes([]);
-                setRegeneratePassword("");
-                setRegenerate2FACode("");
-                setRegenerateStep('input');
-              }}
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              I've Saved Them
-            </Button>
-          </div>
-
-          {/* Optional: Download as file */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const text = `LeadFlow CRM - Backup Codes\nGenerated: ${new Date().toLocaleString()}\n\n${backupCodes.join("\n")}\n\n⚠️ Keep these codes secure. Each code can only be used once.`;
-              const blob = new Blob([text], { type: 'text/plain' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `leadflow-backup-codes-${Date.now()}.txt`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-              
-              toast({
-                title: "Downloaded!",
-                description: "Backup codes saved to file",
-              });
-            }}
-            className="w-full text-xs"
-          >
-            💾 Download as Text File
-          </Button>
-        </div>
-      </>
-    )}
-  </DialogContent>
-</Dialog>
+        </DialogContent>
+      </Dialog>
 
       {/* ✅ NEW: Deletion Progress Modal */}
       <Dialog open={showDeletionProgress} onOpenChange={() => {}}>

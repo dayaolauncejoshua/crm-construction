@@ -26,7 +26,6 @@ interface UserSettings {
   };
 }
 
-// 🆕 Updated User interface with settings
 interface User {
   id: string;
   email: string;
@@ -37,9 +36,17 @@ interface User {
   emailVerified?: boolean;
   isTrialActive?: boolean;
   trialEndsAt?: Date | null;
-  settings?: UserSettings; // 🆕 ADD THIS LINE
   twoFactorEnabled?: boolean;
   
+  // Notification Preferences 
+  emailNotifications?: boolean;
+  whatsappNotifications?: boolean;
+  leadNotifications?: boolean;
+  bookingNotifications?: boolean;
+  weeklyReports?: boolean;
+  
+  // Settings JSONB (for regional preferences)
+  settings?: UserSettings;
 }
 
 interface AuthContextType {

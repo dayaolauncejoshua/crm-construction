@@ -3294,68 +3294,92 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
-  // Update user preferences
-  app.patch("/api/user/preferences", requireAuth, async (req, res) => {
-    try {
-      const userId = req.user!.id;
-      const {
-        emailNotifications,
-        whatsappNotifications,
-        leadNotifications,
-        bookingNotifications,
-        weeklyReports,
-        timezone,
-        language,
-      } = req.body;
+// Update user preferences
+app.patch("/api/user/preferences", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const {
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports,
+      timezone,
+      language,
+    } = req.body;
 
-      console.log("⚙️ Updating preferences for user:", userId);
+    console.log("⚙️ Updating preferences for user:", userId);
+    console.log("📊 Notification preferences:", {
+      emailNotifications,
+      whatsappNotifications,
+      leadNotifications,
+      bookingNotifications,
+      weeklyReports,
+    });
 
-      // For now, we'll store preferences in user settings JSONB field
-      // You could also create a separate preferences table
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
+    // Get current user
+    const user = await storage.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
+    // ✅ FIX: Update notification preferences in dedicated columns
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    // Update notification columns (if provided)
+    if (emailNotifications !== undefined) {
+      updateData.emailNotifications = emailNotifications;
+    }
+    if (whatsappNotifications !== undefined) {
+      updateData.whatsappNotifications = whatsappNotifications;
+    }
+    if (leadNotifications !== undefined) {
+      updateData.leadNotifications = leadNotifications;
+    }
+    if (bookingNotifications !== undefined) {
+      updateData.bookingNotifications = bookingNotifications;
+    }
+    if (weeklyReports !== undefined) {
+      updateData.weeklyReports = weeklyReports;
+    }
+
+    // ✅ ALSO: Update settings JSONB for regional preferences
+    if (timezone || language) {
       const currentSettings = (user.settings as any) || {};
-      const updatedSettings = {
+      updateData.settings = {
         ...currentSettings,
-        notifications: {
-          email: emailNotifications,
-          whatsapp: whatsappNotifications,
-          leads: leadNotifications,
-          bookings: bookingNotifications,
-          weeklyReports,
-        },
         regional: {
-          timezone,
-          language,
+          timezone: timezone || currentSettings.regional?.timezone,
+          language: language || currentSettings.regional?.language,
         },
         updatedAt: new Date().toISOString(),
       };
-
-      await storage.updateUser(userId, {
-        settings: updatedSettings,
-        updatedAt: new Date(),
-      });
-
-      // Log activity
-      await storage.logUserActivity(userId, "preferences_updated", "user", {
-        preferencesChanged: Object.keys(req.body),
-      });
-
-      console.log("✅ Preferences updated successfully");
-      res.json({
-        success: true,
-        message: "Preferences updated successfully",
-      });
-    } catch (error: any) {
-      console.error("❌ Error updating preferences:", error);
-      res.status(500).json({
-        message: error.message || "Failed to update preferences",
-      });
     }
-  });
+
+    // Update user
+    await storage.updateUser(userId, updateData);
+
+    // Log activity
+    await storage.logUserActivity(userId, "preferences_updated", "user", {
+      preferencesChanged: Object.keys(req.body),
+    });
+
+    console.log("✅ Preferences updated successfully");
+    console.log("📊 Updated values:", updateData);
+
+    res.json({
+      success: true,
+      message: "Preferences updated successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ Error updating preferences:", error);
+    res.status(500).json({
+      message: error.message || "Failed to update preferences",
+    });
+  }
+});
 
   app.get("/api/user/activity", requireAuth, async (req, res) => {
     try {
