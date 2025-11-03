@@ -991,6 +991,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
             bookingTimeline.length
           : 0;
 
+      // ===== 7. CONVERSION FUNNEL DATA =====
+      // Stage 1: All Leads
+      const totalLeadsCount = filteredLeads.length;
+
+      // Stage 2: Qualified Leads (score >= 0.7)
+      const qualifiedLeadsCount = filteredLeads.filter((l) => parseFloat(l.qualificationScore || "0") >= 0.7).length;
+
+      // Stage 3: Meetings (scheduled or confirmed bookings)
+      const meetingsCount = filteredBookings.filter((b) => b.status === "scheduled" || b.status === "confirmed").length;
+
+      // Stage 4: Proposals (proposed bookings - before scheduling)
+      const proposalsCount = bookings.filter((b) => b.status === "proposed" && new Date(b.createdAt!) >= startDate).length; 
+
+      // Stage 5: Closed (confirmed bookings)
+      const closedCount = bookings.filter((b) => b.status === "completed" && new Date(b.createdAt!) >= startDate).length;
+
+      const conversionFunnel = {
+        leads: {
+          count: totalLeadsCount,
+          percentage: 100,
+        },
+        qualified: {
+          count: qualifiedLeadsCount,
+          percentage: totalLeadsCount > 0 ? parseFloat(((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+        },
+        meetings: {
+          count: meetingsCount,
+          percentage: totalLeadsCount > 0 ? parseFloat(((meetingsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+        },
+        proposals: {
+          count: proposalsCount,
+          percentage: totalLeadsCount > 0 ? parseFloat(((proposalsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+        },
+        closed: {
+          count: closedCount,
+          percentage: totalLeadsCount > 0 ? parseFloat(((closedCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+        }
+      };
+
+      console.log(`📊 [ANALYTICS] Conversion Funnel:`, conversionFunnel);
+
       console.log(`✅ [ANALYTICS] Data prepared successfully`);
 
       res.json({
@@ -1013,7 +1054,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         temperatureData,
         statusData,
         aiPerformance,
-        bookingTimeline: bookingTimeline.slice(0, 10), // Latest 10
+        bookingTimeline: bookingTimeline.slice(0, 10),
+        conversionFunnel,
       });
     } catch (error: any) {
       console.error("❌ [ANALYTICS] Error:", error);
