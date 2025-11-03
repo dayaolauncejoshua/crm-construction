@@ -498,25 +498,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           incomingMessage.messageId
         );
 
-        // Cancel pending follow-ups when lead replies
-        try {
+        // ✅ FIXED: Only cancel follow-ups on NEW lead messages (not status updates)
+try {
   const lead = await storage.getLeadByPhone(incomingMessage.from);
   
   if (lead) {
-    // Check if there are any pending follow-ups BEFORE cancelling
-    const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
+    // ✅ NEW: Get conversation to check message count
+    const conversations = await storage.getConversations(lead.clientId, 100);
+    const conversation = conversations.find((c) => c.leadId === lead.id);
     
-    if (pendingFollowUps.length > 0) {
-      console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
-      console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
+    if (conversation) {
+      // Count how many messages from this lead exist
+      const messages = await storage.getMessages(conversation.id);
+      const leadMessageCount = messages.filter(m => m.sender === "lead").length;
       
-      // Cancel all pending follow-ups for this lead
-      const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
-      await cancelPendingFollowUps(lead.id);
-      
-      console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
-    } else {
-      console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+      // ✅ Only cancel if this is NOT the first message (first message schedules follow-ups)
+      if (leadMessageCount > 1) {
+        const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
+        
+        if (pendingFollowUps.length > 0) {
+          console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
+          console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
+          
+          // Cancel all pending follow-ups for this lead
+          const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
+          await cancelPendingFollowUps(lead.id);
+          
+          console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
+        } else {
+          console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+        }
+      } else {
+        console.log(`ℹ️ First message from lead - follow-ups will be scheduled after AI response`);
+      }
     }
   }
 } catch (error) {
@@ -4417,28 +4431,6 @@ Could you suggest some alternative times that work for you? We'd love to find a 
   // ========================= START REMINDER CRON  ============================
   setBroadcastFunction(broadcastUpdate);
   startReminderCron();
-
-  // ==================== TEMPORARY: SEED FOLLOW-UP SEQUENCES ====================
-  app.post("/api/admin/seed-follow-ups", requireAuth, async (req, res) => {
-    try {
-      const requestUser = req.user!;
-      
-      // Only super admin can run this
-      if (requestUser.role !== "super_admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      console.log("🌱 Seeding default follow-up sequences...");
-
-      const { seedDefaultFollowUpSequences } = await import("./seeds/seed-follow-ups");
-      await seedDefaultFollowUpSequences();
-
-      res.json({ success: true, message: "Sequences seeded successfully" });
-    } catch (error: any) {
-      console.error("❌ Error seeding sequences:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // After your other routes
   // app.use(vslapp);
