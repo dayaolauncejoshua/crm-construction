@@ -1,13 +1,31 @@
-// client/src/pages/follow-ups.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Clock,
+  MessageSquare,
+  TrendingUp,
+  Users,
+  Play,
+  Pause,
+  Plus,
+  Trash2,
+  Calendar,
+  Check,
+  X,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -16,724 +34,623 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Badge } from "@/components/ui/badge";
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useLocation } from "wouter";
 
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import {
-  Clock,
-  MessageSquare,
-  Phone,
-  Mail,
-  Plus,
-  Play,
-  Pause,
-  Edit,
-  Trash2,
-  CheckCircle,
-  AlertCircle,
-  Calendar,
-  Zap,
-  Users,
-  TrendingUp,
-} from "lucide-react";
+interface FollowUpSequence {
+  id: string;
+  name: string;
+  description: string;
+  triggerType: string;
+  channel: string;
+  status: string;
+  isDefault: boolean;
+  steps: FollowUpStep[];
+}
 
-const createFollowUpSchema = z.object({
-  leadId: z.string().min(1, "Lead is required"),
-  channel: z.enum(["whatsapp", "email", "sms"]),
-  triggerType: z.enum(["no_response", "time_based", "behavior"]),
-  scheduleTime: z.string().min(1, "Schedule time is required"),
-  content: z.string().min(10, "Content must be at least 10 characters"),
-});
+interface FollowUpStep {
+  id: string;
+  stepNumber: number;
+  delayMinutes: number;
+  content: string;
+  channel: string;
+}
 
-type CreateFollowUpData = z.infer<typeof createFollowUpSchema>;
+interface PendingFollowUp {
+  id: string;
+  leadName: string;
+  leadCompany?: string;
+  content: string;
+  scheduledFor: string;
+  status: string;
+  stepNumber: number;
+}
 
-export default function FollowUps() {
+interface FollowUpStats {
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+  cancelled: number;
+}
+
+export default function FollowUpsPage() {
   usePageTitle("Follow-ups");
-  const [selectedClientId, setSelectedClientId] = useState("demo-client");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [selectedSequence, setSelectedSequence] = useState<any>(null);
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [clients, setClients] = useState<any[]>([]);
+  const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
+    []
+  );
+  const [stats, setStats] = useState<FollowUpStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   // Fetch clients
-  const { data: clients } = useQuery({
-    queryKey: ["/api/clients"],
-    queryFn: async () => {
-      const response = await fetch(`/api/clients?userId=demo-user`);
-      return response.json();
-    },
-  });
-
-  // Fetch dashboard data for leads
-  const { data: dashboardData } = useQuery({
-    queryKey: ["/api/dashboard", selectedClientId],
-    enabled: !!selectedClientId,
-  }) as { data: { leads?: any[] } | undefined };
-
-  // Fetch follow-ups
-  const { data: followUpsData, isLoading } = useQuery({
-    queryKey: ["/api/follow-ups", selectedClientId],
-    enabled: !!selectedClientId,
-    queryFn: async () => {
-      const response = await fetch(`/api/follow-ups/${selectedClientId}`);
-      return response.json();
-    },
-  });
-
-  const form = useForm<CreateFollowUpData>({
-    resolver: zodResolver(createFollowUpSchema),
-    defaultValues: {
-      leadId: "",
-      channel: "whatsapp",
-      triggerType: "no_response",
-      scheduleTime: "",
-      content: "",
-    },
-  });
-
-  // Create follow-up mutation
-  const createFollowUpMutation = useMutation({
-    mutationFn: async (data: CreateFollowUpData) => {
-      const response = await apiRequest("POST", "/api/follow-ups", {
-        ...data,
-        clientId: selectedClientId,
-        scheduleTime: new Date(data.scheduleTime),
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/follow-ups", selectedClientId],
-      });
-      setShowCreateDialog(false);
-      form.reset();
-      toast({
-        title: "Follow-up scheduled!",
-        description: "Automated follow-up has been created successfully.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Mock data for demonstration
-  const followUpSequences = [
-    {
-      id: "seq-1",
-      name: "Lead Nurturing Sequence",
-      trigger: "no_response",
-      steps: 5,
-      activeLeads: 23,
-      conversionRate: 18.5,
-      status: "active",
-    },
-    {
-      id: "seq-2",
-      name: "Demo No-Show Follow-up",
-      trigger: "behavior",
-      steps: 3,
-      activeLeads: 8,
-      conversionRate: 35.2,
-      status: "active",
-    },
-    {
-      id: "seq-3",
-      name: "Cold Lead Reactivation",
-      trigger: "time_based",
-      steps: 7,
-      activeLeads: 45,
-      conversionRate: 12.8,
-      status: "paused",
-    },
-  ];
-
-  const activeFollowUps = [
-    {
-      id: "fu-1",
-      leadName: "John Smith",
-      company: "TechCorp",
-      channel: "whatsapp",
-      triggerType: "no_response",
-      content:
-        "Hi John! I noticed you haven't responded to our last message. Are you still interested in learning how we can help TechCorp generate more qualified leads?",
-      scheduledAt: "2024-01-16T10:00:00Z",
-      status: "pending",
-      stepNumber: 2,
-      sequenceName: "Lead Nurturing Sequence",
-    },
-    {
-      id: "fu-2",
-      leadName: "Sarah Johnson",
-      company: "Digital Agency",
-      channel: "email",
-      triggerType: "behavior",
-      content:
-        "Hi Sarah, I see you visited our pricing page but didn't book a demo. Would you like me to answer any questions about our plans?",
-      scheduledAt: "2024-01-16T14:30:00Z",
-      status: "pending",
-      stepNumber: 1,
-      sequenceName: "Demo No-Show Follow-up",
-    },
-    {
-      id: "fu-3",
-      leadName: "Mike Chen",
-      company: "E-commerce Plus",
-      channel: "sms",
-      triggerType: "time_based",
-      content:
-        "Hi Mike! It's been a while since we last spoke. Have your lead generation needs changed? We've got some exciting new features that might interest you.",
-      scheduledAt: "2024-01-16T16:00:00Z",
-      status: "sent",
-      stepNumber: 3,
-      sequenceName: "Cold Lead Reactivation",
-    },
-  ];
-
-  const recentActivity = [
-    {
-      leadName: "Emma Wilson",
-      action: "Responded to WhatsApp follow-up",
-      result: "Booked demo call",
-      timestamp: "2024-01-15T15:30:00Z",
-    },
-    {
-      leadName: "David Brown",
-      action: "Opened email follow-up",
-      result: "Visited pricing page",
-      timestamp: "2024-01-15T14:20:00Z",
-    },
-    {
-      leadName: "Lisa Garcia",
-      action: "SMS follow-up delivered",
-      result: "No response yet",
-      timestamp: "2024-01-15T12:45:00Z",
-    },
-  ];
-
-  const leads = dashboardData?.leads || [];
-
-  const onSubmit = (data: CreateFollowUpData) => {
-    createFollowUpMutation.mutate(data);
-  };
-
-  const getChannelIcon = (channel: string) => {
-    switch (channel) {
-      case "whatsapp":
-        return <MessageSquare className="w-4 h-4" />;
-      case "email":
-        return <Mail className="w-4 h-4" />;
-      case "sms":
-        return <Phone className="w-4 h-4" />;
-      default:
-        return <MessageSquare className="w-4 h-4" />;
+  useEffect(() => {
+    async function fetchClients() {
+      try {
+        const res = await fetch(`/api/clients?userId=${user?.id}`);
+        const data = await res.json();
+        setClients(data);
+        if (data.length > 0) {
+          setSelectedClientId(data[0].id);
+        }
+      } catch (error) {
+        console.error("Error fetching clients:", error);
+      }
     }
-  };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "sent":
-        return "bg-blue-100 text-blue-800";
-      case "responded":
-        return "bg-green-100 text-green-800";
-      case "failed":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+    if (user?.id) {
+      fetchClients();
     }
-  };
+  }, [user]);
 
-  const formatDateTime = (dateTime: string) => {
-    const date = new Date(dateTime);
-    return {
-      date: date.toLocaleDateString(),
-      time: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-  };
+  // Fetch sequences, pending follow-ups, and stats
+  useEffect(() => {
+    async function fetchData() {
+      if (!selectedClientId) return;
 
-  if (isLoading) {
+      setLoading(true);
+      try {
+        const [seqRes, pendingRes, statsRes] = await Promise.all([
+          fetch(`/api/follow-ups/sequences/${selectedClientId}`),
+          fetch(`/api/follow-ups/${selectedClientId}/pending`),
+          fetch(`/api/follow-ups/${selectedClientId}/stats`),
+        ]);
+
+        const seqData = await seqRes.json();
+        const pendingData = await pendingRes.json();
+        const statsData = await statsRes.json();
+
+        setSequences(seqData);
+        setPendingFollowUps(pendingData);
+        setStats(statsData);
+      } catch (error) {
+        console.error("Error fetching follow-up data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [selectedClientId]);
+
+  async function toggleSequenceStatus(
+    sequenceId: string,
+    currentStatus: string
+  ) {
+    const newStatus = currentStatus === "active" ? "paused" : "active";
+
+    try {
+      await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      // Refresh sequences
+      setSequences(
+        sequences.map((seq) =>
+          seq.id === sequenceId ? { ...seq, status: newStatus } : seq
+        )
+      );
+    } catch (error) {
+      console.error("Error toggling sequence:", error);
+    }
+  }
+
+  async function deleteSequence(sequenceId: string) {
+    if (!confirm("Are you sure you want to delete this sequence?")) return;
+
+    try {
+      await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
+        method: "DELETE",
+      });
+
+      setSequences(sequences.filter((seq) => seq.id !== sequenceId));
+    } catch (error) {
+      console.error("Error deleting sequence:", error);
+    }
+  }
+
+  async function cancelFollowUp(followUpId: string) {
+    try {
+      await fetch(`/api/follow-ups/${followUpId}`, {
+        method: "DELETE",
+      });
+
+      setPendingFollowUps(
+        pendingFollowUps.filter((fu) => fu.id !== followUpId)
+      );
+    } catch (error) {
+      console.error("Error cancelling follow-up:", error);
+    }
+  }
+
+  function formatDelay(minutes: number): string {
+    if (minutes < 60) return `${minutes} minutes`;
+    if (minutes < 1440) return `${Math.round(minutes / 60)} hours`;
+    return `${Math.round(minutes / 1440)} days`;
+  }
+
+  if (loading) {
     return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-slate-200 px-6 py-4">
-          <Skeleton className="h-8 w-64 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </header>
-
-        <main className="flex-1 overflow-auto p-6">
-          {/* Stats Cards Skeleton */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-4 rounded" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16 mb-2" />
-                  <Skeleton className="h-3 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Content Skeleton */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {[1, 2].map((i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-6 w-48" />
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((j) => (
-                      <Skeleton key={j} className="h-24 w-full rounded-lg" />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </main>
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading follow-ups...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="space-y-6">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">
-              Automated Follow-ups
-            </h2>
-            <p className="text-slate-600">
-              Intelligent multi-channel follow-up automation
-            </p>
-          </div>
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Follow-ups</h1>
+          <p className="text-muted-foreground">
+            Automated message sequences to nurture leads
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Client Selector */}
+          {clients.length > 1 && (
+            <Select
+              value={selectedClientId}
+              onValueChange={setSelectedClientId}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <Dialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          >
             <DialogTrigger asChild>
-              <Button className="bg-primary text-white hover:bg-primary/90">
+              <Button>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Follow-up
+                Create Sequence
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Create Automated Follow-up</DialogTitle>
-              </DialogHeader>
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-4"
-                >
-                  <FormField
-                    control={form.control}
-                    name="leadId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Select Lead</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Choose a lead" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {leads.map((lead: any) => (
-                              <SelectItem key={lead.id} value={lead.id}>
-                                {lead.firstName} {lead.lastName} -{" "}
-                                {lead.company}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="channel"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Communication Channel</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="sms">SMS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="triggerType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Trigger Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="no_response">
-                              No Response
-                            </SelectItem>
-                            <SelectItem value="time_based">
-                              Time Based
-                            </SelectItem>
-                            <SelectItem value="behavior">
-                              Behavior Triggered
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="scheduleTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Schedule Time</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="datetime-local"
-                            {...field}
-                            min={new Date().toISOString().slice(0, 16)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="content"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Message Content</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Enter your follow-up message..."
-                            rows={4}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-end space-x-3 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowCreateDialog(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={createFollowUpMutation.isPending}
-                      className="bg-primary text-white hover:bg-primary/90"
-                    >
-                      {createFollowUpMutation.isPending
-                        ? "Creating..."
-                        : "Create Follow-up"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
+            <DialogContent className="max-w-2xl">
+              <CreateSequenceForm
+                clientId={selectedClientId}
+                onSuccess={() => {
+                  setIsCreateDialogOpen(false);
+                  // Refresh sequences
+                  window.location.reload();
+                }}
+              />
             </DialogContent>
           </Dialog>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto p-6">
-        <Breadcrumb className="mb-6">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink
-                onClick={() => setLocation("/dashboard")}
-                className="cursor-pointer"
-              >
-                Dashboard
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Automated Follow-ups</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Active Sequences
-              </CardTitle>
-              <Zap className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground">
-                2 running, 1 paused
-              </p>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{stats.total}</div>
+              <p className="text-xs text-muted-foreground">Total Follow-ups</p>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Pending Follow-ups
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">76</div>
-              <p className="text-xs text-muted-foreground">
-                Scheduled this week
-              </p>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-amber-500">
+                {stats.pending}
+              </div>
+              <p className="text-xs text-muted-foreground">Pending</p>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Response Rate
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">24.8%</div>
-              <p className="text-xs text-muted-foreground">
-                +3.2% from last week
-              </p>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-success">
+                {stats.sent}
+              </div>
+              <p className="text-xs text-muted-foreground">Sent</p>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Leads in Sequences
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">76</div>
-              <p className="text-xs text-muted-foreground">
-                Across all sequences
-              </p>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-destructive">
+                {stats.failed}
+              </div>
+              <p className="text-xs text-muted-foreground">Failed</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-muted-foreground">
+                {stats.cancelled}
+              </div>
+              <p className="text-xs text-muted-foreground">Cancelled</p>
             </CardContent>
           </Card>
         </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Follow-up Sequences */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Follow-up Sequences</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {followUpSequences.map((sequence) => (
-                  <div
-                    key={sequence.id}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          sequence.status === "active"
-                            ? "bg-green-500"
-                            : "bg-gray-400"
-                        }`}
-                      ></div>
-                      <div>
-                        <h4 className="font-medium">{sequence.name}</h4>
-                        <div className="flex items-center space-x-4 text-sm text-slate-600 mt-1">
-                          <span>{sequence.steps} steps</span>
-                          <span>{sequence.activeLeads} active leads</span>
-                          <span>{sequence.conversionRate}% conversion</span>
+      {/* Sequences */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Sequences</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {sequences.length === 0 ? (
+            <div className="text-center py-12">
+              <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No sequences created yet</p>
+              <Button
+                className="mt-4"
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                Create Your First Sequence
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {sequences.map((sequence) => (
+                <Card key={sequence.id} className="border-2">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-lg font-semibold">
+                            {sequence.name}
+                          </h3>
+                          {sequence.isDefault && (
+                            <Badge variant="outline">Default</Badge>
+                          )}
+                          <Badge
+                            variant={
+                              sequence.status === "active"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {sequence.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {sequence.description}
+                        </p>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="w-4 h-4" />
+                            {sequence.steps.length} steps
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {sequence.channel}
+                          </span>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge
-                        className={
-                          sequence.status === "active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }
-                      >
-                        {sequence.status}
-                      </Badge>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        {sequence.status === "active" ? (
-                          <Pause className="w-4 h-4" />
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Active Follow-ups */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Follow-ups</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {activeFollowUps.map((followUp) => {
-                  const dateTime = formatDateTime(followUp.scheduledAt);
-                  return (
-                    <div
-                      key={followUp.id}
-                      className="flex items-start justify-between p-4 border rounded-lg"
-                    >
-                      <div className="flex items-start space-x-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                          {getChannelIcon(followUp.channel)}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium">{followUp.leadName}</h4>
-                          <p className="text-sm text-slate-600">
-                            {followUp.company}
-                          </p>
-                          <p className="text-sm text-slate-800 mt-2 line-clamp-2">
-                            {followUp.content}
-                          </p>
-                          <div className="flex items-center space-x-4 mt-2">
-                            <span className="text-xs text-slate-500">
-                              {dateTime.date} at {dateTime.time}
-                            </span>
-                            <Badge variant="outline" className="text-xs">
-                              Step {followUp.stepNumber}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end space-y-2">
-                        <Badge className={getStatusColor(followUp.status)}>
-                          {followUp.status}
-                        </Badge>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="w-3 h-3" />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            toggleSequenceStatus(sequence.id, sequence.status)
+                          }
+                        >
+                          {sequence.status === "active" ? (
+                            <>
+                              <Pause className="w-4 h-4 mr-1" />
+                              Pause
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-1" />
+                              Activate
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => deleteSequence(sequence.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
-                  );
-                })}
+
+                    {/* Steps Preview */}
+                    <div className="space-y-2 pl-4 border-l-2 border-muted">
+                      {sequence.steps.map((step) => (
+                        <div key={step.id} className="text-sm">
+                          <div className="font-medium text-muted-foreground mb-1">
+                            Step {step.stepNumber} • After{" "}
+                            {formatDelay(step.delayMinutes)}
+                          </div>
+                          <div className="text-xs text-muted-foreground line-clamp-2">
+                            {step.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pending Follow-ups */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Pending Follow-ups
+            {pendingFollowUps.length > 0 && (
+              <Badge variant="secondary">{pendingFollowUps.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {pendingFollowUps.length === 0 ? (
+            <div className="text-center py-8">
+              <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No pending follow-ups</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingFollowUps.map((followUp) => (
+                <Card key={followUp.id}>
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium mb-1">
+                          {followUp.leadName}
+                          {followUp.leadCompany && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              • {followUp.leadCompany}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                          {followUp.content}
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(followUp.scheduledFor).toLocaleString()}
+                          </span>
+                          <span>Step {followUp.stepNumber}</span>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => cancelFollowUp(followUp.id)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Create Sequence Form Component
+function CreateSequenceForm({
+  clientId,
+  onSuccess,
+}: {
+  clientId: string;
+  onSuccess: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [triggerType, setTriggerType] = useState("no_response");
+
+  // ✅ FIX: Explicitly type the steps array
+  type StepInput = { delayMinutes: number; content: string };
+  const [steps, setSteps] = useState<StepInput[]>([
+    { delayMinutes: 30, content: "" },
+  ]);
+  const [submitting, setSubmitting] = useState(false);
+
+  function addStep() {
+    setSteps([...steps, { delayMinutes: 360, content: "" }]);
+  }
+
+  function removeStep(index: number) {
+    setSteps(steps.filter((_, i) => i !== index));
+  }
+
+  function updateStep(
+    index: number,
+    field: keyof StepInput,
+    value: number | string
+  ) {
+    const newSteps = [...steps];
+    if (field === "delayMinutes") {
+      newSteps[index][field] = value as number;
+    } else {
+      newSteps[index][field] = value as string;
+    }
+    setSteps(newSteps);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("/api/follow-ups/sequences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          name,
+          description,
+          triggerType,
+          channel: "whatsapp",
+          steps: steps.map((step, i) => ({
+            stepNumber: i + 1,
+            delayMinutes: step.delayMinutes,
+            content: step.content,
+            channel: "whatsapp",
+          })),
+        }),
+      });
+
+      if (response.ok) {
+        onSuccess();
+      }
+    } catch (error) {
+      console.error("Error creating sequence:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <DialogHeader>
+        <DialogTitle>Create Follow-up Sequence</DialogTitle>
+      </DialogHeader>
+
+      <div>
+        <Label>Sequence Name</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g., 48-Hour Fast Lane"
+          required
+        />
+      </div>
+
+      <div>
+        <Label>Description</Label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Brief description of when to use this sequence"
+        />
+      </div>
+
+      <div>
+        <Label>Trigger Type</Label>
+        <Select value={triggerType} onValueChange={setTriggerType}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no_response">No Response</SelectItem>
+            <SelectItem value="time_based">Time Based</SelectItem>
+            <SelectItem value="behavior">Behavior Triggered</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>Follow-up Steps</Label>
+          <Button type="button" size="sm" variant="outline" onClick={addStep}>
+            <Plus className="w-4 h-4 mr-1" />
+            Add Step
+          </Button>
+        </div>
+
+        {steps.map((step, index) => (
+          <Card key={index}>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Step {index + 1}</Label>
+                {steps.length > 1 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeStep(index)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+
+              <div>
+                <Label className="text-xs">Delay (minutes)</Label>
+                <Input
+                  type="number"
+                  value={step.delayMinutes}
+                  onChange={(e) =>
+                    updateStep(index, "delayMinutes", parseInt(e.target.value))
+                  }
+                  min="1"
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  30 min = 30, 6 hrs = 360, 24 hrs = 1440
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-xs">Message Content</Label>
+                <Textarea
+                  value={step.content}
+                  onChange={(e) => updateStep(index, "content", e.target.value)}
+                  placeholder="Use {{firstName}}, {{lastName}}, {{company}} for variables"
+                  required
+                  rows={3}
+                />
               </div>
             </CardContent>
           </Card>
-        </div>
+        ))}
+      </div>
 
-        {/* Recent Activity */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">{activity.leadName}</h4>
-                      <p className="text-sm text-slate-600">
-                        {activity.action}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-green-600">
-                      {activity.result}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(activity.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onSuccess}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Creating..." : "Create Sequence"}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -3,6 +3,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Play,
   Check,
@@ -28,6 +29,7 @@ export default function Landing() {
       <HeroSection />
       <TrustedBySection />
       <HowItWorksSection />
+      <LeadCaptureSection />
       <FeaturesSection />
       <StatsSection />
       <CTASection />
@@ -528,6 +530,149 @@ function StatsSection() {
             <div className="text-white/80">Always Available</div>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function LeadCaptureSection() {
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: "af6849e8-9dcf-4115-8c8a-923d6ef7332c",
+          email,
+          phone,
+          firstName,
+          lastName: "",
+          source: "landing_page",
+          auditType: "construction",
+          consentGiven: true,
+          auditInputs: {
+            contactName: firstName,
+            phone: phone,
+          }
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(true);
+      }
+    } catch (error) {
+      console.error("Error submitting lead:", error);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <section className="py-20 bg-gradient-construction">
+        <div className="max-w-2xl mx-auto px-4 text-center">
+          <div className="bg-white rounded-lg p-12 shadow-2xl">
+            <Check className="w-16 h-16 mx-auto text-success mb-4" />
+            <h2 className="text-3xl font-bold mb-4">Check Your WhatsApp! 📱</h2>
+            <p className="text-lg text-muted-foreground mb-4">
+              We've sent your personalized audit to <strong>{phone}</strong>
+            </p>
+            <p className="text-muted-foreground">
+              Our AI assistant will walk you through the results and answer any questions you have.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="py-20 bg-gradient-construction">
+      <div className="max-w-2xl mx-auto px-4 text-center">
+        <h2 className="text-4xl font-bold text-white mb-4">
+          Get Your Free Construction Audit
+        </h2>
+        <p className="text-white/90 mb-8 text-lg">
+          See exactly how to close more deals in 2 minutes
+        </p>
+
+        <div className="bg-white rounded-lg p-8 shadow-2xl">
+          {step === 1 && (
+            <div className="space-y-4">
+              <Input
+                type="text"
+                placeholder="Your first name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="text-lg py-6"
+              />
+              <Input
+                type="email"
+                placeholder="Your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="text-lg py-6"
+              />
+              <Button 
+                onClick={() => setStep(2)} 
+                size="lg" 
+                className="w-full text-lg py-6"
+                disabled={!firstName || !email}
+              >
+                Continue →
+              </Button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <Input
+                type="tel"
+                placeholder="WhatsApp number (e.g., +639123456789)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="text-lg py-6"
+              />
+              <label className="flex items-start text-left text-sm gap-2">
+                <input type="checkbox" className="mt-1" required />
+                <span className="text-gray-600">
+                  I agree to receive WhatsApp messages about my audit. Reply STOP to opt out anytime.
+                </span>
+              </label>
+              <Button 
+                onClick={handleSubmit} 
+                disabled={isSubmitting || !phone}
+                size="lg" 
+                className="w-full text-lg py-6"
+              >
+                {isSubmitting ? "Generating Audit..." : "Get My Free Audit 🚀"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setStep(1)}
+                className="w-full"
+              >
+                ← Back
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <p className="text-white/80 text-sm mt-4">
+          💯 No credit card required • 📱 Results via WhatsApp in under 2 minutes
+        </p>
       </div>
     </section>
   );
