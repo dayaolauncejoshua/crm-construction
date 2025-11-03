@@ -103,6 +103,7 @@ export default function Analytics() {
     isLoading,
     error,
     refetch,
+    isFetching,
   } = useQuery<AnalyticsData>({
     queryKey: [`/api/analytics/${selectedClientId}`, timeRange],
     queryFn: async () => {
@@ -115,6 +116,9 @@ export default function Analytics() {
     enabled: !!selectedClientId,
     retry: 2,
     staleTime: 30000,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // Process lead trend for area chart
@@ -205,12 +209,28 @@ export default function Analytics() {
                   <SelectItem value="90">Last 90 days</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                <RefreshCw className="w-4 h-4" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching}
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
+                />
               </Button>
             </div>
           </div>
         </header>
+        {/* Refreshing Indicator */}
+        {isFetching && !isLoading && (
+          <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+            <div className="flex items-center gap-2 text-sm text-blue-700">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Updating analytics...</span>
+            </div>
+          </div>
+        )}
         <main className="flex-1 overflow-auto p-4 sm:p-6">
           <Breadcrumb className="mb-6">
             <BreadcrumbList>

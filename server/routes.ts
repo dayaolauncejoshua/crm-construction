@@ -791,10 +791,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (c) => new Date(c.createdAt!) >= startDate
       );
       const filteredBookings = bookings.filter(
-        (b) =>
-          new Date(b.createdAt!) >= startDate &&
-          (b.status === "scheduled" || b.status === "confirmed")
+        (b) => new Date(b.createdAt!) >= startDate
       );
+
+      const confirmedMeetingsCount = filteredBookings.filter(
+        (b) => b.status === "scheduled" || b.status === "confirmed"
+      ).length;
 
       console.log(
         `📊 [ANALYTICS] Filtered data: ${filteredLeads.length} leads, ${filteredConversations.length} conversations`
@@ -996,16 +998,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalLeadsCount = filteredLeads.length;
 
       // Stage 2: Qualified Leads (score >= 0.7)
-      const qualifiedLeadsCount = filteredLeads.filter((l) => parseFloat(l.qualificationScore || "0") >= 0.7).length;
+      const qualifiedLeadsCount = filteredLeads.filter(
+        (l) => parseFloat(l.qualificationScore || "0") >= 0.7
+      ).length;
 
       // Stage 3: Meetings (scheduled or confirmed bookings)
-      const meetingsCount = filteredBookings.filter((b) => b.status === "scheduled" || b.status === "confirmed").length;
+      const meetingsCount = filteredBookings.filter(
+        (b) => b.status === "scheduled" || b.status === "confirmed"
+      ).length;
 
-      // Stage 4: Proposals (proposed bookings - before scheduling)
-      const proposalsCount = bookings.filter((b) => b.status === "proposed" && new Date(b.createdAt!) >= startDate).length; 
+      // Stage 4: Proposals (pending or proposed bookings - awaiting approval)
+      const proposalsCount = filteredBookings.filter(
+        (b) => b.status === "pending_approval" 
+      ).length;
 
-      // Stage 5: Closed (confirmed bookings)
-      const closedCount = bookings.filter((b) => b.status === "completed" && new Date(b.createdAt!) >= startDate).length;
+      // Stage 5: Closed (completed bookings)
+      const closedCount = filteredBookings.filter(
+        (b) => b.status === "completed"
+      ).length;
 
       const conversionFunnel = {
         leads: {
@@ -1014,20 +1024,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         qualified: {
           count: qualifiedLeadsCount,
-          percentage: totalLeadsCount > 0 ? parseFloat(((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+          percentage:
+            totalLeadsCount > 0
+              ? parseFloat(
+                  ((qualifiedLeadsCount / totalLeadsCount) * 100).toFixed(1)
+                )
+              : 0,
         },
         meetings: {
           count: meetingsCount,
-          percentage: totalLeadsCount > 0 ? parseFloat(((meetingsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+          percentage:
+            totalLeadsCount > 0
+              ? parseFloat(((meetingsCount / totalLeadsCount) * 100).toFixed(1))
+              : 0,
         },
         proposals: {
           count: proposalsCount,
-          percentage: totalLeadsCount > 0 ? parseFloat(((proposalsCount / totalLeadsCount) * 100).toFixed(1)) : 0,
+          percentage:
+            totalLeadsCount > 0
+              ? parseFloat(
+                  ((proposalsCount / totalLeadsCount) * 100).toFixed(1)
+                )
+              : 0,
         },
         closed: {
           count: closedCount,
-          percentage: totalLeadsCount > 0 ? parseFloat(((closedCount / totalLeadsCount) * 100).toFixed(1)) : 0,
-        }
+          percentage:
+            totalLeadsCount > 0
+              ? parseFloat(((closedCount / totalLeadsCount) * 100).toFixed(1))
+              : 0,
+        },
       };
 
       console.log(`📊 [ANALYTICS] Conversion Funnel:`, conversionFunnel);
@@ -1039,13 +1065,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         summary: {
           totalLeads: filteredLeads.length,
           totalConversations: filteredConversations.length,
-          totalBookings: filteredBookings.length,
+          totalBookings: confirmedMeetingsCount,
           conversionRate:
             filteredLeads.length > 0
-              ? (
-                  (filteredBookings.length / filteredLeads.length) *
-                  100
-                ).toFixed(1)
+              ? ((confirmedMeetingsCount / filteredLeads.length) * 100).toFixed(
+                  1
+                )
               : "0",
           avgTimeToBook: avgTimeToBook.toFixed(1),
         },
