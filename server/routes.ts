@@ -500,22 +500,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Cancel pending follow-ups when lead replies
         try {
-          const lead = await storage.getLeadByPhone(incomingMessage.from);
-
-          if (lead) {
-            console.log(`✅ Lead replied: ${lead.firstName} ${lead.lastName}`);
-
-            // Cancel all pending follow-ups for this lead
-            const { cancelPendingFollowUps } = await import(
-              "./services/follow-up-worker"
-            );
-            await cancelPendingFollowUps(lead.id);
-
-            console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
-          }
-        } catch (error) {
-          console.error("❌ Error cancelling follow-ups on lead reply:", error);
-        }
+  const lead = await storage.getLeadByPhone(incomingMessage.from);
+  
+  if (lead) {
+    // Check if there are any pending follow-ups BEFORE cancelling
+    const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
+    
+    if (pendingFollowUps.length > 0) {
+      console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
+      console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
+      
+      // Cancel all pending follow-ups for this lead
+      const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
+      await cancelPendingFollowUps(lead.id);
+      
+      console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
+    } else {
+      console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+    }
+  }
+} catch (error) {
+  console.error("❌ Error cancelling follow-ups:", error);
+  // Don't fail the webhook if this fails
+}
 
         // ✅ NEW: Find the lead and conversation to broadcast immediately
         try {

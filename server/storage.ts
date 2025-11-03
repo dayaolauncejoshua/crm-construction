@@ -2309,6 +2309,20 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
       .orderBy(followUps.scheduledFor);
   }
 
+   // ✅ NEW: Get pending follow-ups by lead ID
+  async getPendingFollowUpsByLead(leadId: string) {
+    return await db
+      .select()
+      .from(followUps)
+      .where(
+        and(
+          eq(followUps.leadId, leadId),
+          eq(followUps.status, "pending")
+        )
+      )
+      .orderBy(followUps.scheduledFor);
+  }
+
   async cancelFollowUp(followUpId: string) {
     const [cancelled] = await db
       .update(followUps)
