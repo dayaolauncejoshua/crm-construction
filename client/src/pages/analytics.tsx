@@ -291,7 +291,12 @@ export default function Analytics() {
                 <SelectItem value="90">Last 90 days</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              className="gap-2"
+            >
               <RefreshCw className="w-4 h-4" />
               Refresh
             </Button>
@@ -387,11 +392,35 @@ export default function Analytics() {
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="performance">Performance</TabsTrigger>
-            <TabsTrigger value="ai">AI Insights</TabsTrigger>
-          </TabsList>
+          <div className="border-b border-slate-200 pb-0 mb-6">
+            <div className="flex gap-6 overflow-x-auto">
+              <TabsList className="bg-transparent h-auto p-0 gap-6 border-0">
+                <TabsTrigger
+                  value="overview"
+                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
+                >
+                  <Activity className="w-4 h-4 mr-2" />
+                  <span>Overview</span>
+                </TabsTrigger>
+
+                <TabsTrigger
+                  value="performance"
+                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
+                >
+                  <Target className="w-4 h-4 mr-2" />
+                  <span>Performance</span>
+                </TabsTrigger>
+
+                <TabsTrigger
+                  value="ai"
+                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
+                >
+                  <Brain className="w-4 h-4 mr-2" />
+                  <span>AI Insights</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
           {/* ===== OVERVIEW TAB ===== */}
           <TabsContent value="overview" className="space-y-6">
@@ -445,12 +474,14 @@ export default function Analytics() {
                             fontSize={12}
                             fontWeight={600}
                           />
-                          {leadTrendData.map((entry: LeadTrendData, index: number) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={entry.leads > 0 ? "#2563eb" : "#e2e8f0"}
-                            />
-                          ))}
+                          {leadTrendData.map(
+                            (entry: LeadTrendData, index: number) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={entry.leads > 0 ? "#2563eb" : "#e2e8f0"}
+                              />
+                            )
+                          )}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -492,7 +523,10 @@ export default function Analytics() {
                           >
                             {analyticsData.temperatureData.map(
                               (entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={entry.color}
+                                />
                               )
                             )}
                           </Pie>

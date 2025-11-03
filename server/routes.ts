@@ -881,47 +881,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // ===== 5. AI PERFORMANCE METRICS =====
+      // ✅ FIX: AI handled = conversations with NO human takeover
       const aiConversations = filteredConversations.filter(
-        (c) => c.isAiHandled
+        (c) => !c.humanTakeoverAt
       );
+
+      // ✅ FIX: Human handled = conversations WITH human takeover
       const humanConversations = filteredConversations.filter(
-        (c) => !c.isAiHandled
+        (c) => c.humanTakeoverAt
       );
 
-      const aiLeads = filteredLeads.filter((l) => {
-        const conv = filteredConversations.find((c) => c.leadId === l.id);
-        return conv?.isAiHandled;
-      });
+      // ✅ FIX: AI response time = ALWAYS responseTimeSeconds (AI always responds first)
+      const aiLeads = filteredLeads.filter((l) => l.responseTimeSeconds);
 
+      // ✅ FIX: Human response time = only for conversations with takeover
       const humanLeads = filteredLeads.filter((l) => {
         const conv = filteredConversations.find((c) => c.leadId === l.id);
-        return conv && !conv.isAiHandled;
+        return conv?.humanTakeoverAt;
       });
 
+      // Calculate AI average response (all leads, since AI always responds first)
       const aiAvgResponse =
         aiLeads.length > 0
           ? aiLeads.reduce((sum, l) => sum + (l.responseTimeSeconds || 0), 0) /
             aiLeads.length
           : 0;
 
-      const humanAvgResponse =
-        humanLeads.length > 0
-          ? humanLeads.reduce(
-              (sum, l) => sum + (l.responseTimeSeconds || 0),
-              0
-            ) / humanLeads.length
-          : 0;
+      // Calculate Human average response (time from lead creation to human takeover)
+      let humanAvgResponse = 0;
+      if (humanLeads.length > 0) {
+        let totalHumanTime = 0;
+        humanLeads.forEach((lead) => {
+          const conv = filteredConversations.find((c) => c.leadId === lead.id);
+          if (conv?.humanTakeoverAt && lead.createdAt) {
+            const leadCreated = new Date(lead.createdAt).getTime();
+            const humanTookOver = new Date(conv.humanTakeoverAt).getTime();
+            const timeInSeconds = (humanTookOver - leadCreated) / 1000;
+            if (timeInSeconds > 0) {
+              totalHumanTime += timeInSeconds;
+            }
+          }
+        });
+        humanAvgResponse = totalHumanTime / humanLeads.length;
+      }
 
       // AI Qualification Rate (leads with score >= 0.4)
-      const qualifiedByAI = aiLeads.filter(
+      const qualifiedByAI = filteredLeads.filter(
         (l) => parseFloat(l.qualificationScore || "0") >= 0.4
       ).length;
       const aiQualificationRate =
-        aiLeads.length > 0 ? (qualifiedByAI / aiLeads.length) * 100 : 0;
+        filteredLeads.length > 0
+          ? (qualifiedByAI / filteredLeads.length) * 100
+          : 0;
 
-      // Handoff Rate (% of AI conversations that became human)
+      // Handoff Rate (% of conversations where human took over)
       const handoffCount = filteredConversations.filter(
-        (c) => c.isAiHandled === false && c.humanTakeoverAt
+        (c) => c.humanTakeoverAt
       ).length;
       const handoffRate =
         filteredConversations.length > 0
@@ -943,7 +958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiQualificationRate: aiQualificationRate.toFixed(1),
         handoffRate: handoffRate.toFixed(1),
         aiSpeedAdvantage:
-          humanAvgResponse > 0
+          humanAvgResponse > 0 && aiAvgResponse > 0
             ? `${(
                 ((humanAvgResponse - aiAvgResponse) / humanAvgResponse) *
                 100
