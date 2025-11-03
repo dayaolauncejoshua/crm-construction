@@ -1374,6 +1374,34 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
         });
 
         console.log("✅ Normal response sent");
+
+        // Schedule follow-ups if this is the first AI response
+        try {
+          const allMessages = await storage.getMessages(conversation.id);
+          const aiMessages = allMessages.filter(m => m.sender === "ai");
+
+          // If this is the first AI message, schedule follow-ups
+          if (aiMessages.length === 1){
+            console.log("📅 First AI response - scheduling follow-ups for lead: ${lead.id}");
+
+            // Find default sequence for this client
+            const sequences = await storage.getFollowUpSequences(lead.clientId);
+            const defaultSequence = sequences.find(s => s.isDefault && s.status === "active");
+
+            if (defaultSequence){
+              await storage.scheduleFollowUpSequence(
+                lead.id,
+                defaultSequence.id,
+                conversation.id
+              );
+              console.log(`✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`);
+            } else {
+              console.log(`⚠️ No default follow-up sequence found for client: ${lead.clientId}`);
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error scheduling follow-ups:", error);
+        }
       } else {
         console.log("👤 Human handling - just recording");
         await storage.updateConversation(conversation.id, {

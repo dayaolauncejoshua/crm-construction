@@ -175,6 +175,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process lead for immediate response
       await leadQualificationService.processNewLead(lead.id);
 
+      // Schedule follow-ups after audit is sent
+      try {
+        console.log(
+          `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
+        );
+
+        // Find default sequence
+        const sequences = await storage.getFollowUpSequences(leadData.clientId);
+        const defaultSequence = sequences.find(
+          (s) => s.isDefault && s.status === "active"
+        );
+
+        if (defaultSequence) {
+          // Get conversation for this lead
+          const conversations = await storage.getConversations(
+            leadData.clientId,
+            100
+          );
+          const conversation = conversations.find((c) => c.leadId === lead.id);
+
+          await storage.scheduleFollowUpSequence(
+            lead.id,
+            defaultSequence.id,
+            conversation?.id
+          );
+
+          console.log(
+            `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
+          );
+        } else {
+          console.log(
+            `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Error scheduling follow-ups:", error);
+        // Don't fail the lead creation if scheduling fails
+      }
+
       res.json({
         success: true,
         leadId: lead.id,
@@ -458,6 +497,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           incomingMessage.phoneNumberId,
           incomingMessage.messageId
         );
+
+        // Cancel pending follow-ups when lead replies
+        try {
+          const lead = await storage.getLeadByPhone(incomingMessage.from);
+
+          if (lead) {
+            console.log(`✅ Lead replied: ${lead.firstName} ${lead.lastName}`);
+
+            // Cancel all pending follow-ups for this lead
+            const { cancelPendingFollowUps } = await import(
+              "./services/follow-up-worker"
+            );
+            await cancelPendingFollowUps(lead.id);
+
+            console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
+          }
+        } catch (error) {
+          console.error("❌ Error cancelling follow-ups on lead reply:", error);
+        }
 
         // ✅ NEW: Find the lead and conversation to broadcast immediately
         try {
@@ -1009,7 +1067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Stage 4: Proposals (pending or proposed bookings - awaiting approval)
       const proposalsCount = filteredBookings.filter(
-        (b) => b.status === "pending_approval" 
+        (b) => b.status === "pending_approval"
       ).length;
 
       // Stage 5: Closed (completed bookings)
@@ -1667,6 +1725,327 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use(vslapp);
   // Get all VSLs for a client
+
+  // ======================= FOLLOW-UPS ROUTES ==============================================
+
+  // Get all sequences for a client
+  app.get(
+    "/api/follow-ups/sequences/:clientId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { clientId } = req.params;
+        const requestUser = req.user!;
+
+        // Verify ownership
+        if (requestUser.role !== "super_admin") {
+          const client = await storage.getClient(clientId);
+          if (!client || client.userId !== requestUser.id) {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        const sequences = await storage.getFollowUpSequences(clientId);
+
+        // Get steps for each sequence
+        const sequencesWithSteps = await Promise.all(
+          sequences.map(async (seq) => ({
+            ...seq,
+            steps: await storage.getFollowUpSteps(seq.id),
+          }))
+        );
+
+        res.json(sequencesWithSteps);
+      } catch (error) {
+        console.error("Error fetching sequences:", error);
+        res.status(500).json({ message: "Failed to fetch sequences" });
+      }
+    }
+  );
+
+  // Create a new sequence
+  app.post("/api/follow-ups/sequences", requireAuth, async (req, res) => {
+    try {
+      const requestUser = req.user!;
+      const { clientId, name, description, triggerType, channel, steps } =
+        req.body;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      console.log("📋 Creating follow-up sequence:", name);
+
+      // Create sequence
+      const sequence = await storage.createFollowUpSequence({
+        clientId,
+        name,
+        description,
+        triggerType,
+        channel: channel || "whatsapp",
+        steps: steps?.length || 0,
+        status: "active",
+      });
+
+      // Create steps
+      if (steps && steps.length > 0) {
+        for (const step of steps) {
+          await storage.createFollowUpStep({
+            sequenceId: sequence.id,
+            stepNumber: step.stepNumber,
+            delayMinutes: step.delayMinutes,
+            content: step.content,
+            channel: step.channel || channel || "whatsapp",
+          });
+        }
+      }
+
+      console.log("✅ Sequence created:", sequence.id);
+
+      // Return with steps
+      const sequenceWithSteps = {
+        ...sequence,
+        steps: await storage.getFollowUpSteps(sequence.id),
+      };
+
+      res.json(sequenceWithSteps);
+    } catch (error) {
+      console.error("Error creating sequence:", error);
+      res.status(500).json({ message: "Failed to create sequence" });
+    }
+  });
+
+  // Update sequence status (activate/pause)
+  app.patch(
+    "/api/follow-ups/sequences/:sequenceId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { sequenceId } = req.params;
+        const { status } = req.body;
+
+        console.log(`📝 Updating sequence ${sequenceId} status to ${status}`);
+
+        const updated = await storage.updateFollowUpSequence(sequenceId, {
+          status,
+        });
+
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating sequence:", error);
+        res.status(500).json({ message: "Failed to update sequence" });
+      }
+    }
+  );
+
+  // Delete sequence
+  app.delete(
+    "/api/follow-ups/sequences/:sequenceId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { sequenceId } = req.params;
+
+        console.log(`🗑️ Deleting sequence: ${sequenceId}`);
+
+        await storage.deleteFollowUpSequence(sequenceId);
+
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error deleting sequence:", error);
+        res.status(500).json({ message: "Failed to delete sequence" });
+      }
+    }
+  );
+
+  // Get all follow-ups for a client (with lead info)
+  app.get("/api/follow-ups/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const { status } = req.query;
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const followUps = await storage.getFollowUpsByClient(
+        clientId,
+        status as string | undefined
+      );
+
+      // Enrich with lead data
+      const enrichedFollowUps = await Promise.all(
+        followUps.map(async (fu) => {
+          const lead = await storage.getLead(fu.leadId);
+          const sequence = fu.sequenceId
+            ? await storage.getFollowUpSequence(fu.sequenceId)
+            : null;
+
+          return {
+            ...fu,
+            leadName: lead ? `${lead.firstName} ${lead.lastName}` : "Unknown",
+            leadCompany: lead?.company,
+            sequenceName: sequence?.name,
+          };
+        })
+      );
+
+      res.json(enrichedFollowUps);
+    } catch (error) {
+      console.error("Error fetching follow-ups:", error);
+      res.status(500).json({ message: "Failed to fetch follow-ups" });
+    }
+  });
+
+  // Get pending follow-ups for a client
+  app.get(
+    "/api/follow-ups/:clientId/pending",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { clientId } = req.params;
+        const requestUser = req.user!;
+
+        // Verify ownership
+        if (requestUser.role !== "super_admin") {
+          const client = await storage.getClient(clientId);
+          if (!client || client.userId !== requestUser.id) {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        const pendingFollowUps = await storage.getPendingFollowUpsByClient(
+          clientId
+        );
+
+        // Enrich with lead data
+        const enriched = await Promise.all(
+          pendingFollowUps.map(async (fu) => {
+            const lead = await storage.getLead(fu.leadId);
+            return {
+              ...fu,
+              leadName: lead ? `${lead.firstName} ${lead.lastName}` : "Unknown",
+              leadCompany: lead?.company,
+            };
+          })
+        );
+
+        res.json(enriched);
+      } catch (error) {
+        console.error("Error fetching pending follow-ups:", error);
+        res.status(500).json({ message: "Failed to fetch pending follow-ups" });
+      }
+    }
+  );
+
+  // Schedule a follow-up sequence for a lead
+  app.post("/api/follow-ups/schedule", requireAuth, async (req, res) => {
+    try {
+      const { leadId, sequenceId, conversationId } = req.body;
+
+      console.log(`📅 Scheduling follow-up sequence for lead: ${leadId}`);
+
+      const scheduledFollowUps = await storage.scheduleFollowUpSequence(
+        leadId,
+        sequenceId,
+        conversationId
+      );
+
+      console.log(`✅ Scheduled ${scheduledFollowUps.length} follow-ups`);
+
+      res.json({
+        success: true,
+        count: scheduledFollowUps.length,
+        followUps: scheduledFollowUps,
+      });
+    } catch (error: any) {
+      console.error("Error scheduling follow-ups:", error);
+      res.status(500).json({
+        message: "Failed to schedule follow-ups",
+        error: error.message,
+      });
+    }
+  });
+
+  // Cancel a specific follow-up
+  app.delete("/api/follow-ups/:followUpId", requireAuth, async (req, res) => {
+    try {
+      const { followUpId } = req.params;
+
+      console.log(`🚫 Cancelling follow-up: ${followUpId}`);
+
+      await storage.cancelFollowUp(followUpId);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error cancelling follow-up:", error);
+      res.status(500).json({ message: "Failed to cancel follow-up" });
+    }
+  });
+
+  // Cancel all pending follow-ups for a lead
+  app.post(
+    "/api/follow-ups/cancel-lead/:leadId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { leadId } = req.params;
+
+        console.log(`🚫 Cancelling all follow-ups for lead: ${leadId}`);
+
+        // Import the worker function
+        const { cancelPendingFollowUps } = await import(
+          "./services/follow-up-worker"
+        );
+        await cancelPendingFollowUps(leadId);
+
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error cancelling follow-ups:", error);
+        res.status(500).json({ message: "Failed to cancel follow-ups" });
+      }
+    }
+  );
+
+  // Get follow-up analytics/stats
+  app.get("/api/follow-ups/:clientId/stats", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const allFollowUps = await storage.getFollowUpsByClient(clientId);
+
+      const stats = {
+        total: allFollowUps.length,
+        pending: allFollowUps.filter((f) => f.status === "pending").length,
+        sent: allFollowUps.filter((f) => f.status === "sent").length,
+        failed: allFollowUps.filter((f) => f.status === "failed").length,
+        cancelled: allFollowUps.filter((f) => f.status === "cancelled").length,
+      };
+
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching follow-up stats:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
 
   // ======================= BOOKINGS ROUTES  ==============================================
 
@@ -4017,8 +4396,42 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
+  // ========================= START FOLLOW-UP CRON  =============================
+
+  // Start follow-up worker
+  const { startFollowUpCron, setBroadcastFunction: setFollowUpBroadcast } =
+    await import("./services/follow-up-worker");
+
+  setFollowUpBroadcast(broadcastUpdate);
+  startFollowUpCron();
+
+  console.log("🚀 Follow-up cron job started");
+
+  // ========================= START REMINDER CRON  ============================
   setBroadcastFunction(broadcastUpdate);
   startReminderCron();
+
+  // ==================== TEMPORARY: SEED FOLLOW-UP SEQUENCES ====================
+  app.post("/api/admin/seed-follow-ups", requireAuth, async (req, res) => {
+    try {
+      const requestUser = req.user!;
+      
+      // Only super admin can run this
+      if (requestUser.role !== "super_admin") {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      console.log("🌱 Seeding default follow-up sequences...");
+
+      const { seedDefaultFollowUpSequences } = await import("./seeds/seed-follow-ups");
+      await seedDefaultFollowUpSequences();
+
+      res.json({ success: true, message: "Sequences seeded successfully" });
+    } catch (error: any) {
+      console.error("❌ Error seeding sequences:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // After your other routes
   // app.use(vslapp);

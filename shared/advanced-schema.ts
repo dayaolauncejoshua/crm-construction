@@ -31,25 +31,6 @@ export const leadScoring = pgTable("lead_scoring", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Automated Follow-ups Table
-export const followUps = pgTable("follow_ups", {
-  id: varchar("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  leadId: varchar("lead_id")
-    .references(() => leads.id)
-    .notNull(),
-  conversationId: varchar("conversation_id").references(() => conversations.id),
-  channel: varchar("channel").notNull(), // whatsapp, email, sms
-  triggerType: varchar("trigger_type").notNull(), // no_response, time_based, behavior
-  scheduleTime: timestamp("schedule_time").notNull(),
-  content: text("content").notNull(),
-  status: varchar("status").default("pending"), // pending, sent, failed
-  sentAt: timestamp("sent_at"),
-  responseReceived: boolean("response_received").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 // Competitor Tracking Table
 export const competitorTracking = pgTable("competitor_tracking", {
   id: varchar("id")
@@ -291,7 +272,7 @@ export type NotionScript = {
 
 // Insert schemas for new tables
 export const insertLeadScoringSchema = createInsertSchema(leadScoring);
-export const insertFollowUpSchema = createInsertSchema(followUps);
+
 export const insertCompetitorTrackingSchema =
   createInsertSchema(competitorTracking);
 export const insertSerpMonitoringSchema = createInsertSchema(serpMonitoring);
@@ -310,8 +291,7 @@ export const insertKpiAnomalySchema = createInsertSchema(kpiAnomalies);
 // Type definitions
 export type LeadScoring = typeof leadScoring.$inferSelect;
 export type InsertLeadScoring = z.infer<typeof insertLeadScoringSchema>;
-export type FollowUp = typeof followUps.$inferSelect;
-export type InsertFollowUp = z.infer<typeof insertFollowUpSchema>;
+
 export type CompetitorTracking = typeof competitorTracking.$inferSelect;
 export type InsertCompetitorTracking = z.infer<
   typeof insertCompetitorTrackingSchema

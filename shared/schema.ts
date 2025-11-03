@@ -742,6 +742,130 @@ export const leadScoring = pgTable("lead_scoring", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ==================== FOLLOW-UPS TABLES ====================
+
+// Follow-up Sequences (Templates)
+export const followUpSequences = pgTable("follow_up_sequences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  name: varchar("name").notNull(), // "48-Hour Fast Lane", "No Response Nurture"
+  description: text("description"),
+  triggerType: varchar("trigger_type").notNull(), // "no_response", "time_based", "behavior"
+  channel: varchar("channel").default("whatsapp"), // whatsapp, sms, email
+  steps: integer("steps").default(0), // Number of messages in sequence
+  status: varchar("status").default("active"), // "active", "paused", "draft"
+  isDefault: boolean("is_default").default(false), // Auto-apply to new leads
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Follow-up Steps (Messages in a sequence)
+export const followUpSteps = pgTable("follow_up_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequenceId: varchar("sequence_id").references(() => followUpSequences.id).notNull(),
+  stepNumber: integer("step_number").notNull(), // 1, 2, 3...
+  delayMinutes: integer("delay_minutes").notNull(), // 30, 360, 1440 (30min, 6hr, 24hr)
+  content: text("content").notNull(), // Message template with {{variables}}
+  channel: varchar("channel").default("whatsapp"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Scheduled Follow-ups (Actual messages to send)
+export const followUps = pgTable("follow_ups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequenceId: varchar("sequence_id").references(() => followUpSequences.id),
+  stepId: varchar("step_id").references(() => followUpSteps.id),
+  leadId: varchar("lead_id").references(() => leads.id).notNull(),
+  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  conversationId: varchar("conversation_id").references(() => conversations.id),
+  
+  // Message details
+  content: text("content").notNull(), // Rendered message (variables replaced)
+  channel: varchar("channel").default("whatsapp"),
+  
+  // Scheduling
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  sentAt: timestamp("sent_at"),
+  
+  // Status
+  status: varchar("status").default("pending"), // "pending", "sent", "failed", "cancelled"
+  errorMessage: text("error_message"),
+  
+  // Metadata
+  stepNumber: integer("step_number"),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Relations
+export const followUpSequencesRelations = relations(followUpSequences, ({ one, many }) => ({
+  client: one(clients, {
+    fields: [followUpSequences.clientId],
+    references: [clients.id],
+  }),
+  steps: many(followUpSteps),
+  followUps: many(followUps),
+}));
+
+export const followUpStepsRelations = relations(followUpSteps, ({ one }) => ({
+  sequence: one(followUpSequences, {
+    fields: [followUpSteps.sequenceId],
+    references: [followUpSequences.id],
+  }),
+}));
+
+export const followUpsRelations = relations(followUps, ({ one }) => ({
+  sequence: one(followUpSequences, {
+    fields: [followUps.sequenceId],
+    references: [followUpSequences.id],
+  }),
+  step: one(followUpSteps, {
+    fields: [followUps.stepId],
+    references: [followUpSteps.id],
+  }),
+  lead: one(leads, {
+    fields: [followUps.leadId],
+    references: [leads.id],
+  }),
+  client: one(clients, {
+    fields: [followUps.clientId],
+    references: [clients.id],
+  }),
+  conversation: one(conversations, {
+    fields: [followUps.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
+// Insert schemas
+export const insertFollowUpSequenceSchema = createInsertSchema(followUpSequences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFollowUpStepSchema = createInsertSchema(followUpSteps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFollowUpSchema = createInsertSchema(followUps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+
+export type FollowUpSequence = typeof followUpSequences.$inferSelect;
+export type InsertFollowUpSequence = z.infer<typeof insertFollowUpSequenceSchema>;
+export type FollowUpStep = typeof followUpSteps.$inferSelect;
+export type InsertFollowUpStep = z.infer<typeof insertFollowUpStepSchema>;
+export type FollowUp = typeof followUps.$inferSelect;
+export type InsertFollowUp = z.infer<typeof insertFollowUpSchema>;
+
 // Type exports
 export type CallRecording = typeof callRecordings.$inferSelect;
 export type InsertCallRecording = typeof callRecordings.$inferInsert;

@@ -15,6 +15,9 @@ import {
   spamPatterns,
   subscriptions,
   payments,
+  followUpSequences,
+  followUpSteps,
+  followUps,
   type User,
   type UpsertUser,
   type Client,
@@ -30,10 +33,13 @@ import {
   type Booking,
   type InsertBooking,
   type Analytics,
+  type InsertFollowUpSequence,
+  type InsertFollowUpStep,
+  type InsertFollowUp,
+  
 } from "@shared/schema";
 import {
   leadScoring,
-  followUps,
   competitorTracking,
   serpMonitoring,
   brandMentions,
@@ -922,33 +928,6 @@ export class DatabaseStorage implements IStorage {
       .from(leadScoring)
       .where(eq(leadScoring.leadId, leadId))
       .orderBy(desc(leadScoring.createdAt));
-  }
-
-  // Follow-ups
-  async createFollowUp(data: any): Promise<any> {
-    const [newFollowUp] = await db.insert(followUps).values(data).returning();
-    return newFollowUp;
-  }
-
-  async getFollowUps(clientId: string): Promise<any[]> {
-    return await db
-      .select({
-        id: followUps.id,
-        leadId: followUps.leadId,
-        channel: followUps.channel,
-        triggerType: followUps.triggerType,
-        scheduleTime: followUps.scheduleTime,
-        content: followUps.content,
-        status: followUps.status,
-        sentAt: followUps.sentAt,
-        responseReceived: followUps.responseReceived,
-        createdAt: followUps.createdAt,
-        lead: leads,
-      })
-      .from(followUps)
-      .innerJoin(leads, eq(followUps.leadId, leads.id))
-      .where(eq(leads.clientId, clientId))
-      .orderBy(desc(followUps.scheduleTime));
   }
 
   // Competitor Tracking
@@ -2235,7 +2214,168 @@ export class DatabaseStorage implements IStorage {
         viewCount: sql`${vsls.viewCount} + 1`,
       })
       .where(eq(vsls.id, vslId));
+      
   }
+
+  // ==================== FOLLOW-UPS METHODS ====================
+
+async createFollowUpSequence(data: InsertFollowUpSequence) {
+    const [sequence] = await db.insert(followUpSequences).values(data).returning();
+    return sequence;
+  }
+
+  async getFollowUpSequences(clientId: string) {
+    return await db
+      .select()
+      .from(followUpSequences)
+      .where(eq(followUpSequences.clientId, clientId))
+      .orderBy(desc(followUpSequences.createdAt));
+  }
+
+  async getFollowUpSequence(sequenceId: string) {
+    const [sequence] = await db
+      .select()
+      .from(followUpSequences)
+      .where(eq(followUpSequences.id, sequenceId))
+      .limit(1);
+    return sequence;
+  }
+
+  async updateFollowUpSequence(sequenceId: string, data: Partial<InsertFollowUpSequence>) {
+    const [updated] = await db
+      .update(followUpSequences)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(followUpSequences.id, sequenceId))
+      .returning();
+    return updated;
+  }
+
+  async deleteFollowUpSequence(sequenceId: string) {
+    // Delete steps first
+    await db.delete(followUpSteps).where(eq(followUpSteps.sequenceId, sequenceId));
+    // Delete sequence
+    await db.delete(followUpSequences).where(eq(followUpSequences.id, sequenceId));
+  }
+
+  async createFollowUpStep(data: InsertFollowUpStep) {
+    const [step] = await db.insert(followUpSteps).values(data).returning();
+    return step;
+  }
+
+  async getFollowUpSteps(sequenceId: string) {
+    return await db
+      .select()
+      .from(followUpSteps)
+      .where(eq(followUpSteps.sequenceId, sequenceId))
+      .orderBy(followUpSteps.stepNumber);
+  }
+
+  async scheduleFollowUp(data: InsertFollowUp) {
+    const [followUp] = await db.insert(followUps).values(data).returning();
+    return followUp;
+  }
+
+  async getFollowUpsByClient(clientId: string, status?: string) {
+    if (status) {
+      return await db
+        .select()
+        .from(followUps)
+        .where(
+          and(
+            eq(followUps.clientId, clientId),
+            eq(followUps.status, status)
+          )
+        )
+        .orderBy(followUps.scheduledFor);
+    }
+    
+    return await db
+      .select()
+      .from(followUps)
+      .where(eq(followUps.clientId, clientId))
+      .orderBy(desc(followUps.createdAt));
+  }
+
+  async getPendingFollowUpsByClient(clientId: string) {
+    return await db
+      .select()
+      .from(followUps)
+      .where(
+        and(
+          eq(followUps.clientId, clientId),
+          eq(followUps.status, "pending")
+        )
+      )
+      .orderBy(followUps.scheduledFor);
+  }
+
+  async cancelFollowUp(followUpId: string) {
+    const [cancelled] = await db
+      .update(followUps)
+      .set({
+        status: "cancelled",
+        updatedAt: new Date(),
+      })
+      .where(eq(followUps.id, followUpId))
+      .returning();
+    return cancelled;
+  }
+
+  // Schedule follow-up sequence for a lead
+  async scheduleFollowUpSequence(leadId: string, sequenceId: string, conversationId?: string) {
+    console.log(`📅 [STORAGE] Scheduling follow-up sequence for lead: ${leadId}`);
+
+    const lead = await this.getLead(leadId);
+    if (!lead) {
+      throw new Error("Lead not found");
+    }
+
+    const sequence = await this.getFollowUpSequence(sequenceId);
+    if (!sequence) {
+      throw new Error("Sequence not found");
+    }
+
+    const steps = await this.getFollowUpSteps(sequenceId);
+    if (steps.length === 0) {
+      console.log(`⚠️ [STORAGE] No steps in sequence ${sequenceId}`);
+      return [];
+    }
+
+    const scheduledFollowUps = [];
+    const now = new Date();
+
+    for (const step of steps) {
+      // Calculate when to send
+      const scheduledFor = new Date(now.getTime() + step.delayMinutes * 60 * 1000);
+
+      // Replace variables in content
+      const content = step.content
+        .replace(/{{firstName}}/g, lead.firstName || "there")
+        .replace(/{{lastName}}/g, lead.lastName || "")
+        .replace(/{{company}}/g, lead.company || "");
+
+      const followUp = await this.scheduleFollowUp({
+        sequenceId: sequence.id,
+        stepId: step.id,
+        leadId: lead.id,
+        clientId: lead.clientId,
+        conversationId,
+        content,
+        channel: step.channel || "whatsapp",
+        scheduledFor,
+        status: "pending",
+        stepNumber: step.stepNumber,
+      });
+
+      scheduledFollowUps.push(followUp);
+      console.log(`✅ [STORAGE] Scheduled step ${step.stepNumber} for ${scheduledFor.toISOString()}`);
+    }
+
+    return scheduledFollowUps;
+  }
+  
 }
+
+
 
 export const storage = new DatabaseStorage();
