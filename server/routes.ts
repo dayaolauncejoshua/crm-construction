@@ -138,94 +138,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========================= LEADS ROUTE ======================================
 
-  // Landing page lead capture
-  app.post("/api/leads", async (req, res) => {
-    try {
-      const leadData = insertLeadSchema.parse(req.body);
+// Landing page lead capture
+app.post("/api/leads", async (req, res) => {
+  try {
+    const leadData = insertLeadSchema.parse(req.body);
 
-      // Generate audit based on provided data
-      const auditInputs = req.body.auditInputs || {};
-      const auditType = req.body.auditType || "business";
+    // ✅ SIMPLIFIED: No fake audit, just basic tracking
+    const auditInputs = req.body.auditInputs || {};
+    const auditType = req.body.auditType || "construction";
 
-      const auditResults = await generateAudit(auditType, auditInputs);
+    const firstName =
+      req.body.firstName ||
+      auditInputs.contactName?.split(" ")[0] ||
+      "Unknown";
+    const lastName =
+      req.body.lastName ||
+      auditInputs.contactName?.split(" ").slice(1).join(" ") ||
+      "";
 
-      const firstName =
-        req.body.firstName ||
-        auditInputs.contactName?.split(" ")[0] ||
-        "Unknown";
-      const lastName =
-        req.body.lastName ||
-        auditInputs.contactName?.split(" ").slice(1).join(" ") ||
-        "";
+    // ✅ FIXED: Simple audit results with all needed fields
+    const auditResults = {
+      type: auditType,
+      source: "landing_page",
+      projectType: auditInputs.projectType || "Unknown",
+      timestamp: new Date().toISOString(),
+      topFinding: "Construction inquiry received",
+      wins: ["Lead captured from landing page"],
+      risks: [],
+      score: 50,
+      timeline: "To be discussed",
+      estimatedROI: "TBD"
+    };
 
-      // Create lead with audit results
-      const lead = await storage.createLead({
-        ...leadData,
-        firstName,
-        lastName,
-        auditResults: {
-          type: auditType,
-          ...auditResults,
-          topFinding: auditResults.wins[0] || "Opportunities identified",
-        },
-        status: "new",
-        qualificationScore: (auditResults.score / 100).toString(),
-      });
+    // ✅ FIXED: Create lead with simplified audit results
+    const lead = await storage.createLead({
+      ...leadData,
+      firstName,
+      lastName,
+      auditResults: auditResults,
+      status: "new",
+      qualificationScore: "0.5",
+    });
 
-      // Process lead for immediate response
-      await leadQualificationService.processNewLead(lead.id);
+    // ✅ NEW: Send simple intro message instead of fake audit
+    if (lead.phone) {
+      const introMessage = `Hi ${firstName}! 👋
 
-      // Schedule follow-ups after audit is sent
-      try {
-        console.log(
-          `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
-        );
+Thanks for reaching out about your construction project!
 
-        // Find default sequence
-        const sequences = await storage.getFollowUpSequences(leadData.clientId);
-        const defaultSequence = sequences.find(
-          (s) => s.isDefault && s.status === "active"
-        );
+I'm here to help you get started. To provide the best assistance, could you tell me:
 
-        if (defaultSequence) {
-          // Get conversation for this lead
-          const conversations = await storage.getConversations(
-            leadData.clientId,
-            100
-          );
-          const conversation = conversations.find((c) => c.leadId === lead.id);
+1️⃣ What type of project? (e.g., kitchen remodel, new build, addition)
+2️⃣ Approximate budget range?
+3️⃣ When are you hoping to start?
 
-          await storage.scheduleFollowUpSequence(
-            lead.id,
-            defaultSequence.id,
-            conversation?.id
-          );
+Reply with the details and I'll connect you with our team right away! 🏗️`;
 
-          console.log(
-            `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
-          );
-        } else {
-          console.log(
-            `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
-          );
-        }
-      } catch (error) {
-        console.error("❌ Error scheduling follow-ups:", error);
-        // Don't fail the lead creation if scheduling fails
+      // Send WhatsApp message
+      await whatsappService.sendTextMessage(lead.phone, introMessage);
+
+      // ✅ FIXED: Create or get conversation with proper checks
+      let conversations = await storage.getConversations(leadData.clientId, 100);
+      let conversation = conversations.find((c) => c.leadId === lead.id);
+
+      if (!conversation) {
+        const newConv = await storage.createConversation({
+          leadId: lead.id,
+          clientId: lead.clientId,
+          channel: "whatsapp",
+          status: "active",
+          isAiHandled: true,
+          qualificationScore: "0.0",
+        });
+        
+        // ✅ FIXED: Refresh conversations to get the newly created one with lead data
+        conversations = await storage.getConversations(leadData.clientId, 100);
+        conversation = conversations.find((c) => c.leadId === lead.id);
       }
 
-      res.json({
-        success: true,
-        leadId: lead.id,
-        auditResults: lead.auditResults,
-      });
-    } catch (error) {
-      console.error("Error creating lead:", error);
-      res.status(400).json({
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
+      // ✅ FIXED: Only create message if conversation exists
+      if (conversation) {
+        await storage.createMessage({
+          conversationId: conversation.id,
+          content: introMessage,
+          sender: "ai",
+          channel: "whatsapp",
+          sentAt: new Date(),
+          deliveredAt: new Date(),
+        });
+
+        console.log("✅ Intro message sent and recorded for lead:", lead.id);
+      } else {
+        console.warn("⚠️ Could not create/find conversation for lead:", lead.id);
+      }
     }
-  });
+
+    // Schedule follow-ups after intro message sent
+    try {
+      console.log(
+        `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
+      );
+
+      // Find default sequence
+      const sequences = await storage.getFollowUpSequences(leadData.clientId);
+      const defaultSequence = sequences.find(
+        (s) => s.isDefault && s.status === "active"
+      );
+
+      if (defaultSequence) {
+        // Get conversation for this lead
+        const conversations = await storage.getConversations(
+          leadData.clientId,
+          100
+        );
+        const conversation = conversations.find((c) => c.leadId === lead.id);
+
+        await storage.scheduleFollowUpSequence(
+          lead.id,
+          defaultSequence.id,
+          conversation?.id
+        );
+
+        console.log(
+          `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
+        );
+      } else {
+        console.log(
+          `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
+        );
+      }
+    } catch (error) {
+      console.error("❌ Error scheduling follow-ups:", error);
+      // Don't fail the lead creation if scheduling fails
+    }
+
+    res.json({
+      success: true,
+      leadId: lead.id,
+      auditResults: lead.auditResults,
+    });
+  } catch (error) {
+    console.error("Error creating lead:", error);
+    res.status(400).json({
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
 
   // Manual Lead Controls Routes
 
