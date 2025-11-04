@@ -171,7 +171,7 @@ app.post("/api/leads", async (req, res) => {
     };
 
     // Calculate temperature based on qualification score
-    const qualificationScore = 0.5;
+    const qualificationScore = 0.15;
     let temperature: "hot" | "warm" | "cold";
 
     if (qualificationScore >= 0.7){

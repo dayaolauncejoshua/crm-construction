@@ -971,7 +971,7 @@ function SequenceCard({
   );
 }
 
-// Create Sequence Form Component (unchanged)
+// Create Sequence Form Component with Scrollable Steps
 function CreateSequenceForm({
   clientId,
   onSuccess,
@@ -1045,109 +1045,166 @@ function CreateSequenceForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <DialogHeader>
+    <div className="flex flex-col max-h-[85vh]">
+      {/* Fixed Header */}
+      <DialogHeader className="px-6 pt-6 pb-4 border-b">
         <DialogTitle>Create Follow-up Sequence</DialogTitle>
+        <p className="text-sm text-muted-foreground mt-1">
+          Set up an automated message sequence for leads
+        </p>
       </DialogHeader>
 
-      <div>
-        <Label>Sequence Name</Label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g., 48-Hour Fast Lane"
-          required
-        />
-      </div>
+      {/* Scrollable Content */}
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Sequence Name */}
+          <div>
+            <Label className="text-sm font-medium">Sequence Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., 48-Hour Fast Lane"
+              required
+              className="mt-1.5"
+            />
+          </div>
 
-      <div>
-        <Label>Description</Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Brief description of when to use this sequence"
-        />
-      </div>
+          {/* Description */}
+          <div>
+            <Label className="text-sm font-medium">Description</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of when to use this sequence"
+              rows={2}
+              className="mt-1.5"
+            />
+          </div>
 
-      <div>
-        <Label>Trigger Type</Label>
-        <Select value={triggerType} onValueChange={setTriggerType}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="no_response">No Response</SelectItem>
-            <SelectItem value="time_based">Time Based</SelectItem>
-            <SelectItem value="behavior">Behavior Triggered</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          {/* Trigger Type */}
+          <div>
+            <Label className="text-sm font-medium">Trigger Type</Label>
+            <Select value={triggerType} onValueChange={setTriggerType}>
+              <SelectTrigger className="mt-1.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no_response">No Response</SelectItem>
+                <SelectItem value="time_based">Time Based</SelectItem>
+                <SelectItem value="behavior">Behavior Triggered</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Follow-up Steps</Label>
-          <Button type="button" size="sm" variant="outline" onClick={addStep}>
-            <Plus className="w-4 h-4 mr-1" />
-            Add Step
-          </Button>
+          {/* Follow-up Steps */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between sticky top-0 bg-white py-2 z-10">
+              <Label className="text-sm font-medium">Follow-up Steps</Label>
+              <Button 
+                type="button" 
+                size="sm" 
+                variant="outline" 
+                onClick={addStep}
+                className="gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add Step
+              </Button>
+            </div>
+
+            {/* Steps Container */}
+            <div className="space-y-3">
+              {steps.map((step, index) => (
+                <Card key={index} className="border-2">
+                  <CardContent className="pt-4 pb-4 space-y-3">
+                    {/* Step Header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-bold text-primary">
+                            {index + 1}
+                          </span>
+                        </div>
+                        <Label className="text-sm font-medium">
+                          Step {index + 1}
+                        </Label>
+                      </div>
+                      {steps.length > 1 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeStep(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Delay Input */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Delay (minutes)
+                      </Label>
+                      <Input
+                        type="number"
+                        value={step.delayMinutes}
+                        onChange={(e) =>
+                          updateStep(index, "delayMinutes", parseInt(e.target.value))
+                        }
+                        min="1"
+                        required
+                        className="mt-1.5"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        30 min = 30, 6 hrs = 360, 24 hrs = 1440
+                      </p>
+                    </div>
+
+                    {/* Message Content */}
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Message Content
+                      </Label>
+                      <Textarea
+                        value={step.content}
+                        onChange={(e) => updateStep(index, "content", e.target.value)}
+                        placeholder="Use {{firstName}}, {{lastName}}, {{company}} for variables"
+                        required
+                        rows={3}
+                        className="mt-1.5"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {steps.map((step, index) => (
-          <Card key={index}>
-            <CardContent className="pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Step {index + 1}</Label>
-                {steps.length > 1 && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeStep(index)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-
-              <div>
-                <Label className="text-xs">Delay (minutes)</Label>
-                <Input
-                  type="number"
-                  value={step.delayMinutes}
-                  onChange={(e) =>
-                    updateStep(index, "delayMinutes", parseInt(e.target.value))
-                  }
-                  min="1"
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  30 min = 30, 6 hrs = 360, 24 hrs = 1440
-                </p>
-              </div>
-
-              <div>
-                <Label className="text-xs">Message Content</Label>
-                <Textarea
-                  value={step.content}
-                  onChange={(e) => updateStep(index, "content", e.target.value)}
-                  placeholder="Use {{firstName}}, {{lastName}}, {{company}} for variables"
-                  required
-                  rows={3}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={onSuccess}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Creating..." : "Create Sequence"}
-        </Button>
-      </div>
-    </form>
+        {/* Fixed Footer */}
+        <div className="border-t px-6 py-4 bg-white">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">
+              {steps.length} step{steps.length !== 1 ? "s" : ""} configured
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onSuccess}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "Creating..." : "Create Sequence"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
