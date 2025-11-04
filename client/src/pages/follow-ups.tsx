@@ -1,3 +1,5 @@
+import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -95,13 +97,12 @@ interface FollowUpStats {
 export default function FollowUpsPage() {
   usePageTitle("Follow-ups");
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [clients, setClients] = useState<any[]>([]);
   const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
-  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
-    []
-  );
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>([]);
   const [stats, setStats] = useState<FollowUpStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -124,19 +125,22 @@ export default function FollowUpsPage() {
         }
       } catch (error) {
         console.error("Error fetching clients:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch clients. Please try again.",
+          variant: "destructive",
+        });
       }
     }
-
     if (user?.id) {
       fetchClients();
     }
-  }, [user]);
+  }, [user, toast]);
 
   // Fetch sequences, pending follow-ups, and stats
   useEffect(() => {
     async function fetchData() {
       if (!selectedClientId) return;
-
       setLoading(true);
       try {
         const [seqRes, pendingRes, statsRes] = await Promise.all([
@@ -144,125 +148,147 @@ export default function FollowUpsPage() {
           fetch(`/api/follow-ups/${selectedClientId}/pending`),
           fetch(`/api/follow-ups/${selectedClientId}/stats`),
         ]);
-
         const seqData = await seqRes.json();
         const pendingData = await pendingRes.json();
         const statsData = await statsRes.json();
-
         setSequences(seqData);
         setPendingFollowUps(pendingData);
         setStats(statsData);
       } catch (error) {
         console.error("Error fetching follow-up data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch follow-up data. Please try again.",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     }
-
     fetchData();
-  }, [selectedClientId]);
+  }, [selectedClientId, toast]);
 
   async function toggleSequenceStatus(
     sequenceId: string,
     currentStatus: string
   ) {
     const newStatus = currentStatus === "active" ? "paused" : "active";
-
     try {
       await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-
       setSequences(
         sequences.map((seq) =>
           seq.id === sequenceId ? { ...seq, status: newStatus } : seq
         )
       );
+      toast({
+        title: "Success",
+        description: `Sequence ${newStatus === "active" ? "activated" : "paused"} successfully.`,
+      });
     } catch (error) {
       console.error("Error toggling sequence:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update sequence status. Please try again.",
+        variant: "destructive",
+      });
     }
   }
 
   async function deleteSequence(sequenceId: string) {
-    if (!confirm("Are you sure you want to delete this sequence?")) return;
-
     try {
       await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
         method: "DELETE",
       });
-
       setSequences(sequences.filter((seq) => seq.id !== sequenceId));
+      toast({
+        title: "Success",
+        description: "Sequence deleted successfully.",
+      });
     } catch (error) {
       console.error("Error deleting sequence:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete sequence. Please try again.",
+        variant: "destructive",
+      });
     }
   }
 
-async function sendFollowUpNow(followUpId: string) {
-  if (!confirm("Send this follow-up immediately?")) return;
-
-  try {
-    // Update the follow-up status to trigger immediate send
-    const response = await fetch(`/api/follow-ups/${followUpId}/send-now`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (response.ok) {
-      // Remove from pending list
-      setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
-      
-      // Update stats
-      if (stats) {
-        setStats({
-          ...stats,
-          pending: stats.pending - 1,
-          sent: stats.sent + 1,
+  async function sendFollowUpNow(followUpId: string) {
+    try {
+      const response = await fetch(`/api/follow-ups/${followUpId}/send-now`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
+        if (stats) {
+          setStats({
+            ...stats,
+            pending: stats.pending - 1,
+            sent: stats.sent + 1,
+          });
+        }
+        toast({
+          title: "Success",
+          description: "Follow-up sent successfully.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to send follow-up. Please try again.",
+          variant: "destructive",
         });
       }
-      
-      console.log("✅ Follow-up sent successfully");
-    } else {
-      alert("Failed to send follow-up. Please try again.");
+    } catch (error) {
+      console.error("Error sending follow-up:", error);
+      toast({
+        title: "Error",
+        description: "Error sending follow-up. Please try again.",
+        variant: "destructive",
+      });
     }
-  } catch (error) {
-    console.error("Error sending follow-up:", error);
-    alert("Error sending follow-up. Please try again.");
   }
-}
 
-async function skipFollowUp(followUpId: string) {
-  if (!confirm("Skip this follow-up? This cannot be undone.")) return;
-
-  try {
-    const response = await fetch(`/api/follow-ups/${followUpId}/cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (response.ok) {
-      // Remove from pending list
-      setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
-      
-      // Update stats
-      if (stats) {
-        setStats({
-          ...stats,
-          pending: stats.pending - 1,
-          cancelled: stats.cancelled + 1,
+  async function skipFollowUp(followUpId: string) {
+    try {
+      const response = await fetch(`/api/follow-ups/${followUpId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.ok) {
+        setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
+        if (stats) {
+          setStats({
+            ...stats,
+            pending: stats.pending - 1,
+            cancelled: stats.cancelled + 1,
+          });
+        }
+        toast({
+          title: "Success",
+          description: "Follow-up skipped successfully.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to skip follow-up. Please try again.",
+          variant: "destructive",
         });
       }
-      
-      console.log("✅ Follow-up skipped successfully");
-    } else {
-      alert("Failed to skip follow-up. Please try again.");
+    } catch (error) {
+      console.error("Error skipping follow-up:", error);
+      toast({
+        title: "Error",
+        description: "Error skipping follow-up. Please try again.",
+        variant: "destructive",
+      });
     }
-  } catch (error) {
-    console.error("Error skipping follow-up:", error);
-    alert("Error skipping follow-up. Please try again.");
   }
-}
 
   function formatDelay(minutes: number): string {
     if (minutes < 60) return `${minutes} minutes`;
@@ -275,40 +301,33 @@ async function skipFollowUp(followUpId: string) {
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-
     if (diffMins < 0) return "Overdue";
     if (diffMins < 60) return `in ${diffMins}m`;
     if (diffMins < 1440) return `in ${Math.floor(diffMins / 60)}h`;
     return date.toLocaleDateString();
   }
 
-  
   // Filter pending follow-ups based on active filters
   const filteredFollowUps = useMemo(() => {
     let filtered = [...pendingFollowUps];
-
-    // Filter by step number
     if (filters.stepNumber !== "all") {
       filtered = filtered.filter(
         (fu) => fu.stepNumber === parseInt(filters.stepNumber)
       );
     }
-
-    // Filter by time range
     if (filters.timeRange !== "all") {
       const now = new Date();
       filtered = filtered.filter((fu) => {
         const scheduledDate = new Date(fu.scheduledFor);
         const diffMs = scheduledDate.getTime() - now.getTime();
         const diffHours = diffMs / (1000 * 60 * 60);
-
         switch (filters.timeRange) {
           case "overdue":
             return diffMs < 0;
           case "today":
             return diffHours >= 0 && diffHours <= 24;
           case "thisWeek":
-            return diffHours >= 0 && diffHours <= 168; // 7 days
+            return diffHours >= 0 && diffHours <= 168;
           case "upcoming":
             return diffHours > 168;
           default:
@@ -316,8 +335,6 @@ async function skipFollowUp(followUpId: string) {
         }
       });
     }
-
-    // Filter by search term (lead name)
     if (filters.searchTerm.trim()) {
       const searchLower = filters.searchTerm.toLowerCase();
       filtered = filtered.filter(
@@ -326,11 +343,9 @@ async function skipFollowUp(followUpId: string) {
           fu.leadCompany?.toLowerCase().includes(searchLower)
       );
     }
-
     return filtered;
   }, [pendingFollowUps, filters]);
 
-  // Count active filters
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (filters.stepNumber !== "all") count++;
@@ -339,7 +354,6 @@ async function skipFollowUp(followUpId: string) {
     return count;
   }, [filters]);
 
-  // Reset all filters
   const resetFilters = () => {
     setFilters({
       stepNumber: "all",
@@ -382,9 +396,7 @@ async function skipFollowUp(followUpId: string) {
               Automated message sequences to nurture leads
             </p>
           </div>
-
           <div className="flex items-center gap-3">
-            {/* Client Selector */}
             {clients.length > 1 && (
               <Select
                 value={selectedClientId}
@@ -402,7 +414,6 @@ async function skipFollowUp(followUpId: string) {
                 </SelectContent>
               </Select>
             )}
-
             <Dialog
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
@@ -463,7 +474,6 @@ async function skipFollowUp(followUpId: string) {
                 <p className="text-xs text-slate-500 mt-1">All time</p>
               </CardContent>
             </Card>
-
             <Card className="border-2 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <div className="text-sm font-medium text-slate-600">
@@ -478,7 +488,6 @@ async function skipFollowUp(followUpId: string) {
                 <p className="text-xs text-slate-500 mt-1">Scheduled</p>
               </CardContent>
             </Card>
-
             <Card className="border-2 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <div className="text-sm font-medium text-slate-600">Sent</div>
@@ -491,7 +500,6 @@ async function skipFollowUp(followUpId: string) {
                 <p className="text-xs text-slate-500 mt-1">Delivered</p>
               </CardContent>
             </Card>
-
             <Card className="border-2 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <div className="text-sm font-medium text-slate-600">Failed</div>
@@ -504,7 +512,6 @@ async function skipFollowUp(followUpId: string) {
                 <p className="text-xs text-slate-500 mt-1">Errors</p>
               </CardContent>
             </Card>
-
             <Card className="border-2 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <div className="text-sm font-medium text-slate-600">
@@ -573,285 +580,303 @@ async function skipFollowUp(followUpId: string) {
         </Card>
 
         {/* Pending Follow-ups */}
-<Card className="border-2">
-  <CardHeader>
-    <div className="flex items-center justify-between">
-      <div>
-        <CardTitle className="text-base flex items-center gap-2">
-          Pending Follow-ups
-          {stats && stats.pending > 0 && (
-            <Badge variant="secondary">{stats.pending}</Badge>
-          )}
-        </CardTitle>
-        <p className="text-xs text-slate-500 mt-1">
-          Review and manage scheduled messages
-        </p>
-      </div>
-      <div className="flex gap-2">
-        {/* Filter Popover */}
-        <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 relative">
-              <Filter className="w-4 h-4" />
-              Filters
-              {activeFiltersCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
-                >
-                  {activeFiltersCount}
-                </Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80" align="end">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-sm">Filter Follow-ups</h4>
-                {activeFiltersCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={resetFilters}
-                    className="h-auto py-1 px-2 text-xs"
+        <Card className="border-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  Pending Follow-ups
+                  {stats && stats.pending > 0 && (
+                    <Badge variant="secondary">{stats.pending}</Badge>
+                  )}
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-1">
+                  Review and manage scheduled messages
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2 relative">
+                      <Filter className="w-4 h-4" />
+                      Filters
+                      {activeFiltersCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                        >
+                          {activeFiltersCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm">Filter Follow-ups</h4>
+                        {activeFiltersCount > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={resetFilters}
+                            className="h-auto py-1 px-2 text-xs"
+                          >
+                            Reset All
+                          </Button>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium">Search Lead</Label>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <Input
+                            placeholder="Search by name or company..."
+                            value={filters.searchTerm}
+                            onChange={(e) =>
+                              setFilters({ ...filters, searchTerm: e.target.value })
+                            }
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium">Step Number</Label>
+                        <Select
+                          value={filters.stepNumber}
+                          onValueChange={(value) =>
+                            setFilters({ ...filters, stepNumber: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Steps</SelectItem>
+                            <SelectItem value="1">Step 1 (30 min)</SelectItem>
+                            <SelectItem value="2">Step 2 (6 hours)</SelectItem>
+                            <SelectItem value="3">Step 3 (24 hours)</SelectItem>
+                            <SelectItem value="4">Step 4 (48 hours)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium">Time Range</Label>
+                        <Select
+                          value={filters.timeRange}
+                          onValueChange={(value) =>
+                            setFilters({ ...filters, timeRange: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Time</SelectItem>
+                            <SelectItem value="overdue">Overdue</SelectItem>
+                            <SelectItem value="today">Today (Next 24h)</SelectItem>
+                            <SelectItem value="thisWeek">This Week</SelectItem>
+                            <SelectItem value="upcoming">Upcoming (7+ days)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {activeFiltersCount > 0 && (
+                        <div className="pt-3 border-t">
+                          <p className="text-xs text-slate-600 mb-2">Active filters:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {filters.stepNumber !== "all" && (
+                              <Badge variant="secondary" className="text-xs">
+                                Step {filters.stepNumber}
+                                <button
+                                  onClick={() =>
+                                    setFilters({ ...filters, stepNumber: "all" })
+                                  }
+                                  className="ml-1 hover:text-destructive"
+                                >
+                                  ×
+                                </button>
+                              </Badge>
+                            )}
+                            {filters.timeRange !== "all" && (
+                              <Badge variant="secondary" className="text-xs capitalize">
+                                {filters.timeRange.replace(/([A-Z])/g, " $1")}
+                                <button
+                                  onClick={() =>
+                                    setFilters({ ...filters, timeRange: "all" })
+                                  }
+                                  className="ml-1 hover:text-destructive"
+                                >
+                                  ×
+                                </button>
+                              </Badge>
+                            )}
+                            {filters.searchTerm.trim() && (
+                              <Badge variant="secondary" className="text-xs">
+                                "{filters.searchTerm}"
+                                <button
+                                  onClick={() =>
+                                    setFilters({ ...filters, searchTerm: "" })
+                                  }
+                                  className="ml-1 hover:text-destructive"
+                                >
+                                  ×
+                                </button>
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Clock className="w-4 h-4" />
+                  Sort
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {activeFiltersCount > 0 && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  Showing <strong>{filteredFollowUps.length}</strong> of{" "}
+                  <strong>{pendingFollowUps.length}</strong> follow-ups
+                  {activeFiltersCount > 0 && (
+                    <button
+                      onClick={resetFilters}
+                      className="ml-2 text-blue-600 hover:underline font-medium"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </p>
+              </div>
+            )}
+            {filteredFollowUps.length === 0 ? (
+              <div className="text-center py-12">
+                <Clock className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+                {activeFiltersCount > 0 ? (
+                  <>
+                    <p className="text-slate-600 mb-2">No follow-ups match your filters</p>
+                    <p className="text-sm text-slate-500 mb-4">
+                      Try adjusting or clearing your filters
+                    </p>
+                    <Button variant="outline" onClick={resetFilters}>
+                      Clear All Filters
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-slate-600">No pending follow-ups</p>
+                    <p className="text-sm text-slate-500 mt-2">
+                      All scheduled messages have been sent or cancelled
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredFollowUps.map((followUp) => (
+                  <div
+                    key={followUp.id}
+                    className="flex items-start gap-4 p-4 border-2 rounded-lg bg-white hover:border-primary/50 transition-all"
                   >
-                    Reset All
-                  </Button>
-                )}
-              </div>
-
-              {/* Search by Lead Name */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Search Lead</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input
-                    placeholder="Search by name or company..."
-                    value={filters.searchTerm}
-                    onChange={(e) =>
-                      setFilters({ ...filters, searchTerm: e.target.value })
-                    }
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              {/* Filter by Step */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Step Number</Label>
-                <Select
-                  value={filters.stepNumber}
-                  onValueChange={(value) =>
-                    setFilters({ ...filters, stepNumber: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Steps</SelectItem>
-                    <SelectItem value="1">Step 1 (30 min)</SelectItem>
-                    <SelectItem value="2">Step 2 (6 hours)</SelectItem>
-                    <SelectItem value="3">Step 3 (24 hours)</SelectItem>
-                    <SelectItem value="4">Step 4 (48 hours)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Filter by Time Range */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Time Range</Label>
-                <Select
-                  value={filters.timeRange}
-                  onValueChange={(value) =>
-                    setFilters({ ...filters, timeRange: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="today">Today (Next 24h)</SelectItem>
-                    <SelectItem value="thisWeek">This Week</SelectItem>
-                    <SelectItem value="upcoming">Upcoming (7+ days)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Active Filters Summary */}
-              {activeFiltersCount > 0 && (
-                <div className="pt-3 border-t">
-                  <p className="text-xs text-slate-600 mb-2">Active filters:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {filters.stepNumber !== "all" && (
-                      <Badge variant="secondary" className="text-xs">
-                        Step {filters.stepNumber}
-                        <button
-                          onClick={() =>
-                            setFilters({ ...filters, stepNumber: "all" })
-                          }
-                          className="ml-1 hover:text-destructive"
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    )}
-                    {filters.timeRange !== "all" && (
-                      <Badge variant="secondary" className="text-xs capitalize">
-                        {filters.timeRange.replace(/([A-Z])/g, " $1")}
-                        <button
-                          onClick={() =>
-                            setFilters({ ...filters, timeRange: "all" })
-                          }
-                          className="ml-1 hover:text-destructive"
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    )}
-                    {filters.searchTerm.trim() && (
-                      <Badge variant="secondary" className="text-xs">
-                        "{filters.searchTerm}"
-                        <button
-                          onClick={() =>
-                            setFilters({ ...filters, searchTerm: "" })
-                          }
-                          className="ml-1 hover:text-destructive"
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    )}
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-sm font-bold text-blue-600">
+                        {followUp.leadName.substring(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-slate-900">
+                          {followUp.leadName}
+                        </h4>
+                        {followUp.leadCompany && (
+                          <span className="text-sm text-slate-500">
+                            • {followUp.leadCompany}
+                          </span>
+                        )}
+                        <Badge variant="outline" className="text-xs ml-auto">
+                          Step {followUp.stepNumber}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+                        {followUp.content}
+                      </p>
+                      <div className="flex items-center gap-4 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(followUp.scheduledFor).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatScheduledTime(followUp.scheduledFor)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" className="gap-1">
+                            <Send className="w-4 h-4" />
+                            Send Now
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Send Follow-up Now?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will immediately send the follow-up message to{" "}
+                              <strong>{followUp.leadName}</strong>. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => sendFollowUpNow(followUp.id)}>
+                              Send Now
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="gap-1">
+                            <SkipForward className="w-4 h-4" />
+                            Skip
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Skip This Follow-up?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will cancel the scheduled follow-up for{" "}
+                              <strong>{followUp.leadName}</strong>. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => skipFollowUp(followUp.id)}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              Skip Follow-up
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Sort Button (Optional - can add later) */}
-        <Button variant="outline" size="sm" className="gap-2">
-          <Clock className="w-4 h-4" />
-          Sort
-        </Button>
-      </div>
-    </div>
-  </CardHeader>
-  <CardContent>
-    {/* Show filter results count */}
-    {activeFiltersCount > 0 && (
-      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <p className="text-sm text-blue-900">
-          Showing <strong>{filteredFollowUps.length}</strong> of{" "}
-          <strong>{pendingFollowUps.length}</strong> follow-ups
-          {activeFiltersCount > 0 && (
-            <button
-              onClick={resetFilters}
-              className="ml-2 text-blue-600 hover:underline font-medium"
-            >
-              Clear filters
-            </button>
-          )}
-        </p>
-      </div>
-    )}
-
-    {filteredFollowUps.length === 0 ? (
-      <div className="text-center py-12">
-        <Clock className="w-12 h-12 mx-auto text-slate-400 mb-4" />
-        {activeFiltersCount > 0 ? (
-          <>
-            <p className="text-slate-600 mb-2">No follow-ups match your filters</p>
-            <p className="text-sm text-slate-500 mb-4">
-              Try adjusting or clearing your filters
-            </p>
-            <Button variant="outline" onClick={resetFilters}>
-              Clear All Filters
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-slate-600">No pending follow-ups</p>
-            <p className="text-sm text-slate-500 mt-2">
-              All scheduled messages have been sent or cancelled
-            </p>
-          </>
-        )}
-      </div>
-    ) : (
-      <div className="space-y-3">
-        {filteredFollowUps.map((followUp) => (
-          <div
-            key={followUp.id}
-            className="flex items-start gap-4 p-4 border-2 rounded-lg bg-white hover:border-primary/50 transition-all"
-          >
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-              <span className="text-sm font-bold text-blue-600">
-                {followUp.leadName.substring(0, 2).toUpperCase()}
-              </span>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h4 className="font-semibold text-slate-900">
-                  {followUp.leadName}
-                </h4>
-                {followUp.leadCompany && (
-                  <span className="text-sm text-slate-500">
-                    • {followUp.leadCompany}
-                  </span>
-                )}
-                <Badge variant="outline" className="text-xs ml-auto">
-                  Step {followUp.stepNumber}
-                </Badge>
+                ))}
               </div>
-              <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                {followUp.content}
-              </p>
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {new Date(followUp.scheduledFor).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {formatScheduledTime(followUp.scheduledFor)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => sendFollowUpNow(followUp.id)}
-                className="gap-1"
-              >
-                <Send className="w-4 h-4" />
-                Send Now
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => skipFollowUp(followUp.id)}
-                className="gap-1"
-              >
-                <SkipForward className="w-4 h-4" />
-                Skip
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </CardContent>
-</Card>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
@@ -869,10 +894,9 @@ function SequenceCard({
   formatDelay: (minutes: number) => string;
 }) {
   const [showSteps, setShowSteps] = useState(false);
-
+  
   return (
     <div className="border-2 rounded-lg bg-white overflow-hidden hover:border-primary/50 transition-all">
-      {/* Main Sequence Info */}
       <div className="flex items-center justify-between p-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-2">
@@ -917,7 +941,6 @@ function SequenceCard({
             </button>
           </div>
         </div>
-
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -936,17 +959,35 @@ function SequenceCard({
               </>
             )}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onDelete(sequence.id)}
-          >
-            <Trash2 className="w-4 h-4 text-red-600" />
-          </Button>
+          
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="ghost">
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Sequence?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "<strong>{sequence.name}</strong>"? 
+                  This will permanently remove the sequence and cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete(sequence.id)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Delete Sequence
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
-
-      {/* Expandable Steps Section */}
+      
       {showSteps && (
         <div className="border-t bg-slate-50 p-4">
           <h4 className="text-sm font-semibold text-slate-700 mb-3">
@@ -958,14 +999,11 @@ function SequenceCard({
                 key={step.id}
                 className="flex items-start gap-3 p-3 bg-white rounded-lg border"
               >
-                {/* Step Number */}
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <span className="text-sm font-bold text-primary">
                     {step.stepNumber}
                   </span>
                 </div>
-
-                {/* Step Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-slate-900">
@@ -980,8 +1018,6 @@ function SequenceCard({
                     {step.content}
                   </p>
                 </div>
-
-                {/* Arrow Indicator */}
                 {index < sequence.steps.length - 1 && (
                   <div className="flex-shrink-0 text-slate-400">
                     <svg
@@ -1008,7 +1044,6 @@ function SequenceCard({
   );
 }
 
-// Create Sequence Form Component with Scrollable Steps
 function CreateSequenceForm({
   clientId,
   onSuccess,
@@ -1016,10 +1051,10 @@ function CreateSequenceForm({
   clientId: string;
   onSuccess: () => void;
 }) {
+  const { toast } = useToast();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("no_response");
-
   type StepInput = { delayMinutes: number; content: string };
   const [steps, setSteps] = useState<StepInput[]>([
     { delayMinutes: 30, content: "" },
@@ -1051,7 +1086,6 @@ function CreateSequenceForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-
     try {
       const response = await fetch("/api/follow-ups/sequences", {
         method: "POST",
@@ -1070,12 +1104,23 @@ function CreateSequenceForm({
           })),
         }),
       });
-
+      
       if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Follow-up sequence created successfully.",
+        });
         onSuccess();
+      } else {
+        throw new Error("Failed to create sequence");
       }
     } catch (error) {
       console.error("Error creating sequence:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create sequence. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -1083,18 +1128,15 @@ function CreateSequenceForm({
 
   return (
     <div className="flex flex-col max-h-[85vh]">
-      {/* Fixed Header */}
       <DialogHeader className="px-6 pt-6 pb-4 border-b">
         <DialogTitle>Create Follow-up Sequence</DialogTitle>
         <p className="text-sm text-muted-foreground mt-1">
           Set up an automated message sequence for leads
         </p>
       </DialogHeader>
-
-      {/* Scrollable Content */}
+      
       <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {/* Sequence Name */}
           <div>
             <Label className="text-sm font-medium">Sequence Name</Label>
             <Input
@@ -1105,8 +1147,7 @@ function CreateSequenceForm({
               className="mt-1.5"
             />
           </div>
-
-          {/* Description */}
+          
           <div>
             <Label className="text-sm font-medium">Description</Label>
             <Textarea
@@ -1117,8 +1158,7 @@ function CreateSequenceForm({
               className="mt-1.5"
             />
           </div>
-
-          {/* Trigger Type */}
+          
           <div>
             <Label className="text-sm font-medium">Trigger Type</Label>
             <Select value={triggerType} onValueChange={setTriggerType}>
@@ -1132,15 +1172,14 @@ function CreateSequenceForm({
               </SelectContent>
             </Select>
           </div>
-
-          {/* Follow-up Steps */}
+          
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between sticky top-0 bg-white py-2 z-10">
               <Label className="text-sm font-medium">Follow-up Steps</Label>
-              <Button 
-                type="button" 
-                size="sm" 
-                variant="outline" 
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={addStep}
                 className="gap-1"
               >
@@ -1148,13 +1187,11 @@ function CreateSequenceForm({
                 Add Step
               </Button>
             </div>
-
-            {/* Steps Container */}
+            
             <div className="space-y-3">
               {steps.map((step, index) => (
                 <Card key={index} className="border-2">
                   <CardContent className="pt-4 pb-4 space-y-3">
-                    {/* Step Header */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
@@ -1178,8 +1215,7 @@ function CreateSequenceForm({
                         </Button>
                       )}
                     </div>
-
-                    {/* Delay Input */}
+                    
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Delay (minutes)
@@ -1198,8 +1234,7 @@ function CreateSequenceForm({
                         30 min = 30, 6 hrs = 360, 24 hrs = 1440
                       </p>
                     </div>
-
-                    {/* Message Content */}
+                    
                     <div>
                       <Label className="text-xs text-muted-foreground">
                         Message Content
@@ -1219,17 +1254,16 @@ function CreateSequenceForm({
             </div>
           </div>
         </div>
-
-        {/* Fixed Footer */}
+        
         <div className="border-t px-6 py-4 bg-white">
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">
               {steps.length} step{steps.length !== 1 ? "s" : ""} configured
             </p>
             <div className="flex gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={onSuccess}
                 disabled={submitting}
               >
