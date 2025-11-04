@@ -556,45 +556,30 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
           incomingMessage.messageId
         );
 
-        // ✅ FIXED: Only cancel follow-ups on NEW lead messages (not status updates)
-try {
-  const lead = await storage.getLeadByPhone(incomingMessage.from);
-  
-  if (lead) {
-    // ✅ NEW: Get conversation to check message count
-    const conversations = await storage.getConversations(lead.clientId, 100);
-    const conversation = conversations.find((c) => c.leadId === lead.id);
-    
-    if (conversation) {
-      // Count how many messages from this lead exist
-      const messages = await storage.getMessages(conversation.id);
-      const leadMessageCount = messages.filter(m => m.sender === "lead").length;
-      
-      // ✅ Only cancel if this is NOT the first message (first message schedules follow-ups)
-      if (leadMessageCount > 1) {
-        const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
-        
-        if (pendingFollowUps.length > 0) {
-          console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
-          console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
-          
-          // Cancel all pending follow-ups for this lead
-          const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
-          await cancelPendingFollowUps(lead.id);
-          
-          console.log(`🚫 Cancelled pending follow-ups for lead: ${lead.id}`);
-        } else {
-          console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+        // Cancel pending follow-ups when lead replies 
+        try {
+          const lead = await storage.getLeadByPhone(incomingMessage.from);
+
+          if (lead) {
+            // Check if there are any pending follow-ups
+            const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
+
+            if (pendingFollowUps.length > 0){
+              console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
+              console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
+
+              // Cancel all pending follow-ups for this lead
+              const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
+              await cancelPendingFollowUps(lead.id);
+
+              console.log(`🚫 Cancelled ${pendingFollowUps.length} pending follow-ups for lead: ${lead.id}`);
+            } else {
+              console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error cancelling follow-ups:", error);
         }
-      } else {
-        console.log(`ℹ️ First message from lead - follow-ups will be scheduled after AI response`);
-      }
-    }
-  }
-} catch (error) {
-  console.error("❌ Error cancelling follow-ups:", error);
-  // Don't fail the webhook if this fails
-}
 
         // ✅ NEW: Find the lead and conversation to broadcast immediately
         try {
