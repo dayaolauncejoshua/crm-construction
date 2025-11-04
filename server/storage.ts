@@ -36,7 +36,6 @@ import {
   type InsertFollowUpSequence,
   type InsertFollowUpStep,
   type InsertFollowUp,
-  
 } from "@shared/schema";
 import {
   leadScoring,
@@ -1770,7 +1769,6 @@ export class DatabaseStorage implements IStorage {
       // 6. Delete all follow-ups for this lead
       await db.delete(followUps).where(eq(followUps.leadId, leadId));
       console.log(`  ✅ Deleted follow-ups.`);
-      
 
       // 7. Finally, delete the lead
       await db.delete(leads).where(eq(leads.id, leadId));
@@ -2219,13 +2217,15 @@ export class DatabaseStorage implements IStorage {
         viewCount: sql`${vsls.viewCount} + 1`,
       })
       .where(eq(vsls.id, vslId));
-      
   }
 
   // ==================== FOLLOW-UPS METHODS ====================
 
-async createFollowUpSequence(data: InsertFollowUpSequence) {
-    const [sequence] = await db.insert(followUpSequences).values(data).returning();
+  async createFollowUpSequence(data: InsertFollowUpSequence) {
+    const [sequence] = await db
+      .insert(followUpSequences)
+      .values(data)
+      .returning();
     return sequence;
   }
 
@@ -2246,7 +2246,10 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
     return sequence;
   }
 
-  async updateFollowUpSequence(sequenceId: string, data: Partial<InsertFollowUpSequence>) {
+  async updateFollowUpSequence(
+    sequenceId: string,
+    data: Partial<InsertFollowUpSequence>
+  ) {
     const [updated] = await db
       .update(followUpSequences)
       .set({ ...data, updatedAt: new Date() })
@@ -2257,9 +2260,13 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
 
   async deleteFollowUpSequence(sequenceId: string) {
     // Delete steps first
-    await db.delete(followUpSteps).where(eq(followUpSteps.sequenceId, sequenceId));
+    await db
+      .delete(followUpSteps)
+      .where(eq(followUpSteps.sequenceId, sequenceId));
     // Delete sequence
-    await db.delete(followUpSequences).where(eq(followUpSequences.id, sequenceId));
+    await db
+      .delete(followUpSequences)
+      .where(eq(followUpSequences.id, sequenceId));
   }
 
   async createFollowUpStep(data: InsertFollowUpStep) {
@@ -2286,14 +2293,11 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
         .select()
         .from(followUps)
         .where(
-          and(
-            eq(followUps.clientId, clientId),
-            eq(followUps.status, status)
-          )
+          and(eq(followUps.clientId, clientId), eq(followUps.status, status))
         )
         .orderBy(followUps.scheduledFor);
     }
-    
+
     return await db
       .select()
       .from(followUps)
@@ -2306,25 +2310,17 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
       .select()
       .from(followUps)
       .where(
-        and(
-          eq(followUps.clientId, clientId),
-          eq(followUps.status, "pending")
-        )
+        and(eq(followUps.clientId, clientId), eq(followUps.status, "pending"))
       )
       .orderBy(followUps.scheduledFor);
   }
 
-   // ✅ NEW: Get pending follow-ups by lead ID
+  // ✅ NEW: Get pending follow-ups by lead ID
   async getPendingFollowUpsByLead(leadId: string) {
     return await db
       .select()
       .from(followUps)
-      .where(
-        and(
-          eq(followUps.leadId, leadId),
-          eq(followUps.status, "pending")
-        )
-      )
+      .where(and(eq(followUps.leadId, leadId), eq(followUps.status, "pending")))
       .orderBy(followUps.scheduledFor);
   }
 
@@ -2341,8 +2337,14 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
   }
 
   // Schedule follow-up sequence for a lead
-  async scheduleFollowUpSequence(leadId: string, sequenceId: string, conversationId?: string) {
-    console.log(`📅 [STORAGE] Scheduling follow-up sequence for lead: ${leadId}`);
+  async scheduleFollowUpSequence(
+    leadId: string,
+    sequenceId: string,
+    conversationId?: string
+  ) {
+    console.log(
+      `📅 [STORAGE] Scheduling follow-up sequence for lead: ${leadId}`
+    );
 
     const lead = await this.getLead(leadId);
     if (!lead) {
@@ -2365,7 +2367,9 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
 
     for (const step of steps) {
       // Calculate when to send
-      const scheduledFor = new Date(now.getTime() + step.delayMinutes * 60 * 1000);
+      const scheduledFor = new Date(
+        now.getTime() + step.delayMinutes * 60 * 1000
+      );
 
       // Replace variables in content
       const content = step.content
@@ -2387,14 +2391,44 @@ async createFollowUpSequence(data: InsertFollowUpSequence) {
       });
 
       scheduledFollowUps.push(followUp);
-      console.log(`✅ [STORAGE] Scheduled step ${step.stepNumber} for ${scheduledFor.toISOString()}`);
+      console.log(
+        `✅ [STORAGE] Scheduled step ${
+          step.stepNumber
+        } for ${scheduledFor.toISOString()}`
+      );
     }
 
     return scheduledFollowUps;
   }
-  
+
+  // Get single follow-up by ID
+  async getFollowUpById(id: string) {
+    const result = await db
+      .select()
+      .from(followUps)
+      .where(eq(followUps.id, id))
+      .limit(1);
+
+    return result[0] || null;
+  }
+
+  // Update follow-up status
+  async updateFollowUp(
+    id: string,
+    data: {
+      status?: string;
+      sentAt?: Date;
+      errorMessage?: string;
+    }
+  ) {
+    await db
+      .update(followUps)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(followUps.id, id));
+  }
 }
-
-
 
 export const storage = new DatabaseStorage();

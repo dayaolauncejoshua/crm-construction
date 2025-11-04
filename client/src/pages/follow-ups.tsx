@@ -199,33 +199,70 @@ export default function FollowUpsPage() {
     }
   }
 
-  async function sendFollowUpNow(followUpId: string) {
-    try {
-      await fetch(`/api/follow-ups/${followUpId}/send`, {
-        method: "POST",
-      });
+async function sendFollowUpNow(followUpId: string) {
+  if (!confirm("Send this follow-up immediately?")) return;
 
-      setPendingFollowUps(
-        pendingFollowUps.filter((fu) => fu.id !== followUpId)
-      );
-    } catch (error) {
-      console.error("Error sending follow-up:", error);
+  try {
+    // Update the follow-up status to trigger immediate send
+    const response = await fetch(`/api/follow-ups/${followUpId}/send-now`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      // Remove from pending list
+      setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
+      
+      // Update stats
+      if (stats) {
+        setStats({
+          ...stats,
+          pending: stats.pending - 1,
+          sent: stats.sent + 1,
+        });
+      }
+      
+      console.log("✅ Follow-up sent successfully");
+    } else {
+      alert("Failed to send follow-up. Please try again.");
     }
+  } catch (error) {
+    console.error("Error sending follow-up:", error);
+    alert("Error sending follow-up. Please try again.");
   }
+}
 
-  async function skipFollowUp(followUpId: string) {
-    try {
-      await fetch(`/api/follow-ups/${followUpId}`, {
-        method: "DELETE",
-      });
+async function skipFollowUp(followUpId: string) {
+  if (!confirm("Skip this follow-up? This cannot be undone.")) return;
 
-      setPendingFollowUps(
-        pendingFollowUps.filter((fu) => fu.id !== followUpId)
-      );
-    } catch (error) {
-      console.error("Error skipping follow-up:", error);
+  try {
+    const response = await fetch(`/api/follow-ups/${followUpId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      // Remove from pending list
+      setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
+      
+      // Update stats
+      if (stats) {
+        setStats({
+          ...stats,
+          pending: stats.pending - 1,
+          cancelled: stats.cancelled + 1,
+        });
+      }
+      
+      console.log("✅ Follow-up skipped successfully");
+    } else {
+      alert("Failed to skip follow-up. Please try again.");
     }
+  } catch (error) {
+    console.error("Error skipping follow-up:", error);
+    alert("Error skipping follow-up. Please try again.");
   }
+}
 
   function formatDelay(minutes: number): string {
     if (minutes < 60) return `${minutes} minutes`;

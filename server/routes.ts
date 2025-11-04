@@ -2136,6 +2136,59 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
     }
   });
 
+  // Send follow-up immediately
+app.post("/api/follow-ups/:id/send-now", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get the follow-up
+    const followUp = await storage.getFollowUpById(id);
+    
+    if (!followUp) {
+      return res.status(404).json({ message: "Follow-up not found" });
+    }
+
+    // Get the lead
+    const lead = await storage.getLead(followUp.leadId);
+    
+    if (!lead || !lead.phone) {
+      return res.status(400).json({ message: "Lead not found or has no phone" });
+    }
+
+    // Send the message via WhatsApp
+    await whatsappService.sendTextMessage(lead.phone, followUp.content);
+
+    // Update follow-up status to sent
+    await storage.updateFollowUp(id, {
+      status: "sent",
+      sentAt: new Date(),
+    });
+
+    res.json({ success: true, message: "Follow-up sent successfully" });
+  } catch (error) {
+    console.error("Error sending follow-up now:", error);
+    res.status(500).json({ message: "Failed to send follow-up" });
+  }
+});
+
+// Cancel/skip follow-up
+app.post("/api/follow-ups/:id/cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Update follow-up status to cancelled
+    await storage.updateFollowUp(id, {
+      status: "cancelled",
+      errorMessage: "Manually skipped by user",
+    });
+
+    res.json({ success: true, message: "Follow-up cancelled successfully" });
+  } catch (error) {
+    console.error("Error cancelling follow-up:", error);
+    res.status(500).json({ message: "Failed to cancel follow-up" });
+  }
+});
+
   // ======================= BOOKINGS ROUTES  ==============================================
 
   // Bookings
