@@ -245,27 +245,7 @@ export default function FollowUpsPage() {
     return date.toLocaleDateString();
   }
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-          <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2" />
-          <div className="h-4 w-96 bg-slate-200 rounded animate-pulse" />
-        </header>
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="h-24 bg-slate-200 rounded animate-pulse"
-              />
-            ))}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
+  
   // Filter pending follow-ups based on active filters
   const filteredFollowUps = useMemo(() => {
     let filtered = [...pendingFollowUps];
@@ -330,6 +310,27 @@ export default function FollowUpsPage() {
       searchTerm: "",
     });
   };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2" />
+          <div className="h-4 w-96 bg-slate-200 rounded animate-pulse" />
+        </header>
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="h-24 bg-slate-200 rounded animate-pulse"
+              />
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
