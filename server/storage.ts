@@ -1767,7 +1767,12 @@ export class DatabaseStorage implements IStorage {
         .where(eq(leadActivityLog.leadId, leadId));
       console.log(`  ✅ Deleted lead activity logs.`);
 
-      // 6. Finally, delete the lead
+      // 6. Delete all follow-ups for this lead
+      await db.delete(followUps).where(eq(followUps.leadId, leadId));
+      console.log(`  ✅ Deleted follow-ups.`);
+      
+
+      // 7. Finally, delete the lead
       await db.delete(leads).where(eq(leads.id, leadId));
       console.log(`  ✅ Deleted lead.`);
     } catch (error) {
