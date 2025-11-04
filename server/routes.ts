@@ -165,7 +165,7 @@ app.post("/api/leads", async (req, res) => {
       topFinding: "Construction inquiry received",
       wins: ["Lead captured from landing page"],
       risks: [],
-      score: 50,
+      score: 15,
       timeline: "To be discussed",
       estimatedROI: "TBD"
     };
@@ -191,7 +191,7 @@ app.post("/api/leads", async (req, res) => {
       lastName,
       auditResults: auditResults,
       status: "new",
-      qualificationScore: "0.5",
+      qualificationScore: "0.15",
       temperature: temperature,
     });
 

@@ -1,13 +1,26 @@
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import {
   Clock,
   MessageSquare,
-  TrendingUp,
   Users,
   Play,
   Pause,
@@ -16,6 +29,13 @@ import {
   Calendar,
   Check,
   X,
+  Send,
+  SkipForward,
+  Activity,
+  AlertCircle,
+  Settings,
+  Filter,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -75,6 +95,7 @@ interface FollowUpStats {
 export default function FollowUpsPage() {
   usePageTitle("Follow-ups");
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [clients, setClients] = useState<any[]>([]);
   const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
@@ -84,6 +105,12 @@ export default function FollowUpsPage() {
   const [stats, setStats] = useState<FollowUpStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    stepNumber: "all",
+    timeRange: "all",
+    searchTerm: "",
+  });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   // Fetch clients
   useEffect(() => {
@@ -148,7 +175,6 @@ export default function FollowUpsPage() {
         body: JSON.stringify({ status: newStatus }),
       });
 
-      // Refresh sequences
       setSequences(
         sequences.map((seq) =>
           seq.id === sequenceId ? { ...seq, status: newStatus } : seq
@@ -173,7 +199,21 @@ export default function FollowUpsPage() {
     }
   }
 
-  async function cancelFollowUp(followUpId: string) {
+  async function sendFollowUpNow(followUpId: string) {
+    try {
+      await fetch(`/api/follow-ups/${followUpId}/send`, {
+        method: "POST",
+      });
+
+      setPendingFollowUps(
+        pendingFollowUps.filter((fu) => fu.id !== followUpId)
+      );
+    } catch (error) {
+      console.error("Error sending follow-up:", error);
+    }
+  }
+
+  async function skipFollowUp(followUpId: string) {
     try {
       await fetch(`/api/follow-ups/${followUpId}`, {
         method: "DELETE",
@@ -183,7 +223,7 @@ export default function FollowUpsPage() {
         pendingFollowUps.filter((fu) => fu.id !== followUpId)
       );
     } catch (error) {
-      console.error("Error cancelling follow-up:", error);
+      console.error("Error skipping follow-up:", error);
     }
   }
 
@@ -193,287 +233,744 @@ export default function FollowUpsPage() {
     return `${Math.round(minutes / 1440)} days`;
   }
 
+  function formatScheduledTime(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 0) return "Overdue";
+    if (diffMins < 60) return `in ${diffMins}m`;
+    if (diffMins < 1440) return `in ${Math.floor(diffMins / 60)}h`;
+    return date.toLocaleDateString();
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading follow-ups...</p>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2" />
+          <div className="h-4 w-96 bg-slate-200 rounded animate-pulse" />
+        </header>
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="h-24 bg-slate-200 rounded animate-pulse"
+              />
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
 
+  // Filter pending follow-ups based on active filters
+  const filteredFollowUps = useMemo(() => {
+    let filtered = [...pendingFollowUps];
+
+    // Filter by step number
+    if (filters.stepNumber !== "all") {
+      filtered = filtered.filter(
+        (fu) => fu.stepNumber === parseInt(filters.stepNumber)
+      );
+    }
+
+    // Filter by time range
+    if (filters.timeRange !== "all") {
+      const now = new Date();
+      filtered = filtered.filter((fu) => {
+        const scheduledDate = new Date(fu.scheduledFor);
+        const diffMs = scheduledDate.getTime() - now.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        switch (filters.timeRange) {
+          case "overdue":
+            return diffMs < 0;
+          case "today":
+            return diffHours >= 0 && diffHours <= 24;
+          case "thisWeek":
+            return diffHours >= 0 && diffHours <= 168; // 7 days
+          case "upcoming":
+            return diffHours > 168;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Filter by search term (lead name)
+    if (filters.searchTerm.trim()) {
+      const searchLower = filters.searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (fu) =>
+          fu.leadName.toLowerCase().includes(searchLower) ||
+          fu.leadCompany?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  }, [pendingFollowUps, filters]);
+
+  // Count active filters
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.stepNumber !== "all") count++;
+    if (filters.timeRange !== "all") count++;
+    if (filters.searchTerm.trim()) count++;
+    return count;
+  }, [filters]);
+
+  // Reset all filters
+  const resetFilters = () => {
+    setFilters({
+      stepNumber: "all",
+      timeRange: "all",
+      searchTerm: "",
+    });
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Follow-ups</h1>
-          <p className="text-muted-foreground">
-            Automated message sequences to nurture leads
-          </p>
-        </div>
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+              Follow-ups
+            </h2>
+            <p className="text-sm text-slate-600 mt-1">
+              Automated message sequences to nurture leads
+            </p>
+          </div>
 
-        <div className="flex items-center gap-4">
-          {/* Client Selector */}
-          {clients.length > 1 && (
-            <Select
-              value={selectedClientId}
-              onValueChange={setSelectedClientId}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <Dialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Sequence
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <CreateSequenceForm
-                clientId={selectedClientId}
-                onSuccess={() => {
-                  setIsCreateDialogOpen(false);
-                  // Refresh sequences
-                  window.location.reload();
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">{stats.total}</div>
-              <p className="text-xs text-muted-foreground">Total Follow-ups</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-amber-500">
-                {stats.pending}
-              </div>
-              <p className="text-xs text-muted-foreground">Pending</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-success">
-                {stats.sent}
-              </div>
-              <p className="text-xs text-muted-foreground">Sent</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-destructive">
-                {stats.failed}
-              </div>
-              <p className="text-xs text-muted-foreground">Failed</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-muted-foreground">
-                {stats.cancelled}
-              </div>
-              <p className="text-xs text-muted-foreground">Cancelled</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Sequences */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Sequences</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sequences.length === 0 ? (
-            <div className="text-center py-12">
-              <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No sequences created yet</p>
-              <Button
-                className="mt-4"
-                onClick={() => setIsCreateDialogOpen(true)}
+          <div className="flex items-center gap-3">
+            {/* Client Selector */}
+            {clients.length > 1 && (
+              <Select
+                value={selectedClientId}
+                onValueChange={setSelectedClientId}
               >
-                Create Your First Sequence
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Dialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+            >
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Create Sequence
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <CreateSequenceForm
+                  clientId={selectedClientId}
+                  onSuccess={() => {
+                    setIsCreateDialogOpen(false);
+                    window.location.reload();
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto p-4 sm:p-6">
+        <Breadcrumb className="mb-6">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Follow-ups</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <Card className="border-2 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="text-sm font-medium text-slate-600">
+                  Total Follow-ups
+                </div>
+                <Activity className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-900">
+                  {stats.total}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">All time</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="text-sm font-medium text-slate-600">
+                  Pending
+                </div>
+                <Clock className="h-4 w-4 text-amber-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-amber-600">
+                  {stats.pending}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Scheduled</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="text-sm font-medium text-slate-600">Sent</div>
+                <Send className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-green-600">
+                  {stats.sent}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Delivered</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="text-sm font-medium text-slate-600">Failed</div>
+                <AlertCircle className="h-4 w-4 text-red-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-red-600">
+                  {stats.failed}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Errors</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="text-sm font-medium text-slate-600">
+                  Cancelled
+                </div>
+                <X className="h-4 w-4 text-slate-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-600">
+                  {stats.cancelled}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Skipped</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Active Sequences */}
+        <Card className="border-2 mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Active Sequences</CardTitle>
+                <p className="text-xs text-slate-500 mt-1">
+                  Manage your automated follow-up workflows
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Sequence
               </Button>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {sequences.map((sequence) => (
-                <Card key={sequence.id} className="border-2">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-lg font-semibold">
-                            {sequence.name}
-                          </h3>
-                          {sequence.isDefault && (
-                            <Badge variant="outline">Default</Badge>
-                          )}
-                          <Badge
-                            variant={
-                              sequence.status === "active"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {sequence.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {sequence.description}
-                        </p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <MessageSquare className="w-4 h-4" />
-                            {sequence.steps.length} steps
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {sequence.channel}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            toggleSequenceStatus(sequence.id, sequence.status)
-                          }
-                        >
-                          {sequence.status === "active" ? (
-                            <>
-                              <Pause className="w-4 h-4 mr-1" />
-                              Pause
-                            </>
-                          ) : (
-                            <>
-                              <Play className="w-4 h-4 mr-1" />
-                              Activate
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => deleteSequence(sequence.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Steps Preview */}
-                    <div className="space-y-2 pl-4 border-l-2 border-muted">
-                      {sequence.steps.map((step) => (
-                        <div key={step.id} className="text-sm">
-                          <div className="font-medium text-muted-foreground mb-1">
-                            Step {step.stepNumber} • After{" "}
-                            {formatDelay(step.delayMinutes)}
-                          </div>
-                          <div className="text-xs text-muted-foreground line-clamp-2">
-                            {step.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pending Follow-ups */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Pending Follow-ups
-            {pendingFollowUps.length > 0 && (
-              <Badge variant="secondary">{pendingFollowUps.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            {sequences.length === 0 ? (
+              <div className="text-center py-12">
+                <MessageSquare className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+                <p className="text-slate-600 mb-4">No sequences created yet</p>
+                <Button
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Your First Sequence
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sequences.map((sequence) => (
+                  <SequenceCard
+                    key={sequence.id}
+                    sequence={sequence}
+                    onToggleStatus={toggleSequenceStatus}
+                    onDelete={deleteSequence}
+                    formatDelay={formatDelay}
+                  />
+                ))}
+              </div>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {pendingFollowUps.length === 0 ? (
-            <div className="text-center py-8">
-              <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No pending follow-ups</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingFollowUps.map((followUp) => (
-                <Card key={followUp.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium mb-1">
-                          {followUp.leadName}
-                          {followUp.leadCompany && (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              • {followUp.leadCompany}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                          {followUp.content}
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(followUp.scheduledFor).toLocaleString()}
-                          </span>
-                          <span>Step {followUp.stepNumber}</span>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => cancelFollowUp(followUp.id)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pending Follow-ups */}
+<Card className="border-2">
+  <CardHeader>
+    <div className="flex items-center justify-between">
+      <div>
+        <CardTitle className="text-base flex items-center gap-2">
+          Pending Follow-ups
+          {stats && stats.pending > 0 && (
+            <Badge variant="secondary">{stats.pending}</Badge>
           )}
-        </CardContent>
-      </Card>
+        </CardTitle>
+        <p className="text-xs text-slate-500 mt-1">
+          Review and manage scheduled messages
+        </p>
+      </div>
+      <div className="flex gap-2">
+        {/* Filter Popover */}
+        <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2 relative">
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFiltersCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                >
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80" align="end">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm">Filter Follow-ups</h4>
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetFilters}
+                    className="h-auto py-1 px-2 text-xs"
+                  >
+                    Reset All
+                  </Button>
+                )}
+              </div>
+
+              {/* Search by Lead Name */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Search Lead</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    placeholder="Search by name or company..."
+                    value={filters.searchTerm}
+                    onChange={(e) =>
+                      setFilters({ ...filters, searchTerm: e.target.value })
+                    }
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {/* Filter by Step */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Step Number</Label>
+                <Select
+                  value={filters.stepNumber}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, stepNumber: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Steps</SelectItem>
+                    <SelectItem value="1">Step 1 (30 min)</SelectItem>
+                    <SelectItem value="2">Step 2 (6 hours)</SelectItem>
+                    <SelectItem value="3">Step 3 (24 hours)</SelectItem>
+                    <SelectItem value="4">Step 4 (48 hours)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filter by Time Range */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Time Range</Label>
+                <Select
+                  value={filters.timeRange}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, timeRange: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="today">Today (Next 24h)</SelectItem>
+                    <SelectItem value="thisWeek">This Week</SelectItem>
+                    <SelectItem value="upcoming">Upcoming (7+ days)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Active Filters Summary */}
+              {activeFiltersCount > 0 && (
+                <div className="pt-3 border-t">
+                  <p className="text-xs text-slate-600 mb-2">Active filters:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {filters.stepNumber !== "all" && (
+                      <Badge variant="secondary" className="text-xs">
+                        Step {filters.stepNumber}
+                        <button
+                          onClick={() =>
+                            setFilters({ ...filters, stepNumber: "all" })
+                          }
+                          className="ml-1 hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    )}
+                    {filters.timeRange !== "all" && (
+                      <Badge variant="secondary" className="text-xs capitalize">
+                        {filters.timeRange.replace(/([A-Z])/g, " $1")}
+                        <button
+                          onClick={() =>
+                            setFilters({ ...filters, timeRange: "all" })
+                          }
+                          className="ml-1 hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    )}
+                    {filters.searchTerm.trim() && (
+                      <Badge variant="secondary" className="text-xs">
+                        "{filters.searchTerm}"
+                        <button
+                          onClick={() =>
+                            setFilters({ ...filters, searchTerm: "" })
+                          }
+                          className="ml-1 hover:text-destructive"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Sort Button (Optional - can add later) */}
+        <Button variant="outline" size="sm" className="gap-2">
+          <Clock className="w-4 h-4" />
+          Sort
+        </Button>
+      </div>
+    </div>
+  </CardHeader>
+  <CardContent>
+    {/* Show filter results count */}
+    {activeFiltersCount > 0 && (
+      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-sm text-blue-900">
+          Showing <strong>{filteredFollowUps.length}</strong> of{" "}
+          <strong>{pendingFollowUps.length}</strong> follow-ups
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={resetFilters}
+              className="ml-2 text-blue-600 hover:underline font-medium"
+            >
+              Clear filters
+            </button>
+          )}
+        </p>
+      </div>
+    )}
+
+    {filteredFollowUps.length === 0 ? (
+      <div className="text-center py-12">
+        <Clock className="w-12 h-12 mx-auto text-slate-400 mb-4" />
+        {activeFiltersCount > 0 ? (
+          <>
+            <p className="text-slate-600 mb-2">No follow-ups match your filters</p>
+            <p className="text-sm text-slate-500 mb-4">
+              Try adjusting or clearing your filters
+            </p>
+            <Button variant="outline" onClick={resetFilters}>
+              Clear All Filters
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-slate-600">No pending follow-ups</p>
+            <p className="text-sm text-slate-500 mt-2">
+              All scheduled messages have been sent or cancelled
+            </p>
+          </>
+        )}
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {filteredFollowUps.map((followUp) => (
+          <div
+            key={followUp.id}
+            className="flex items-start gap-4 p-4 border-2 rounded-lg bg-white hover:border-primary/50 transition-all"
+          >
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <span className="text-sm font-bold text-blue-600">
+                {followUp.leadName.substring(0, 2).toUpperCase()}
+              </span>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-semibold text-slate-900">
+                  {followUp.leadName}
+                </h4>
+                {followUp.leadCompany && (
+                  <span className="text-sm text-slate-500">
+                    • {followUp.leadCompany}
+                  </span>
+                )}
+                <Badge variant="outline" className="text-xs ml-auto">
+                  Step {followUp.stepNumber}
+                </Badge>
+              </div>
+              <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+                {followUp.content}
+              </p>
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {new Date(followUp.scheduledFor).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {formatScheduledTime(followUp.scheduledFor)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => sendFollowUpNow(followUp.id)}
+                className="gap-1"
+              >
+                <Send className="w-4 h-4" />
+                Send Now
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => skipFollowUp(followUp.id)}
+                className="gap-1"
+              >
+                <SkipForward className="w-4 h-4" />
+                Skip
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </CardContent>
+</Card>
+      </main>
     </div>
   );
 }
 
-// Create Sequence Form Component
+function SequenceCard({
+  sequence,
+  onToggleStatus,
+  onDelete,
+  formatDelay,
+}: {
+  sequence: FollowUpSequence;
+  onToggleStatus: (id: string, status: string) => void;
+  onDelete: (id: string) => void;
+  formatDelay: (minutes: number) => string;
+}) {
+  const [showSteps, setShowSteps] = useState(false);
+
+  return (
+    <div className="border-2 rounded-lg bg-white overflow-hidden hover:border-primary/50 transition-all">
+      {/* Main Sequence Info */}
+      <div className="flex items-center justify-between p-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="font-semibold text-slate-900">{sequence.name}</h3>
+            {sequence.isDefault && (
+              <Badge variant="outline" className="text-xs">
+                Default
+              </Badge>
+            )}
+            <Badge
+              variant={sequence.status === "active" ? "default" : "secondary"}
+              className="text-xs"
+            >
+              {sequence.status}
+            </Badge>
+          </div>
+          <p className="text-sm text-slate-600 mb-2">{sequence.description}</p>
+          <div className="flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" />
+              {sequence.steps.length} steps
+            </span>
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {sequence.channel}
+            </span>
+            <button
+              onClick={() => setShowSteps(!showSteps)}
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              {showSteps ? (
+                <>
+                  <X className="w-3 h-3" />
+                  Hide Steps
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3 h-3" />
+                  View All Steps
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onToggleStatus(sequence.id, sequence.status)}
+          >
+            {sequence.status === "active" ? (
+              <>
+                <Pause className="w-4 h-4 mr-1" />
+                Pause
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-1" />
+                Activate
+              </>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDelete(sequence.id)}
+          >
+            <Trash2 className="w-4 h-4 text-red-600" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Expandable Steps Section */}
+      {showSteps && (
+        <div className="border-t bg-slate-50 p-4">
+          <h4 className="text-sm font-semibold text-slate-700 mb-3">
+            Sequence Steps
+          </h4>
+          <div className="space-y-3">
+            {sequence.steps.map((step, index) => (
+              <div
+                key={step.id}
+                className="flex items-start gap-3 p-3 bg-white rounded-lg border"
+              >
+                {/* Step Number */}
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-bold text-primary">
+                    {step.stepNumber}
+                  </span>
+                </div>
+
+                {/* Step Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium text-slate-900">
+                      Step {step.stepNumber}
+                    </span>
+                    <span className="text-xs text-slate-500">•</span>
+                    <span className="text-xs text-slate-500">
+                      After {formatDelay(step.delayMinutes)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {step.content}
+                  </p>
+                </div>
+
+                {/* Arrow Indicator */}
+                {index < sequence.steps.length - 1 && (
+                  <div className="flex-shrink-0 text-slate-400">
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Create Sequence Form Component (unchanged)
 function CreateSequenceForm({
   clientId,
   onSuccess,
@@ -485,7 +982,6 @@ function CreateSequenceForm({
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("no_response");
 
-  // ✅ FIX: Explicitly type the steps array
   type StepInput = { delayMinutes: number; content: string };
   const [steps, setSteps] = useState<StepInput[]>([
     { delayMinutes: 30, content: "" },
