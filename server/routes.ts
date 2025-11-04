@@ -170,6 +170,20 @@ app.post("/api/leads", async (req, res) => {
       estimatedROI: "TBD"
     };
 
+    // Calculate temperature based on qualification score
+    const qualificationScore = 0.5;
+    let temperature: "hot" | "warm" | "cold";
+
+    if (qualificationScore >= 0.7){
+      temperature = "hot";
+    } else if (qualificationScore >= 0.4){
+      temperature = "warm";
+    } else {
+      temperature = "cold";
+    }
+
+    console.log(`🌡️ Lead temperature calculated: ${temperature} (score: ${qualificationScore})`);
+
     // ✅ FIXED: Create lead with simplified audit results
     const lead = await storage.createLead({
       ...leadData,
@@ -178,6 +192,7 @@ app.post("/api/leads", async (req, res) => {
       auditResults: auditResults,
       status: "new",
       qualificationScore: "0.5",
+      temperature: temperature,
     });
 
     // ✅ NEW: Send simple intro message instead of fake audit
@@ -228,6 +243,16 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
         });
 
         console.log("✅ Intro message sent and recorded for lead:", lead.id);
+
+        // Track response time for AI intro message
+        const leadCreatedAt = lead.createdAt ? new Date(lead.createdAt).getTime() : Date.now();
+        const responseTime = Math.floor((Date.now() - leadCreatedAt) / 1000);
+
+        await storage.updateLead(lead.id, {
+          responseTimeSeconds: responseTime,
+        });
+
+        console.log(`⏱️ AI Response time tracked: ${responseTime}s (${(responseTime / 60).toFixed(1)} min)`);
       } else {
         console.warn("⚠️ Could not create/find conversation for lead:", lead.id);
       }

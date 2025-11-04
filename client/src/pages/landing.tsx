@@ -540,6 +540,7 @@ function LeadCaptureSection() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -555,12 +556,12 @@ function LeadCaptureSection() {
           email,
           phone,
           firstName,
-          lastName: "",
+          lastName: lastName || "",
           source: "landing_page",
           auditType: "construction",
           consentGiven: true,
           auditInputs: {
-            contactName: firstName,
+            contactName: `${firstName} ${lastName}`.trim(),
             phone: phone,
           },
         }),
@@ -612,13 +613,22 @@ function LeadCaptureSection() {
         <div className="bg-white rounded-lg p-8 shadow-2xl">
           {step === 1 && (
             <div className="space-y-4">
-              <Input
-                type="text"
-                placeholder="Your first name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="text-lg py-6"
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  type="text"
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="text-lg py-6"
+                />
+                <Input
+                  type="text"
+                  placeholder="Last name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="text-lg py-6"
+                />
+              </div>
               <Input
                 type="email"
                 placeholder="Your email"
