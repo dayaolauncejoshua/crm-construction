@@ -1027,6 +1027,7 @@ export default function Conversations() {
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Vancouver",
     });
   };
 
@@ -2670,6 +2671,7 @@ export default function Conversations() {
                                           month: "short",
                                           day: "numeric",
                                           year: "numeric",
+                                          timeZone: "America/Vancouver",
                                         })}
                                       </p>
                                       {isExpired && (
@@ -2695,6 +2697,7 @@ export default function Conversations() {
                                           hour: "numeric",
                                           minute: "2-digit",
                                           hour12: true,
+                                          timeZone: "America/Vancouver",
                                         })}{" "}
                                         • {booking.duration} min
                                       </p>
@@ -3536,6 +3539,7 @@ export default function Conversations() {
                           day: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
+                          timeZone: "America/Vancouver",
                         })}{" "}
                         ({conflictError.conflictingBooking?.duration} min)
                       </p>
@@ -3633,11 +3637,13 @@ export default function Conversations() {
                                 {start.toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: "America/Vancouver",
                                 })}{" "}
                                 -{" "}
                                 {end.toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: "America/Vancouver",
                                 })}
                               </span>
                               <span className="text-blue-600 text-xs truncate">
@@ -3708,6 +3714,7 @@ export default function Conversations() {
                       return end.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver",
                       });
                     })()}
                   </strong>

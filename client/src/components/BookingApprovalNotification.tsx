@@ -86,6 +86,7 @@ export function BookingApprovalNotification({ booking }: { booking: any }) {
                   weekday: "long",
                   month: "long",
                   day: "numeric",
+                  timeZone: "America/Vancouver",
                 })}
               </span>
             </div>
@@ -95,6 +96,7 @@ export function BookingApprovalNotification({ booking }: { booking: any }) {
                 {new Date(booking.scheduledFor).toLocaleTimeString("en-US", {
                   hour: "2-digit",
                   minute: "2-digit",
+                  timeZone: "America/Vancouver",
                 })} ({booking.duration} min)
               </span>
             </div>

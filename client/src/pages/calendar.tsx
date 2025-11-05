@@ -497,6 +497,7 @@ export default function CalendarPage() {
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
+          timeZone: "America/Vancouver",
         })
       );
       setRescheduleDuration(selectedBooking.duration.toString());
@@ -970,6 +971,7 @@ export default function CalendarPage() {
                                 ).toLocaleTimeString("en-US", {
                                   hour: "numeric",
                                   minute: "2-digit",
+                                  timeZone: "America/Vancouver"
                                 })}{" "}
                                 {booking.attendeeName}
                               </div>
@@ -1066,6 +1068,7 @@ export default function CalendarPage() {
                               ).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
+                                timeZone: "America/Vancouver"
                               })}
                             </div>
                             <div className="flex items-center">
@@ -1075,6 +1078,7 @@ export default function CalendarPage() {
                               ).toLocaleTimeString("en-US", {
                                 hour: "2-digit",
                                 minute: "2-digit",
+                                timeZone: "America/Vancouver"
                               })}
                             </div>
                             <div className="flex items-center">
@@ -1122,6 +1126,7 @@ export default function CalendarPage() {
                         month: "long",
                         day: "numeric",
                         year: "numeric",
+                        timeZone: "America/Vancouver"
                       }
                     )}
                   </span>
@@ -1134,6 +1139,7 @@ export default function CalendarPage() {
                       {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       }
                     )}{" "}
                     ({selectedBooking.duration} minutes)
@@ -1525,6 +1531,7 @@ export default function CalendarPage() {
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
+                    timeZone: "America/Vancouver"
                   }
                 )}
               </p>
@@ -1589,6 +1596,7 @@ export default function CalendarPage() {
                       return end.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       });
                     })()}
                   </strong>
@@ -1682,6 +1690,7 @@ export default function CalendarPage() {
                         weekday: "long",
                         month: "long",
                         day: "numeric",
+                        timeZone: "America/Vancouver"
                       }
                     )}{" "}
                     at{" "}
@@ -1690,6 +1699,7 @@ export default function CalendarPage() {
                       {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       }
                     )}
                   </p>

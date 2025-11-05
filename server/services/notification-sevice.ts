@@ -387,6 +387,7 @@ LeadFlow CRM
         year: "numeric",
         month: "long",
         day: "numeric",
+        timeZone: "America/Vancouver",
       }
     );
     const scheduledTime = new Date(booking.scheduledFor).toLocaleTimeString(
@@ -395,6 +396,7 @@ LeadFlow CRM
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
+        timeZone: "America/Vancouver",
       }
     );
 
@@ -494,6 +496,7 @@ LeadFlow CRM
         year: "numeric",
         month: "long",
         day: "numeric",
+        timeZone: "America/Vancouver",
       }
     );
     const scheduledTime = new Date(booking.scheduledFor).toLocaleTimeString(
@@ -502,6 +505,7 @@ LeadFlow CRM
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
+        timeZone: "America/Vancouver",
       }
     );
 
@@ -572,6 +576,7 @@ View in CRM: ${
         weekday: "short",
         month: "short",
         day: "numeric",
+        timeZone: "America/Vancouver",
       }
     );
     const scheduledTime = new Date(booking.scheduledFor).toLocaleTimeString(
@@ -580,6 +585,7 @@ View in CRM: ${
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
+        timeZone: "America/Vancouver",
       }
     );
 
