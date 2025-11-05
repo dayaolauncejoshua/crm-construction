@@ -125,16 +125,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // WebSocket server for real-time updates
-  wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws",
+    // ✅ Add stability options
+    clientTracking: true,
+    perMessageDeflate: false,
+  });
+
   leadQualificationService.setWebSocketServer(wss);
 
+  // ✅ Connection tracking
+  let connectionCount = 0;
+
   wss.on("connection", (ws: WebSocket) => {
-    console.log("Client connected to WebSocket");
+    connectionCount++;
+    const clientId = connectionCount;
+    console.log(
+      `✅ WebSocket client connected #${clientId} (Total: ${wss.clients.size})`
+    );
+
+    // ✅ Send immediate connection confirmation
+    ws.send(
+      JSON.stringify({
+        type: "connection_established",
+        clientId,
+        timestamp: new Date().toISOString(),
+      })
+    );
+
+    // ✅ Heartbeat/ping-pong to keep connection alive
+    let isAlive = true;
+
+    ws.on("pong", () => {
+      isAlive = true;
+    });
+
+    const pingInterval = setInterval(() => {
+      if (!isAlive) {
+        console.log(
+          `💔 Client #${clientId} didn't respond to ping, terminating`
+        );
+        return ws.terminate();
+      }
+
+      isAlive = false;
+      ws.ping();
+    }, 30000); // Ping every 30 seconds
+
+    ws.on("message", (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        console.log(`📨 Received from client #${clientId}:`, data);
+
+        // Handle client messages if needed (e.g., authentication)
+      } catch (error) {
+        console.error(
+          `❌ Error parsing message from client #${clientId}:`,
+          error
+        );
+      }
+    });
 
     ws.on("close", () => {
-      console.log("Client disconnected from WebSocket");
+      clearInterval(pingInterval);
+      console.log(
+        `🔌 WebSocket client disconnected #${clientId} (Remaining: ${wss.clients.size})`
+      );
+    });
+
+    ws.on("error", (error) => {
+      console.error(`❌ WebSocket error for client #${clientId}:`, error);
+      clearInterval(pingInterval);
     });
   });
+
+  console.log("✅ WebSocket server initialized on path: /ws");
 
   // ========================= LEADS ROUTE ======================================
 
@@ -244,18 +310,32 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
           await storage.createMessage({
             conversationId: conversation.id,
             content: introMessage,
-            sender: "ai", 
+            sender: "ai",
             channel: "whatsapp",
             sentAt: new Date(),
             deliveredAt: new Date(),
-            isStatusMessage: true, 
+            isStatusMessage: true,
           });
 
           console.log("✅ Intro message sent and recorded for lead:", lead.id);
 
-          console.log(`ℹ️ Automated intro sent - response time will be tracked on first actual reply`);
+          // ✅ NEW: Broadcast new conversation to all connected clients
+          broadcastUpdate({
+            type: "new_conversation",
+            conversation: {
+              ...conversation,
+              lead: lead,
+            },
+            leadId: lead.id,
+          });
+
+          console.log("✅ Intro message sent and recorded for lead:", lead.id);
+
+          console.log(
+            `ℹ️ Automated intro sent - response time will be tracked on first actual reply`
+          );
+        }
       }
-    }
 
       // Schedule follow-ups after intro message sent
       try {

@@ -26,6 +26,9 @@ import passport from "./config/passport";
 // import callsRouter from "./routes/calls.route";
 // import twilioRouter from "./routes/twilio.route";
 
+import { WebSocketServer } from "ws";
+import { leadQualificationService } from "./services/leadQualification";
+
 const { Pool } = pg;
 config();
 config({ override: false });
@@ -177,6 +180,74 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // ✅ SETUP WEBSOCKET SERVER
+  const wss = new WebSocketServer({ 
+    server,
+    path: "/ws",
+    // ✅ Add these options for better stability
+    clientTracking: true,
+    perMessageDeflate: false,
+  });
+
+  // ✅ Connection tracking
+  let connectionCount = 0;
+
+  wss.on("connection", (ws, req) => {
+    connectionCount++;
+    const clientId = connectionCount;
+    console.log(`✅ WebSocket client connected #${clientId} (Total: ${wss.clients.size})`);
+
+    // ✅ Send immediate connection confirmation
+    ws.send(JSON.stringify({ 
+      type: "connection_established", 
+      clientId,
+      timestamp: new Date().toISOString()
+    }));
+
+    // ✅ Heartbeat/ping-pong to keep connection alive
+    let isAlive = true;
+
+    ws.on("pong", () => {
+      isAlive = true;
+    });
+
+    const pingInterval = setInterval(() => {
+      if (!isAlive) {
+        console.log(`💔 Client #${clientId} didn't respond to ping, terminating`);
+        return ws.terminate();
+      }
+
+      isAlive = false;
+      ws.ping();
+    }, 30000); // Ping every 30 seconds
+
+    ws.on("message", (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        console.log(`📨 Received from client #${clientId}:`, data);
+        
+        // Handle client messages if needed (e.g., authentication)
+      } catch (error) {
+        console.error(`❌ Error parsing message from client #${clientId}:`, error);
+      }
+    });
+
+    ws.on("close", () => {
+      clearInterval(pingInterval);
+      console.log(`🔌 WebSocket client disconnected #${clientId} (Remaining: ${wss.clients.size})`);
+    });
+
+    ws.on("error", (error) => {
+      console.error(`❌ WebSocket error for client #${clientId}:`, error);
+      clearInterval(pingInterval);
+    });
+  });
+
+  // ✅ Inject WebSocket server into lead qualification service
+  leadQualificationService.setWebSocketServer(wss);
+
+  console.log("✅ WebSocket server initialized on path: /ws");
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -203,5 +274,19 @@ app.use((req, res, next) => {
     log(`📱 Environment: ${app.get("env")}`);
     log(`🔐 Session store: PostgreSQL`);
     log(`🧠 AI Pattern Learning: Active`);
+    log(`🔌 WebSocket server: Active on /ws`);
+    log(`👥 WebSocket clients: ${wss.clients.size}`);
+  });
+
+  // ✅ Graceful shutdown
+  process.on("SIGTERM", () => {
+    console.log("⚠️ SIGTERM signal received: closing HTTP server");
+    wss.clients.forEach((client) => {
+      client.close();
+    });
+    server.close(() => {
+      console.log("✅ HTTP server closed");
+      process.exit(0);
+    });
   });
 })();
