@@ -1,8 +1,9 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 
-import { webHookController } from "server/controllers/twilio-call.controller";
+import { twilioCallController } from "../controllers/twilio-call.controller";
+
 const router = Router();
 
-router.post("/", webHookController);
+router.post("/", twilioCallController);
 
 export default router;

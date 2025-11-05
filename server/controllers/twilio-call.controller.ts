@@ -11,7 +11,10 @@ interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
 
-export const webHookController = async (req: RawBodyRequest, res: Response) => {
+export const twilioCallController = async (
+  req: RawBodyRequest,
+  res: Response
+) => {
   try {
     if (!WEBHOOK_SECRET) {
       console.error("OPENAI_WEBHOOK_SIGNING_SECRET is not defined");
@@ -23,8 +26,12 @@ export const webHookController = async (req: RawBodyRequest, res: Response) => {
     const signature =
       req.headers["openai-signature"] || req.headers["x-openai-signature"];
 
-    const event = await // Verify and unwrap t  t
-    (rawBody.toString(), req.headers as Record<string, string>, WEBHOOK_SECRET);
+    // Verify and unwrap the webhook event
+    const event = await client.webhooks.unwrap(
+      rawBody.toString(),
+      req.headers as Record<string, string>,
+      WEBHOOK_SECRET
+    );
 
     console.log("Received webhook event:", event.type);
 
