@@ -1,3 +1,5 @@
+// client/src/components/BookingApprovalNotification.tsx
+
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";

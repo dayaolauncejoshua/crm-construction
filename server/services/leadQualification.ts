@@ -8,6 +8,7 @@ import { spamPatternLearning } from "./spamPatternLearning";
 import { detectBookingIntent, extractLeadDetails } from "./openai";
 import type { InsertBooking } from "../../shared/schema";
 import { notificationService } from "./notification-sevice";
+import { time } from "console";
 // ✅ Constants
 const BOOKING_CONFIDENCE_THRESHOLD = 0.8;
 const BOOKING_INTEREST_THRESHOLD = 0.5;
@@ -56,18 +57,39 @@ function normalizeTimeString(timeStr: string): string {
   return `${hours}:${minutes} ${period}`;
 }
 
-// ✅ Smart date parser
+// ✅ Robust date parser with better time handling
 function parseDateFromNaturalLanguage(
   dateStr: string,
-  timeStr?: string
+  timeStr: string
 ): Date | null {
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // Normalize time
+  // Normalize time with validation
   const normalizedTime = timeStr ? normalizeTimeString(timeStr) : "10:00 AM";
 
-  // Handle day names (Monday, Tuesday, etc.)
+  console.log(`📅 Parsing date: "${dateStr}" with time: "${normalizedTime}"`);
+
+  // ✅ Parse time components FIRST
+  const timeMatch = normalizedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!timeMatch) {
+    console.error(`❌ Invalid time format: "${normalizedTime}"`);
+    return null;
+  }
+
+  let hours = parseInt(timeMatch[1]);
+  const minutes = parseInt(timeMatch[2]);
+  const period = timeMatch[3].toUpperCase();
+
+  // Convert to 24-hour format
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  console.log(
+    `⏰ Parsed time: ${hours}:${String(minutes).padStart(2, "0")} (24h format)`
+  );
+
+  // Handle day names (Monday, Tuesday, etc)
   const dayNames = [
     "sunday",
     "monday",
@@ -80,47 +102,98 @@ function parseDateFromNaturalLanguage(
   const lowerDate = dateStr.toLowerCase().trim();
 
   if (dayNames.includes(lowerDate)) {
-    // Find next occurrence of this day
     const targetDay = dayNames.indexOf(lowerDate);
     const currentDay = now.getDay();
     let daysUntil = targetDay - currentDay;
 
     if (daysUntil <= 0) {
-      daysUntil += 7; // Next week
+      daysUntil += 7;
     }
 
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysUntil);
+    targetDate.setHours(hours, minutes, 0, 0);
 
-    // Parse time
-    const timeMatch = normalizedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (timeMatch) {
-      let hours = parseInt(timeMatch[1]);
-      const minutes = parseInt(timeMatch[2]);
-      const period = timeMatch[3].toUpperCase();
-
-      if (period === "PM" && hours !== 12) hours += 12;
-      if (period === "AM" && hours === 12) hours = 0;
-
-      targetDate.setHours(hours, minutes, 0, 0);
-    }
-
+    console.log(`✅ Day name parsed: ${targetDate.toISOString()}`);
     return targetDate;
   }
 
-  // Handle full date strings (e.g., "November 15", "Nov 15", "15 November")
-  let parsed = new Date(`${dateStr}, ${currentYear} ${normalizedTime}`);
-  if (!isNaN(parsed.getTime())) {
-    return parsed;
+  // Handle full date strings with explicit month parsing
+  const monthNames = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ];
+
+  const monthAbbr = [
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+  ];
+
+  // Try to extract month and day
+  let month = -1;
+  let day = -1;
+
+  // Pattern: "Novermber 9" or "Nov 9" or "9 November"
+  const datePattern = /(\w+)\s+(\d{1,2})|(\d{1,2})\s+(\w+)/i;
+  const match = dateStr.match(datePattern);
+
+  if (match) {
+    const monthStr = (match[1] || match[4]).toLowerCase();
+    day = parseInt(match[2] || match[3]);
+
+    // Find month index
+    month = monthNames.indexOf(monthStr);
+    if (month === -1) {
+      month = monthAbbr.indexOf(monthStr);
+    }
+
+    if (month !== -1 && day > 0 && day <= 31) {
+      // Construct date explicitly (no string parsing)
+      const targetDate = new Date(
+        currentYear,
+        month,
+        day,
+        hours,
+        minutes,
+        0,
+        0
+      );
+
+      console.log(`✅ Explicit date created: ${targetDate.toISOString()}`);
+      console.log(
+        `   Year: ${currentYear}, Month: ${month}, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`
+      );
+
+      // Validate it's not in the past
+      if (targetDate < now) {
+        console.warn(`⚠️ Date is in the past, trying next year...`);
+        targetDate.setFullYear(currentYear + 1);
+      }
+
+      return targetDate;
+    }
   }
 
-  // Try without comma
-  parsed = new Date(`${dateStr} ${currentYear} ${normalizedTime}`);
-  if (!isNaN(parsed.getTime())) {
-    return parsed;
-  }
-
-  console.error(`❌ Could not parse date: "${dateStr}"`);
   return null;
 }
 
@@ -314,20 +387,27 @@ export class LeadQualificationService {
         }
 
         const leadMessageTime = new Date(sentAt);
-      const responseTime = new Date();
-      const responseTimeSeconds = Math.round(
-        (responseTime.getTime() - leadMessageTime.getTime()) / 1000
-      );
+        const responseTime = new Date();
+        const responseTimeSeconds = Math.round(
+          (responseTime.getTime() - leadMessageTime.getTime()) / 1000
+        );
 
-      // ✅ Validate response time (should be positive and reasonable)
-      if (responseTimeSeconds < 0) {
-        console.warn(`⚠️ Negative response time detected: ${responseTimeSeconds}s - skipping`);
-        return;
-      }
+        // ✅ Validate response time (should be positive and reasonable)
+        if (responseTimeSeconds < 0) {
+          console.warn(
+            `⚠️ Negative response time detected: ${responseTimeSeconds}s - skipping`
+          );
+          return;
+        }
 
-      if (responseTimeSeconds > 86400) { // More than 24 hours
-        console.warn(`⚠️ Unusually long response time: ${responseTimeSeconds}s (${(responseTimeSeconds / 3600).toFixed(1)} hours)`);
-      }
+        if (responseTimeSeconds > 86400) {
+          // More than 24 hours
+          console.warn(
+            `⚠️ Unusually long response time: ${responseTimeSeconds}s (${(
+              responseTimeSeconds / 3600
+            ).toFixed(1)} hours)`
+          );
+        }
 
         console.log(
           `⏱️ ${sender.toUpperCase()} Response time: ${responseTimeSeconds}s (${(
@@ -1088,10 +1168,11 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
           let scheduledFor: Date | null = null;
 
           if (bookingIntent.proposedDateTime?.date) {
-            scheduledFor = parseDateFromNaturalLanguage(
-              bookingIntent.proposedDateTime.date,
-              bookingIntent.proposedDateTime.time
-            );
+            // ✅ FIX: Provide defaults for undefined values
+            const dateStr = bookingIntent.proposedDateTime.date;
+            const timeStr = bookingIntent.proposedDateTime.time || "10:00 AM";
+
+            scheduledFor = parseDateFromNaturalLanguage(dateStr, timeStr);
 
             if (!scheduledFor) {
               console.error("❌ Failed to parse date");
