@@ -138,66 +138,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========================= LEADS ROUTE ======================================
 
-// Landing page lead capture
-app.post("/api/leads", async (req, res) => {
-  try {
-    const leadData = insertLeadSchema.parse(req.body);
+  // Landing page lead capture
+  app.post("/api/leads", async (req, res) => {
+    try {
+      const leadData = insertLeadSchema.parse(req.body);
 
-    // ✅ SIMPLIFIED: No fake audit, just basic tracking
-    const auditInputs = req.body.auditInputs || {};
-    const auditType = req.body.auditType || "construction";
+      // ✅ SIMPLIFIED: No fake audit, just basic tracking
+      const auditInputs = req.body.auditInputs || {};
+      const auditType = req.body.auditType || "construction";
 
-    const firstName =
-      req.body.firstName ||
-      auditInputs.contactName?.split(" ")[0] ||
-      "Unknown";
-    const lastName =
-      req.body.lastName ||
-      auditInputs.contactName?.split(" ").slice(1).join(" ") ||
-      "";
+      const firstName =
+        req.body.firstName ||
+        auditInputs.contactName?.split(" ")[0] ||
+        "Unknown";
+      const lastName =
+        req.body.lastName ||
+        auditInputs.contactName?.split(" ").slice(1).join(" ") ||
+        "";
 
-    // ✅ FIXED: Simple audit results with all needed fields
-    const auditResults = {
-      type: auditType,
-      source: "landing_page",
-      projectType: auditInputs.projectType || "Unknown",
-      timestamp: new Date().toISOString(),
-      topFinding: "Construction inquiry received",
-      wins: ["Lead captured from landing page"],
-      risks: [],
-      score: 15,
-      timeline: "To be discussed",
-      estimatedROI: "TBD"
-    };
+      // ✅ FIXED: Simple audit results with all needed fields
+      const auditResults = {
+        type: auditType,
+        source: "landing_page",
+        projectType: auditInputs.projectType || "Unknown",
+        timestamp: new Date().toISOString(),
+        topFinding: "Construction inquiry received",
+        wins: ["Lead captured from landing page"],
+        risks: [],
+        score: 15,
+        timeline: "To be discussed",
+        estimatedROI: "TBD",
+      };
 
-    // Calculate temperature based on qualification score
-    const qualificationScore = 0.15;
-    let temperature: "hot" | "warm" | "cold";
+      // Calculate temperature based on qualification score
+      const qualificationScore = 0.15;
+      let temperature: "hot" | "warm" | "cold";
 
-    if (qualificationScore >= 0.7){
-      temperature = "hot";
-    } else if (qualificationScore >= 0.4){
-      temperature = "warm";
-    } else {
-      temperature = "cold";
-    }
+      if (qualificationScore >= 0.7) {
+        temperature = "hot";
+      } else if (qualificationScore >= 0.4) {
+        temperature = "warm";
+      } else {
+        temperature = "cold";
+      }
 
-    console.log(`🌡️ Lead temperature calculated: ${temperature} (score: ${qualificationScore})`);
+      console.log(
+        `🌡️ Lead temperature calculated: ${temperature} (score: ${qualificationScore})`
+      );
 
-    // ✅ FIXED: Create lead with simplified audit results
-    const lead = await storage.createLead({
-      ...leadData,
-      firstName,
-      lastName,
-      auditResults: auditResults,
-      status: "new",
-      qualificationScore: "0.15",
-      temperature: temperature,
-    });
+      // ✅ FIXED: Create lead with simplified audit results
+      const lead = await storage.createLead({
+        ...leadData,
+        firstName,
+        lastName,
+        auditResults: auditResults,
+        status: "new",
+        qualificationScore: "0.15",
+        temperature: temperature,
+      });
 
-    // ✅ NEW: Send simple intro message instead of fake audit
-    if (lead.phone) {
-      const introMessage = `Hi ${firstName}! 👋
+      // ✅ NEW: Send simple intro message instead of fake audit
+      if (lead.phone) {
+        const introMessage = `Hi ${firstName}! 👋
 
 Thanks for reaching out about your construction project!
 
@@ -209,106 +211,103 @@ I'm here to help you get started. To provide the best assistance, could you tell
 
 Reply with the details and I'll connect you with our team right away! 🏗️`;
 
-      // Send WhatsApp message
-      await whatsappService.sendTextMessage(lead.phone, introMessage);
+        // Send WhatsApp message
+        await whatsappService.sendTextMessage(lead.phone, introMessage);
 
-      // ✅ FIXED: Create or get conversation with proper checks
-      let conversations = await storage.getConversations(leadData.clientId, 100);
-      let conversation = conversations.find((c) => c.leadId === lead.id);
-
-      if (!conversation) {
-        const newConv = await storage.createConversation({
-          leadId: lead.id,
-          clientId: lead.clientId,
-          channel: "whatsapp",
-          status: "active",
-          isAiHandled: true,
-          qualificationScore: "0.0",
-        });
-        
-        // ✅ FIXED: Refresh conversations to get the newly created one with lead data
-        conversations = await storage.getConversations(leadData.clientId, 100);
-        conversation = conversations.find((c) => c.leadId === lead.id);
-      }
-
-      // ✅ FIXED: Only create message if conversation exists
-      if (conversation) {
-        await storage.createMessage({
-          conversationId: conversation.id,
-          content: introMessage,
-          sender: "ai",
-          channel: "whatsapp",
-          sentAt: new Date(),
-          deliveredAt: new Date(),
-        });
-
-        console.log("✅ Intro message sent and recorded for lead:", lead.id);
-
-        // Track response time for AI intro message
-        const leadCreatedAt = lead.createdAt ? new Date(lead.createdAt).getTime() : Date.now();
-        const responseTime = Math.floor((Date.now() - leadCreatedAt) / 1000);
-
-        await storage.updateLead(lead.id, {
-          responseTimeSeconds: responseTime,
-        });
-
-        console.log(`⏱️ AI Response time tracked: ${responseTime}s (${(responseTime / 60).toFixed(1)} min)`);
-      } else {
-        console.warn("⚠️ Could not create/find conversation for lead:", lead.id);
-      }
-    }
-
-    // Schedule follow-ups after intro message sent
-    try {
-      console.log(
-        `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
-      );
-
-      // Find default sequence
-      const sequences = await storage.getFollowUpSequences(leadData.clientId);
-      const defaultSequence = sequences.find(
-        (s) => s.isDefault && s.status === "active"
-      );
-
-      if (defaultSequence) {
-        // Get conversation for this lead
-        const conversations = await storage.getConversations(
+        // Create or get conversation with proper checks
+        let conversations = await storage.getConversations(
           leadData.clientId,
           100
         );
-        const conversation = conversations.find((c) => c.leadId === lead.id);
+        let conversation = conversations.find((c) => c.leadId === lead.id);
 
-        await storage.scheduleFollowUpSequence(
-          lead.id,
-          defaultSequence.id,
-          conversation?.id
-        );
+        if (!conversation) {
+          const newConv = await storage.createConversation({
+            leadId: lead.id,
+            clientId: lead.clientId,
+            channel: "whatsapp",
+            status: "active",
+            isAiHandled: true,
+            qualificationScore: "0.0",
+          });
 
-        console.log(
-          `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
-        );
-      } else {
-        console.log(
-          `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
-        );
+          // Refresh conversations to get the newly created one with lead data
+          conversations = await storage.getConversations(
+            leadData.clientId,
+            100
+          );
+          conversation = conversations.find((c) => c.leadId === lead.id);
+        }
+
+        // ✅ FIXED: Mark as system message, NOT ai response
+        if (conversation) {
+          await storage.createMessage({
+            conversationId: conversation.id,
+            content: introMessage,
+            sender: "ai", 
+            channel: "whatsapp",
+            sentAt: new Date(),
+            deliveredAt: new Date(),
+            isStatusMessage: true, 
+          });
+
+          console.log("✅ Intro message sent and recorded for lead:", lead.id);
+
+          console.log(`ℹ️ Automated intro sent - response time will be tracked on first actual reply`);
       }
-    } catch (error) {
-      console.error("❌ Error scheduling follow-ups:", error);
-      // Don't fail the lead creation if scheduling fails
     }
 
-    res.json({
-      success: true,
-      leadId: lead.id,
-      auditResults: lead.auditResults,
-    });
-  } catch (error) {
-    console.error("Error creating lead:", error);
-    res.status(400).json({
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-});
+      // Schedule follow-ups after intro message sent
+      try {
+        console.log(
+          `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
+        );
+
+        // Find default sequence
+        const sequences = await storage.getFollowUpSequences(leadData.clientId);
+        const defaultSequence = sequences.find(
+          (s) => s.isDefault && s.status === "active"
+        );
+
+        if (defaultSequence) {
+          // Get conversation for this lead
+          const conversations = await storage.getConversations(
+            leadData.clientId,
+            100
+          );
+          const conversation = conversations.find((c) => c.leadId === lead.id);
+
+          await storage.scheduleFollowUpSequence(
+            lead.id,
+            defaultSequence.id,
+            conversation?.id
+          );
+
+          console.log(
+            `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
+          );
+        } else {
+          console.log(
+            `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Error scheduling follow-ups:", error);
+        // Don't fail the lead creation if scheduling fails
+      }
+
+      res.json({
+        success: true,
+        leadId: lead.id,
+        auditResults: lead.auditResults,
+      });
+    } catch (error) {
+      console.error("Error creating lead:", error);
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
 
   // Manual Lead Controls Routes
 
@@ -581,25 +580,37 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
           incomingMessage.messageId
         );
 
-        // Cancel pending follow-ups when lead replies 
+        // Cancel pending follow-ups when lead replies
         try {
           const lead = await storage.getLeadByPhone(incomingMessage.from);
 
           if (lead) {
             // Check if there are any pending follow-ups
-            const pendingFollowUps = await storage.getPendingFollowUpsByLead(lead.id);
+            const pendingFollowUps = await storage.getPendingFollowUpsByLead(
+              lead.id
+            );
 
-            if (pendingFollowUps.length > 0){
-              console.log(`✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`);
-              console.log(`📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`);
+            if (pendingFollowUps.length > 0) {
+              console.log(
+                `✅ Lead replied with pending follow-ups: ${lead.firstName} ${lead.lastName}`
+              );
+              console.log(
+                `📋 Found ${pendingFollowUps.length} pending follow-ups to cancel`
+              );
 
               // Cancel all pending follow-ups for this lead
-              const { cancelPendingFollowUps } = await import("./services/follow-up-worker");
+              const { cancelPendingFollowUps } = await import(
+                "./services/follow-up-worker"
+              );
               await cancelPendingFollowUps(lead.id);
 
-              console.log(`🚫 Cancelled ${pendingFollowUps.length} pending follow-ups for lead: ${lead.id}`);
+              console.log(
+                `🚫 Cancelled ${pendingFollowUps.length} pending follow-ups for lead: ${lead.id}`
+              );
             } else {
-              console.log(`ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`);
+              console.log(
+                `ℹ️ No pending follow-ups to cancel for lead: ${lead.id}`
+              );
             }
           }
         } catch (error) {
@@ -2137,57 +2148,59 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
   });
 
   // Send follow-up immediately
-app.post("/api/follow-ups/:id/send-now", async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Get the follow-up
-    const followUp = await storage.getFollowUpById(id);
-    
-    if (!followUp) {
-      return res.status(404).json({ message: "Follow-up not found" });
+  app.post("/api/follow-ups/:id/send-now", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get the follow-up
+      const followUp = await storage.getFollowUpById(id);
+
+      if (!followUp) {
+        return res.status(404).json({ message: "Follow-up not found" });
+      }
+
+      // Get the lead
+      const lead = await storage.getLead(followUp.leadId);
+
+      if (!lead || !lead.phone) {
+        return res
+          .status(400)
+          .json({ message: "Lead not found or has no phone" });
+      }
+
+      // Send the message via WhatsApp
+      await whatsappService.sendTextMessage(lead.phone, followUp.content);
+
+      // Update follow-up status to sent
+      await storage.updateFollowUp(id, {
+        status: "sent",
+        sentAt: new Date(),
+      });
+
+      res.json({ success: true, message: "Follow-up sent successfully" });
+    } catch (error) {
+      console.error("Error sending follow-up now:", error);
+      res.status(500).json({ message: "Failed to send follow-up" });
     }
+  });
 
-    // Get the lead
-    const lead = await storage.getLead(followUp.leadId);
-    
-    if (!lead || !lead.phone) {
-      return res.status(400).json({ message: "Lead not found or has no phone" });
+  // Cancel/skip follow-up
+  app.post("/api/follow-ups/:id/cancel", async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Update follow-up status to cancelled
+      await storage.updateFollowUp(id, {
+        status: "cancelled",
+        errorMessage: "Manually skipped by user",
+      });
+
+      res.json({ success: true, message: "Follow-up cancelled successfully" });
+    } catch (error) {
+      console.error("Error cancelling follow-up:", error);
+      res.status(500).json({ message: "Failed to cancel follow-up" });
     }
-
-    // Send the message via WhatsApp
-    await whatsappService.sendTextMessage(lead.phone, followUp.content);
-
-    // Update follow-up status to sent
-    await storage.updateFollowUp(id, {
-      status: "sent",
-      sentAt: new Date(),
-    });
-
-    res.json({ success: true, message: "Follow-up sent successfully" });
-  } catch (error) {
-    console.error("Error sending follow-up now:", error);
-    res.status(500).json({ message: "Failed to send follow-up" });
-  }
-});
-
-// Cancel/skip follow-up
-app.post("/api/follow-ups/:id/cancel", async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Update follow-up status to cancelled
-    await storage.updateFollowUp(id, {
-      status: "cancelled",
-      errorMessage: "Manually skipped by user",
-    });
-
-    res.json({ success: true, message: "Follow-up cancelled successfully" });
-  } catch (error) {
-    console.error("Error cancelling follow-up:", error);
-    res.status(500).json({ message: "Failed to cancel follow-up" });
-  }
-});
+  });
 
   // ======================= BOOKINGS ROUTES  ==============================================
 

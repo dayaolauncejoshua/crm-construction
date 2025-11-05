@@ -283,7 +283,7 @@ export class LeadQualificationService {
 
       // Find first lead message (filter out nulls)
       const firstLeadMessage = messages
-        .filter((m) => m.sender === "lead" && m.sentAt !== null) // ✅ Filter out null sentAt
+        .filter((m) => m.sender === "lead" && m.sentAt !== null)
         .sort((a, b) => {
           // ✅ Safe: we already filtered out nulls above
           const timeA = new Date(a.sentAt!).getTime();
@@ -291,11 +291,13 @@ export class LeadQualificationService {
           return timeA - timeB;
         })[0];
 
-      // Find first response (AI or human) - filter out nulls
+      // Find first real response (exclude system messages)
       const firstResponse = messages
         .filter(
           (m) =>
-            (m.sender === "ai" || m.sender === "human") && m.sentAt !== null
+            (m.sender === "ai" || m.sender === "human") &&
+            m.sentAt !== null &&
+            !m.isStatusMessage
         )
         .sort((a, b) => {
           const timeA = new Date(a.sentAt!).getTime();
@@ -303,7 +305,7 @@ export class LeadQualificationService {
           return timeA - timeB;
         })[0];
 
-      // If this is the FIRST response to the lead
+      // If this is the FIRST real response to the lead
       if (firstLeadMessage && !firstResponse) {
         const sentAt = firstLeadMessage.sentAt;
         if (!sentAt) {
@@ -312,10 +314,20 @@ export class LeadQualificationService {
         }
 
         const leadMessageTime = new Date(sentAt);
-        const responseTime = new Date();
-        const responseTimeSeconds = Math.round(
-          (responseTime.getTime() - leadMessageTime.getTime()) / 1000
-        );
+      const responseTime = new Date();
+      const responseTimeSeconds = Math.round(
+        (responseTime.getTime() - leadMessageTime.getTime()) / 1000
+      );
+
+      // ✅ Validate response time (should be positive and reasonable)
+      if (responseTimeSeconds < 0) {
+        console.warn(`⚠️ Negative response time detected: ${responseTimeSeconds}s - skipping`);
+        return;
+      }
+
+      if (responseTimeSeconds > 86400) { // More than 24 hours
+        console.warn(`⚠️ Unusually long response time: ${responseTimeSeconds}s (${(responseTimeSeconds / 3600).toFixed(1)} hours)`);
+      }
 
         console.log(
           `⏱️ ${sender.toUpperCase()} Response time: ${responseTimeSeconds}s (${(
@@ -1378,25 +1390,33 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
         // Schedule follow-ups if this is the first AI response
         try {
           const allMessages = await storage.getMessages(conversation.id);
-          const aiMessages = allMessages.filter(m => m.sender === "ai");
+          const aiMessages = allMessages.filter((m) => m.sender === "ai");
 
           // If this is the first AI message, schedule follow-ups
-          if (aiMessages.length === 1){
-            console.log("📅 First AI response - scheduling follow-ups for lead: ${lead.id}");
+          if (aiMessages.length === 1) {
+            console.log(
+              "📅 First AI response - scheduling follow-ups for lead: ${lead.id}"
+            );
 
             // Find default sequence for this client
             const sequences = await storage.getFollowUpSequences(lead.clientId);
-            const defaultSequence = sequences.find(s => s.isDefault && s.status === "active");
+            const defaultSequence = sequences.find(
+              (s) => s.isDefault && s.status === "active"
+            );
 
-            if (defaultSequence){
+            if (defaultSequence) {
               await storage.scheduleFollowUpSequence(
                 lead.id,
                 defaultSequence.id,
                 conversation.id
               );
-              console.log(`✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`);
+              console.log(
+                `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
+              );
             } else {
-              console.log(`⚠️ No default follow-up sequence found for client: ${lead.clientId}`);
+              console.log(
+                `⚠️ No default follow-up sequence found for client: ${lead.clientId}`
+              );
             }
           }
         } catch (error) {
