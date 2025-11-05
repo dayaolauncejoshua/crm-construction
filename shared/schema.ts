@@ -254,8 +254,8 @@ export const leads = pgTable("leads", {
     .notNull(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
-  email: varchar("email").notNull(),
-  phone: varchar("phone"),
+  email: varchar("email").notNull().unique(),
+  phone: varchar("phone").unique(),
   company: varchar("company"),
   source: varchar("source").default("landing_page"),
   status: varchar("status").default("new"), // new, qualified, hot, converted, lost, not-a-lead
@@ -275,6 +275,7 @@ export const leads = pgTable("leads", {
   internalNotes: text("internal_notes"),
   lastContactedAt: timestamp("last_contacted_at"),
   nextFollowUpAt: timestamp("next_follow_up_at"),
+  
   submissionCount: integer("submission_count").default(1),
   lastSubmittedAt: timestamp("last_submitted_at").defaultNow(),
 
