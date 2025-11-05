@@ -36,6 +36,7 @@ import {
   type InsertFollowUpSequence,
   type InsertFollowUpStep,
   type InsertFollowUp,
+  callRecordings,
 } from "@shared/schema";
 import {
   leadScoring,
@@ -1729,57 +1730,60 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Delete lead
-  // ✅ NEW: Add this robust cascade delete function
-  async deleteLeadAndAssociations(leadId: string): Promise<void> {
-    console.log(`🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`);
-    try {
-      // 1. Find all conversations for this lead
-      const leadConversations = await db
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(eq(conversations.leadId, leadId));
+ async deleteLeadAndAssociations(leadId: string): Promise<void> {
+  console.log(`🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`);
+  try {
+    // 5. Delete all follow-ups for this lead FIRST (before conversations)
+    await db.delete(followUps).where(eq(followUps.leadId, leadId));
+    console.log(`  ✅ Deleted follow-ups.`);
 
-      const conversationIds = leadConversations.map((c) => c.id);
-      if (conversationIds.length > 0) {
-        console.log(`  Deleting ${conversationIds.length} conversations...`);
-        // 2. Delete all messages for those conversations
-        await db.delete(messages).where(
-          sql`${messages.conversationId} = ANY(ARRAY[${sql.join(
-            conversationIds.map((id) => sql`${id}`),
-            sql`, `
-          )}])`
-        );
-        console.log(`  ✅ Deleted messages.`);
+    // 6. Find all conversations for this lead
+    const leadConversations = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.leadId, leadId));
 
-        // 3. Delete the conversations
-        await db.delete(conversations).where(eq(conversations.leadId, leadId));
-        console.log(`  ✅ Deleted conversations.`);
-      }
-
-      // 4. Delete all bookings for this lead
-      await db.delete(bookings).where(eq(bookings.leadId, leadId));
-      console.log(`  ✅ Deleted bookings.`);
-
-      // 5. Delete all lead activity logs for this lead
-      await db
-        .delete(leadActivityLog)
-        .where(eq(leadActivityLog.leadId, leadId));
-      console.log(`  ✅ Deleted lead activity logs.`);
-
-      // 6. Delete all follow-ups for this lead
-      await db.delete(followUps).where(eq(followUps.leadId, leadId));
-      console.log(`  ✅ Deleted follow-ups.`);
-
-      // 7. Finally, delete the lead
-      await db.delete(leads).where(eq(leads.id, leadId));
-      console.log(`  ✅ Deleted lead.`);
-    } catch (error) {
-      console.error(
-        `❌ [Cascade Delete] Error deleting lead ${leadId}:`,
-        error!
+    const conversationIds = leadConversations.map((c) => c.id);
+    if (conversationIds.length > 0) {
+      console.log(`  Deleting ${conversationIds.length} conversations...`);
+      
+      // 7. Delete all messages for those conversations
+      await db.delete(messages).where(
+        sql`${messages.conversationId} = ANY(ARRAY[${sql.join(
+          conversationIds.map((id) => sql`${id}`),
+          sql`, `
+        )}])`
       );
+      console.log(`  ✅ Deleted messages.`);
+
+      // 8. Delete the conversations (now safe after follow-ups deleted)
+      await db.delete(conversations).where(eq(conversations.leadId, leadId));
+      console.log(`  ✅ Deleted conversations.`);
     }
+
+    // 9. Delete all bookings for this lead
+    await db.delete(bookings).where(eq(bookings.leadId, leadId));
+    console.log(`  ✅ Deleted bookings.`);
+
+    // 10. Delete all lead activity logs for this lead
+    await db
+      .delete(leadActivityLog)
+      .where(eq(leadActivityLog.leadId, leadId));
+    console.log(`  ✅ Deleted lead activity logs.`);
+
+    // 11. Finally, delete the lead
+    await db.delete(leads).where(eq(leads.id, leadId));
+    console.log(`  ✅ Deleted lead.`);
+    
+    console.log(`🎯 [Cascade Delete] Successfully deleted lead: ${leadId}`);
+  } catch (error) {
+    console.error(
+      `❌ [Cascade Delete] Error deleting lead ${leadId}:`,
+      error
+    );
+    throw error; // Re-throw so the API can return proper error
   }
+}
 
   // Analytics operations
   async getKPIs(clientId: string): Promise<{
