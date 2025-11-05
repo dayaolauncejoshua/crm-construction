@@ -31,6 +31,7 @@ import { generateVSLScript, generateAudit } from "./services/openai";
 import { vslGenerator } from "./services/vsl-generator";
 import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
+import { normalizePhone, normalizeEmail } from "./utils/normalize";
 
 // import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
@@ -205,66 +206,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================= LEADS ROUTE ======================================
 
   // Landing page lead capture
-  app.post("/api/leads", async (req, res) => {
-    try {
-      const leadData = insertLeadSchema.parse(req.body);
+app.post("/api/leads", async (req, res) => {
+  try {
+    const leadData = insertLeadSchema.parse(req.body);
 
-      // ✅ SIMPLIFIED: No fake audit, just basic tracking
-      const auditInputs = req.body.auditInputs || {};
-      const auditType = req.body.auditType || "construction";
+    // Normalize phone and email BEFORE creating lead
+    if (leadData.phone) {
+      leadData.phone = normalizePhone(leadData.phone);
+    }
+    if (leadData.email) {
+      leadData.email = normalizeEmail(leadData.email);
+    }
 
-      const firstName =
-        req.body.firstName ||
-        auditInputs.contactName?.split(" ")[0] ||
-        "Unknown";
-      const lastName =
-        req.body.lastName ||
-        auditInputs.contactName?.split(" ").slice(1).join(" ") ||
-        "";
+    const auditInputs = req.body.auditInputs || {};
+    const auditType = req.body.auditType || "construction";
 
-      // ✅ FIXED: Simple audit results with all needed fields
-      const auditResults = {
-        type: auditType,
-        source: "landing_page",
-        projectType: auditInputs.projectType || "Unknown",
-        timestamp: new Date().toISOString(),
-        topFinding: "Construction inquiry received",
-        wins: ["Lead captured from landing page"],
-        risks: [],
-        score: 15,
-        timeline: "To be discussed",
-        estimatedROI: "TBD",
-      };
+    const firstName =
+      req.body.firstName ||
+      auditInputs.contactName?.split(" ")[0] ||
+      "Unknown";
+    const lastName =
+      req.body.lastName ||
+      auditInputs.contactName?.split(" ").slice(1).join(" ") ||
+      "";
 
-      // Calculate temperature based on qualification score
-      const qualificationScore = 0.15;
-      let temperature: "hot" | "warm" | "cold";
+    // Audit results
+    const auditResults = {
+      type: auditType,
+      source: "landing_page",
+      projectType: auditInputs.projectType || "Unknown",
+      timestamp: new Date().toISOString(),
+      topFinding: "Construction inquiry received",
+      wins: ["Lead captured from landing page"],
+      risks: [],
+      score: 15,
+      timeline: "To be discussed",
+      estimatedROI: "TBD",
+    };
 
-      if (qualificationScore >= 0.7) {
-        temperature = "hot";
-      } else if (qualificationScore >= 0.4) {
-        temperature = "warm";
-      } else {
-        temperature = "cold";
-      }
+    // Calculate temperature
+    const qualificationScore = 0.15;
+    let temperature: "hot" | "warm" | "cold";
 
-      console.log(
-        `🌡️ Lead temperature calculated: ${temperature} (score: ${qualificationScore})`
-      );
+    if (qualificationScore >= 0.7) {
+      temperature = "hot";
+    } else if (qualificationScore >= 0.4) {
+      temperature = "warm";
+    } else {
+      temperature = "cold";
+    }
 
-      // ✅ FIXED: Create lead with simplified audit results
-      const lead = await storage.createLead({
-        ...leadData,
-        firstName,
-        lastName,
-        auditResults: auditResults,
-        status: "new",
-        qualificationScore: "0.15",
-        temperature: temperature,
-      });
+    // ✅ UPSERT: Create or update lead
+    const lead = await storage.createLead({
+      ...leadData,
+      firstName,
+      lastName,
+      auditResults: auditResults,
+      status: "new",
+      qualificationScore: "0.15",
+      temperature: temperature,
+    });
 
-      // ✅ NEW: Send simple intro message instead of fake audit
-      if (lead.phone) {
+    // ✅ Check if this is a re-submission
+    const isResubmission = (lead.submissionCount || 1) > 1;
+
+    if (isResubmission) {
+      console.log(`♻️ [LEAD] Re-submission detected (count: ${lead.submissionCount})`);
+    }
+
+    // ✅ Send WhatsApp message (only if new OR first time in 24hrs)
+    if (lead.phone) {
+      // Check if we should send intro message
+      const shouldSendIntro = !isResubmission || 
+        !lead.lastSubmittedAt || 
+        (new Date().getTime() - new Date(lead.lastSubmittedAt).getTime()) > 24 * 60 * 60 * 1000;
+
+      if (shouldSendIntro) {
         const introMessage = `Hi ${firstName}! 👋
 
 Thanks for reaching out about your construction project!
@@ -277,10 +294,9 @@ I'm here to help you get started. To provide the best assistance, could you tell
 
 Reply with the details and I'll connect you with our team right away! 🏗️`;
 
-        // Send WhatsApp message
         await whatsappService.sendTextMessage(lead.phone, introMessage);
 
-        // Create or get conversation with proper checks
+        // Create or get conversation
         let conversations = await storage.getConversations(
           leadData.clientId,
           100
@@ -297,7 +313,6 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
             qualificationScore: "0.0",
           });
 
-          // Refresh conversations to get the newly created one with lead data
           conversations = await storage.getConversations(
             leadData.clientId,
             100
@@ -305,7 +320,6 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
           conversation = conversations.find((c) => c.leadId === lead.id);
         }
 
-        // ✅ FIXED: Mark as system message, NOT ai response
         if (conversation) {
           await storage.createMessage({
             conversationId: conversation.id,
@@ -319,7 +333,6 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
 
           console.log("✅ Intro message sent and recorded for lead:", lead.id);
 
-          // ✅ NEW: Broadcast new conversation to all connected clients
           broadcastUpdate({
             type: "new_conversation",
             conversation: {
@@ -328,29 +341,23 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
             },
             leadId: lead.id,
           });
-
-          console.log("✅ Intro message sent and recorded for lead:", lead.id);
-
-          console.log(
-            `ℹ️ Automated intro sent - response time will be tracked on first actual reply`
-          );
         }
+      } else {
+        console.log(`ℹ️ [LEAD] Skipping intro message (sent recently)`);
       }
+    }
 
-      // Schedule follow-ups after intro message sent
+    // Schedule follow-ups (only for new leads)
+    if (!isResubmission) {
       try {
-        console.log(
-          `📅 Scheduling follow-ups for form submission lead: ${lead.id}`
-        );
+        console.log(`📅 Scheduling follow-ups for new lead: ${lead.id}`);
 
-        // Find default sequence
         const sequences = await storage.getFollowUpSequences(leadData.clientId);
         const defaultSequence = sequences.find(
           (s) => s.isDefault && s.status === "active"
         );
 
         if (defaultSequence) {
-          // Get conversation for this lead
           const conversations = await storage.getConversations(
             leadData.clientId,
             100
@@ -363,34 +370,39 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
             conversation?.id
           );
 
-          console.log(
-            `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
-          );
-        } else {
-          console.log(
-            `⚠️ No default follow-up sequence found for client: ${leadData.clientId}`
-          );
+          console.log(`✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`);
         }
       } catch (error) {
         console.error("❌ Error scheduling follow-ups:", error);
-        // Don't fail the lead creation if scheduling fails
       }
+    }
 
-      res.json({
-        success: true,
-        leadId: lead.id,
-        auditResults: lead.auditResults,
-      });
-    } catch (error) {
-      console.error("Error creating lead:", error);
-      res.status(400).json({
-        message: error instanceof Error ? error.message : "Unknown error",
+    // ✅ Return appropriate message
+    res.json({
+      success: true,
+      leadId: lead.id,
+      auditResults: lead.auditResults,
+      isResubmission,
+      submissionCount: lead.submissionCount,
+      message: isResubmission
+        ? "Thanks for the update! We'll be in touch soon."
+        : "Thanks! Check your WhatsApp for next steps.",
+    });
+  } catch (error) {
+    console.error("Error creating lead:", error);
+    
+    // ✅ Handle unique constraint violations gracefully
+    if (error instanceof Error && error.message.includes("unique constraint")) {
+      return res.status(409).json({
+        message: "This contact information is already in our system. We'll be in touch soon!",
       });
     }
-  });
-
-  // Manual Lead Controls Routes
-
+    
+    res.status(400).json({
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
   // Update lead with manual overrides
   app.patch("/api/leads/:leadId/manual", async (req, res) => {
     try {

@@ -60,8 +60,7 @@ import {
   InsertLeadActivityLog,
   InsertLeadTag,
 } from "@shared/schema";
-import { l } from "node_modules/vite/dist/node/types.d-aGj9QkWt";
-import { availableFilters } from "fluent-ffmpeg";
+import { normalizePhone, normalizeEmail } from "./utils/normalize";
 
 export interface IStorage {
   // User operations (required for auth)
@@ -279,8 +278,86 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
-  async createLead(lead: InsertLead): Promise<Lead> {
-    const [newLead] = await db.insert(leads).values(lead).returning();
+async createLead(lead: InsertLead): Promise<Lead> {
+    console.log("📝 [UPSERT LEAD] Checking for existing lead...");
+    
+    // Normalize phone and email for comparison
+    const normalizedPhone = lead.phone ? normalizePhone(lead.phone) : null;
+    const normalizedEmail = lead.email ? normalizeEmail(lead.email) : null;
+
+    // Check if lead already exists by phone OR email
+    let existingLead: Lead | undefined;
+
+    if (normalizedPhone) {
+      console.log(`🔍 [UPSERT] Searching by phone: ${normalizedPhone}`);
+      existingLead = await this.getLeadByPhone(normalizedPhone);
+    }
+
+    // If not found by phone, try email
+    if (!existingLead && normalizedEmail) {
+      console.log(`🔍 [UPSERT] Searching by email: ${normalizedEmail}`);
+      const [leadByEmail] = await db
+        .select()
+        .from(leads)
+        .where(sql`LOWER(${leads.email}) = ${normalizedEmail}`)
+        .limit(1);
+      
+      existingLead = leadByEmail;
+    }
+
+    // ✅ UPSERT: Update existing lead
+    if (existingLead) {
+      console.log(`♻️ [UPSERT] Found existing lead: ${existingLead.id}`);
+      console.log(`   Previous submissions: ${existingLead.submissionCount || 1}`);
+
+      const [updatedLead] = await db
+        .update(leads)
+        .set({
+          // Update core info (in case they changed)
+          firstName: lead.firstName || existingLead.firstName,
+          lastName: lead.lastName || existingLead.lastName,
+          company: lead.company || existingLead.company,
+          
+          // ✅ Refresh audit results with new data
+          auditResults: lead.auditResults || existingLead.auditResults,
+          
+          // ✅ Increment submission count
+          submissionCount: (existingLead.submissionCount || 1) + 1,
+          lastSubmittedAt: new Date(),
+          
+          // Update temperature based on new qualification
+          temperature: lead.temperature || existingLead.temperature,
+          qualificationScore: lead.qualificationScore || existingLead.qualificationScore,
+          
+          // Keep status as-is (don't reset to 'new' if already qualified)
+          // status remains unchanged
+          
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, existingLead.id))
+        .returning();
+
+      console.log(`✅ [UPSERT] Updated existing lead (submission #${updatedLead.submissionCount})`);
+      
+      return updatedLead;
+    }
+
+    // ✅ INSERT: Create new lead
+    console.log("🆕 [UPSERT] Creating new lead...");
+    
+    const [newLead] = await db
+      .insert(leads)
+      .values({
+        ...lead,
+        phone: normalizedPhone || lead.phone,
+        email: normalizedEmail || lead.email,
+        submissionCount: 1,
+        lastSubmittedAt: new Date(),
+      })
+      .returning();
+
+    console.log(`✅ [UPSERT] Created new lead: ${newLead.id}`);
+    
     return newLead;
   }
 
@@ -301,10 +378,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(leads.createdAt));
   }
 
-  async getLeadByPhone(phone: string): Promise<Lead | undefined> {
-    const cleanPhone = phone.replace(/\D/g, "");
-    const allLeads = await db.select().from(leads);
-    return allLeads.find((l) => l.phone?.replace(/\D/g, "") === cleanPhone);
+async getLeadByPhone(phone: string): Promise<Lead | undefined> {
+    const normalizedPhone = normalizePhone(phone);
+    
+    // Try exact match first
+    const [exactMatch] = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.phone, normalizedPhone))
+      .limit(1);
+    
+    if (exactMatch) return exactMatch;
+
+    // Fallback: search all leads and normalize (for backward compatibility)
+    const allLeads = await db.select().from(leads).where(sql`${leads.phone} IS NOT NULL`);
+    return allLeads.find((l) => normalizePhone(l.phone!) === normalizedPhone);
   }
 
   // Lead Activity Log

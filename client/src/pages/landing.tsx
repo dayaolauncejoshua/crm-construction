@@ -544,6 +544,8 @@ function LeadCaptureSection() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const [isResubmission, setIsResubmission] = useState(false);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
 
@@ -570,7 +572,9 @@ function LeadCaptureSection() {
       const data = await response.json();
 
       if (data.success) {
+        // ✅ Store re-submission status for custom message
         setSuccess(true);
+        setIsResubmission(data.isResubmission || false); // NEW
       }
     } catch (error) {
       console.error("Error submitting lead:", error);
@@ -580,19 +584,25 @@ function LeadCaptureSection() {
     }
   };
 
+  // ✅ Update success screen
   if (success) {
     return (
       <section className="py-20 bg-gradient-construction">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <div className="bg-white rounded-lg p-12 shadow-2xl">
             <Check className="w-16 h-16 mx-auto text-success mb-4" />
-            <h2 className="text-3xl font-bold mb-4">Check Your WhatsApp! 📱</h2>
+            <h2 className="text-3xl font-bold mb-4">
+              {isResubmission ? "Welcome Back! 👋" : "Check Your WhatsApp! 📱"}
+            </h2>
             <p className="text-lg text-muted-foreground mb-4">
-              We've sent you a message at <strong>{phone}</strong>
+              {isResubmission
+                ? "Thanks for the update! We have your information and will be in touch soon."
+                : `We've sent you a message at ${phone}`}
             </p>
             <p className="text-muted-foreground">
-              Our team will help you with your construction project. Reply on
-              WhatsApp to get started!
+              {isResubmission
+                ? "If you need immediate assistance, feel free to call us directly."
+                : "Our team will help you with your construction project. Reply on WhatsApp to get started!"}
             </p>
           </div>
         </div>
