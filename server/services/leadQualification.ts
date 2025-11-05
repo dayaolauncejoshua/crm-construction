@@ -77,7 +77,7 @@ function normalizeTimeString(timeStr: string): string {
   return normalized;
 }
 
-// ✅ Robust date parser with better time handling
+// ✅ Robust date parser with TIMEZONE-AWARE handling
 function parseDateFromNaturalLanguage(
   dateStr: string,
   timeStr: string
@@ -173,7 +173,7 @@ function parseDateFromNaturalLanguage(
   let month = -1;
   let day = -1;
 
-  // Pattern: "Novermber 9" or "Nov 9" or "9 November"
+  // Pattern: "November 9" or "Nov 9" or "9 November"
   const datePattern = /(\w+)\s+(\d{1,2})|(\d{1,2})\s+(\w+)/i;
   const match = dateStr.match(datePattern);
 
@@ -188,26 +188,22 @@ function parseDateFromNaturalLanguage(
     }
 
     if (month !== -1 && day > 0 && day <= 31) {
-      // Construct date explicitly (no string parsing)
-      const targetDate = new Date(
-        currentYear,
-        month,
-        day,
-        hours,
-        minutes,
-        0,
-        0
-      );
+      // ✅ CRITICAL FIX: Create date string for Pacific timezone, then parse
+      // This ensures the time is interpreted as Pacific Time, not server's local time
+      const dateString = `${currentYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-08:00`;
+      
+      console.log(`📅 Creating date string: ${dateString}`);
+      const targetDate = new Date(dateString);
 
       console.log(`✅ Explicit date created: ${targetDate.toISOString()}`);
-      console.log(
-        `   Year: ${currentYear}, Month: ${month}, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`
-      );
+      console.log(`   Year: ${currentYear}, Month: ${month + 1}, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`);
+      console.log(`   Pacific Time: ${targetDate.toLocaleString('en-US', { timeZone: 'America/Vancouver' })}`);
 
       // Validate it's not in the past
       if (targetDate < now) {
         console.warn(`⚠️ Date is in the past, trying next year...`);
-        targetDate.setFullYear(currentYear + 1);
+        const nextYearDateString = `${currentYear + 1}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-08:00`;
+        return new Date(nextYearDateString);
       }
 
       return targetDate;
@@ -216,7 +212,6 @@ function parseDateFromNaturalLanguage(
 
   return null;
 }
-
 // ✅ Smart day suggestions
 function getSmartDaySuggestions(): string {
   const now = new Date();
