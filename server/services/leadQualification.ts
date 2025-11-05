@@ -25,36 +25,56 @@ interface BookingDetails {
 
 // ✅ IMPROVED: Better time normalization
 function normalizeTimeString(timeStr: string): string {
-  if (!timeStr) return "10:00 AM";
+  if (!timeStr) {
+    console.log("⚠️ No time provided, defaulting to 10:00 AM");
+    return "10:00 AM";
+  }
 
   const upperTime = timeStr.toUpperCase().trim();
+  console.log(`🕐 Normalizing time: "${timeStr}" → "${upperTime}"`);
 
-  // Handle formats: "2PM", "2 PM", "2:00PM", "2:00 PM", "14:00"
+  // Handle formats: "9AM", "9 AM", "2PM", "2:00PM", "2:00 PM", "14:00"
   const match = upperTime.match(/(\d{1,2})(?::(\d{2}))?\s*([AP]M)?/);
 
   if (!match) {
-    console.warn(`⚠️ Could not parse time "${timeStr}", using default`);
+    console.warn(
+      `⚠️ Could not parse time "${timeStr}", using default 10:00 AM`
+    );
     return "10:00 AM";
   }
 
   let hours = parseInt(match[1]);
   const minutes = match[2] || "00";
-  let period = match[3];
+  let period = match[3]; // Will be "AM" or "PM" or undefined
 
-  // Handle 24-hour format
+  console.log(
+    `🕐 Parsed components: hours=${hours}, minutes=${minutes}, period=${period}`
+  );
+
+  // Handle 24-hour format (if no AM/PM specified)
   if (!period) {
-    period = hours >= 12 ? "PM" : "AM";
-    if (hours > 12) hours -= 12;
-    if (hours === 0) hours = 12;
+    console.log(`🕐 No AM/PM found, treating as 24-hour format`);
+    if (hours >= 12) {
+      period = "PM";
+      if (hours > 12) hours -= 12;
+    } else {
+      period = "AM";
+      if (hours === 0) hours = 12;
+    }
+    console.log(`🕐 Converted to 12-hour: ${hours} ${period}`);
   }
 
   // Validate
   if (hours < 1 || hours > 12) {
-    console.warn(`⚠️ Invalid hour "${hours}", using default`);
+    console.warn(
+      `⚠️ Invalid hour "${hours}" after conversion, using default 10:00 AM`
+    );
     return "10:00 AM";
   }
 
-  return `${hours}:${minutes} ${period}`;
+  const normalized = `${hours}:${minutes} ${period}`;
+  console.log(`✅ Normalized time result: "${normalized}"`);
+  return normalized;
 }
 
 // ✅ Robust date parser with better time handling
@@ -1172,19 +1192,46 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
             const dateStr = bookingIntent.proposedDateTime.date;
             const timeStr = bookingIntent.proposedDateTime.time || "10:00 AM";
 
+            console.log("📅 ============================================");
+            console.log("📅 BOOKING DATE/TIME PARSING DEBUG:");
+            console.log("📅 ============================================");
+            console.log("📅 Extracted from AI:");
+            console.log("  - Date:", dateStr);
+            console.log("  - Time:", timeStr);
+            console.log("  - Time type:", typeof timeStr);
+            console.log(
+              "📅 Full booking intent:",
+              JSON.stringify(bookingIntent, null, 2)
+            );
+            console.log("📅 ============================================");
+
             scheduledFor = parseDateFromNaturalLanguage(dateStr, timeStr);
 
             if (!scheduledFor) {
               console.error("❌ Failed to parse date");
+              console.error("   Input dateStr:", dateStr);
+              console.error("   Input timeStr:", timeStr);
               return;
             }
 
             if (scheduledFor < new Date()) {
               console.error("❌ Date is in the past");
+              console.error("   Parsed date:", scheduledFor.toISOString());
+              console.error("   Current time:", new Date().toISOString());
               return;
             }
 
             console.log(`✅ Parsed date: ${scheduledFor.toISOString()}`);
+            console.log(`✅ Final parsed date: ${scheduledFor.toISOString()}`);
+            console.log(
+              `✅ Local time: ${scheduledFor.toLocaleString("en-US", {
+                timeZone: "America/Vancouver",
+              })}`
+            );
+            console.log(
+              `✅ Hour (24h): ${scheduledFor.getHours()}, Minute: ${scheduledFor.getMinutes()}`
+            );
+            console.log("📅 ============================================");
           } else {
             console.error("❌ Date missing after validation");
             return;

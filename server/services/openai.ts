@@ -906,9 +906,23 @@ ${conversationText}
 
 **EXTRACT IF MENTIONED:**
 - Specific date/day: "Thursday", "Friday", "November 15", "next Monday"
-- Specific time: "2PM", "afternoon", "morning", "10 AM"
+- Specific time: MUST PRESERVE AM/PM exactly as stated
+  * "9AM" → extract as "9 AM"
+  * "9 AM" → extract as "9 AM"  
+  * "2PM" → extract as "2 PM"
+  * "afternoon" → extract as "2 PM" (default afternoon time)
+  * "morning" → extract as "10 AM" (default morning time)
+  * CRITICAL: If lead says "9AM should work" → time is "9 AM" NOT "2 PM" or any other time
+  * ALWAYS use the EXACT time the customer mentioned, not a default
 - Location/address: Complete address if mentioned
 - Meeting type: "site visit" vs "consultation"
+
+**TIME EXTRACTION EXAMPLES:**
+✅ Customer: "9AM should work" → time: "9 AM"
+✅ Customer: "2 PM works for me" → time: "2 PM"
+✅ Customer: "Let's meet at 3" → time: "3 PM" (assume PM for single digit 3+)
+✅ Customer: "morning works" → time: "10 AM"
+❌ Customer: "9AM should work" → time: "5 PM" ← WRONG! Use what they said!
 
 Respond with JSON only:
 {
@@ -917,7 +931,7 @@ Respond with JSON only:
   "confidence": 0.85,
   "proposedDateTime": {
     "date": "Thursday" or null if not specific,
-    "time": "2PM" or null,
+    "time": "9 AM" or "2 PM" (EXACT time customer stated with AM/PM),
     "isFlexible": true/false
   },
   "meetingType": "site-visit" or "consultation" or null,
@@ -931,7 +945,7 @@ Respond with JSON only:
         {
           role: "system",
           content:
-            "You are a booking intent analyzer. Respond only with valid JSON. Be STRICT about isConfirmed - requires BOTH date AND time.",
+            "You are a booking intent analyzer. Respond only with valid JSON. Be STRICT about isConfirmed - requires BOTH date AND time. CRITICAL: Extract the EXACT time the customer mentioned (preserve AM/PM). If customer says '9AM', extract '9 AM' NOT any other time.",
         },
         { role: "user", content: prompt },
       ],
