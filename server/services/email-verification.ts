@@ -1,53 +1,44 @@
-//server/services/email-verification.ts
+// server/services/email-verification.ts
 
 import { config } from "dotenv";
 config();
 
-import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
-
-// ✅ Debug environment variables on load
-console.log("📧 Email Service Initialization:");
-console.log("  EMAIL_HOST:", process.env.EMAIL_HOST || "❌ NOT SET");
-console.log("  EMAIL_PORT:", process.env.EMAIL_PORT || "❌ NOT SET");
-console.log("  EMAIL_USER:", process.env.EMAIL_USER || "❌ NOT SET");
-console.log("  EMAIL_PASS:", process.env.EMAIL_PASSWORD ? "✅ Set" : "❌ NOT SET");
+import sgMail from '@sendgrid/mail';
 
 const EMAIL_TOKEN_SECRET =
   process.env.EMAIL_TOKEN_SECRET || "change-this-secret-key";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5000";
 
-// Create Gmail transporter with validation
-if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-  console.error("❌ CRITICAL: Email configuration missing in .env file!");
-  console.error("   Required: EMAIL_HOST, EMAIL_USER, EMAIL_PASS");
+// ✅ Initialize SendGrid (same as email.ts)
+const apiKey = process.env.EMAIL_PASSWORD; // SendGrid API key
+const emailFrom = process.env.EMAIL_FROM;
+
+console.log("📧 [EMAIL VERIFICATION] Initializing SendGrid");
+console.log("  API Key:", apiKey ? "✅ Set" : "❌ Missing");
+console.log("  From:", emailFrom);
+
+if (!apiKey) {
+  console.error("❌ [EMAIL VERIFICATION] SendGrid API key not found!");
+} else {
+  sgMail.setApiKey(apiKey);
+  console.log("✅ [EMAIL VERIFICATION] SendGrid ready");
 }
 
-// Create Gmail transporter (using your existing config)
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || "587"),
-  secure: false, // true for 465, false for 587
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-  // ✅ ADD: Better timeout and debugging
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-  debug: true, // Enable debug output
-  logger: true, // Enable logger
-});
+// Parse EMAIL_FROM to extract email and name
+let fromEmail = '';
+let fromName = '';
 
-// Test email connection
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Email service error:", error);
+if (emailFrom) {
+  const fromMatch = emailFrom.match(/"?([^"<]+)"?\s*<([^>]+)>/);
+  if (fromMatch) {
+    fromName = fromMatch[1].trim();
+    fromEmail = fromMatch[2].trim();
   } else {
-    console.log("✅ Email service ready");
+    fromEmail = emailFrom.trim();
+    fromName = 'AI Lead System';
   }
-});
+}
 
 // Generate verification token (expires in 24 hours)
 export function generateVerificationToken(
@@ -268,46 +259,82 @@ function getPasswordResetEmailHTML(
   `;
 }
 
-// Send verification email
+// ✅ Send verification email using SendGrid
 export async function sendVerificationEmail(
   email: string,
   userId: string,
   firstName: string
 ): Promise<void> {
+  if (!apiKey || !fromEmail) {
+    throw new Error("SendGrid not configured");
+  }
+
   const token = generateVerificationToken(userId, email);
   const verificationLink = `${FRONTEND_URL}/verify/${token}`;
 
-  await transporter.sendMail({
-    from:
-      process.env.EMAIL_FROM ||
-      '"AI Lead System" <crmaileadsystem.noreply@gmail.com>',
-    to: email,
-    subject: "Verify Your Email - AI Lead System",
-    html: getVerificationEmailHTML(verificationLink, firstName),
-  });
+  console.log(`📧 [VERIFICATION] Sending to: ${email}`);
+  console.log(`🔗 [VERIFICATION] Link: ${verificationLink}`);
 
-  console.log(`✅ Verification email sent to ${email}`);
+  try {
+    await sgMail.send({
+      to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
+      subject: "Verify Your Email - AI Lead System",
+      html: getVerificationEmailHTML(verificationLink, firstName),
+    });
+
+    console.log(`✅ [VERIFICATION] Email sent to ${email}`);
+  } catch (error: any) {
+    console.error("❌ [VERIFICATION] Failed to send email:", error);
+    
+    if (error.response) {
+      console.error("SendGrid Error:", error.response.body);
+    }
+    
+    throw error;
+  }
 }
 
-// Send password reset email
+// ✅ Send password reset email using SendGrid
 export async function sendPasswordResetEmail(
   email: string,
   userId: string,
   firstName: string
 ): Promise<void> {
+  if (!apiKey || !fromEmail) {
+    throw new Error("SendGrid not configured");
+  }
+
   const token = generatePasswordResetToken(userId, email);
   const resetLink = `${FRONTEND_URL}/reset-password/${token}`;
 
-  await transporter.sendMail({
-    from:
-      process.env.EMAIL_FROM ||
-      '"AI Lead System" <crmaileadsystem.noreply@gmail.com>',
-    to: email,
-    subject: "Reset Your Password - AI Lead System",
-    html: getPasswordResetEmailHTML(resetLink, firstName),
-  });
+  console.log(`📧 [PASSWORD RESET] Sending to: ${email}`);
+  console.log(`🔗 [PASSWORD RESET] Link: ${resetLink}`);
 
-  console.log(`✅ Password reset email sent to ${email}`);
+  try {
+    await sgMail.send({
+      to: email,
+      from: {
+        email: fromEmail,
+        name: fromName,
+      },
+      subject: "Reset Your Password - AI Lead System",
+      html: getPasswordResetEmailHTML(resetLink, firstName),
+    });
+
+    console.log(`✅ [PASSWORD RESET] Email sent to ${email}`);
+  } catch (error: any) {
+    console.error("❌ [PASSWORD RESET] Failed to send email:", error);
+    
+    if (error.response) {
+      console.error("SendGrid Error:", error.response.body);
+    }
+    
+    throw error;
+  }
 }
 
 export const emailVerificationService = {

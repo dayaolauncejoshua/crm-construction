@@ -1,3 +1,5 @@
+// server/services/email.ts
+
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer'; // Keep for ICS generation
 
