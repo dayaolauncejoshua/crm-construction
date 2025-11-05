@@ -1,6 +1,6 @@
 // client/src/pages/trial-unlock.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,14 +20,14 @@ import {
   Gift,
   Timer,
   Crown,
-  HardHat,      // ✅ Construction icon
-  Building2,    // ✅ Construction icon
-  Wrench,       // ✅ Construction icon
-  Hammer,       // ✅ Construction icon
-  Target,       // ✅ Construction icon
-  Calendar,      // ✅ Construction icon
-  Play,        // ✅ Add for VSL
-  FileText,    // ✅ Add for SOPs
+  HardHat,
+  Building2,
+  Wrench,
+  Hammer,
+  Target,
+  Calendar,
+  Play,
+  FileText,
   Palette
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -39,16 +39,48 @@ interface TrialStatus {
   trialEndsAt?: string;
 }
 
+// ✅ Add User interface
+interface User {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  emailVerified: boolean;
+  isTrialActive: boolean;
+  trialEndsAt: string | null;
+}
+
 export default function TrialUnlock() {
   usePageTitle("Unlock Free Trial - AI Lead System");
   const [isActivating, setIsActivating] = useState(false);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  // Use authenticated user from backend
-  const { data: userStatus, isLoading } = useQuery<TrialStatus>({
+  // ✅ CHECK AUTHENTICATION FIRST
+  const { data: authData, isLoading: authLoading, error: authError } = useQuery<{ user: User }>({
+    queryKey: ["/api/auth/me"],
+    retry: false,
+  });
+
+  // ✅ Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && (authError || !authData?.user)) {
+      console.log("❌ Not authenticated, redirecting to login...");
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to activate your trial",
+        variant: "destructive",
+      });
+      setLocation("/login?redirect=/trial-unlock");
+    }
+  }, [authLoading, authError, authData, setLocation, toast]);
+
+  // Get trial status (only if authenticated)
+  const { data: userStatus, isLoading: trialLoading } = useQuery<TrialStatus>({
     queryKey: ["/api/user/trial-status"],
     retry: false,
+    enabled: !!authData?.user, // ✅ Only fetch if authenticated
   });
 
   const activateTrialMutation = useMutation({
@@ -74,7 +106,7 @@ export default function TrialUnlock() {
     onError: (error: any) => {
       toast({
         title: "Activation Failed",
-        description: error.message,
+        description: error.message || "Please try again or contact support",
         variant: "destructive",
       });
       setIsActivating(false);
@@ -134,15 +166,21 @@ export default function TrialUnlock() {
     { label: "Features Included", value: "50+", icon: <Rocket className="w-5 h-5" /> }
   ];
 
-  if (isLoading) {
+  // ✅ Show loading while checking auth
+  if (authLoading || trialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading trial status...</p>
+          <p className="text-slate-600">Loading...</p>
         </div>
       </div>
     );
+  }
+
+  // ✅ Don't render anything if not authenticated (will redirect)
+  if (!authData?.user) {
+    return null;
   }
 
   // If trial is already active, show status
@@ -163,7 +201,7 @@ export default function TrialUnlock() {
             <div className="bg-gradient-to-r from-blue-50 to-orange-50 border-2 border-construction/20 rounded-lg p-6 text-center">
               <div className="flex items-center justify-center space-x-2 mb-2">
                 <Timer className="w-5 h-5 text-construction" />
-                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">
+                <span className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">
                   {daysLeft} days left
                 </span>
               </div>
@@ -232,8 +270,7 @@ export default function TrialUnlock() {
             {/* Subheadline */}
             <p className="text-xl text-slate-600 mb-14 max-w-3xl mx-auto leading-relaxed">
               Stop losing $100K+ projects to slow responses. AI-powered system responds in under 2 minutes, 
-              qualifies prospects 24/7, and book meetings with one
-              click and close more deals.
+              qualifies prospects 24/7, and book meetings with one click and close more deals.
             </p>
 
             {/* Stats Bar */}
