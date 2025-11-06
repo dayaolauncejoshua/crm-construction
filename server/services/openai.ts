@@ -41,43 +41,61 @@ export interface ExtractedLeadDetails {
   confidence: number;
 }
 
-// ✅ NEW: Hardcoded keyword detection for obvious non-construction topics
+// ✅ IMPROVED: Context-aware keyword detection
 function hasNonConstructionKeywords(message: string): boolean {
+  const lowerMessage = message.toLowerCase();
+
+  // ✅ CRITICAL: Check for CONSTRUCTION CONTEXT first
+  const constructionIndicators = [
+    "kitchen renovation",
+    "restaurant kitchen",
+    "commercial kitchen",
+    "kitchen remodel",
+    "warehouse",
+    "building",
+    "construction",
+    "renovation",
+    "remodel",
+    "site visit",
+    "contractor",
+    "build",
+    "repair",
+    "install",
+  ];
+
+  // If message contains construction context, DON'T mark as spam
+  if (
+    constructionIndicators.some((indicator) => lowerMessage.includes(indicator))
+  ) {
+    console.log("✅ Construction context detected, not spam");
+    return false;
+  }
+
+  // ✅ NOW check for non-construction keywords (more specific)
   const nonConstructionKeywords = [
-    // Food & Beverages
+    // Food & Beverages (SPECIFIC items only, NOT "restaurant")
     "burger",
     "pizza",
     "fries",
-    "food",
-    "restaurant",
-    "delivery",
+    "food delivery",
     "menu",
-    "order",
-    "eat",
-    "drink",
-    "coffee",
-    "lunch",
-    "dinner",
-    "breakfast",
-    "meal",
-    "cuisine",
-    "dish",
-    "recipe",
+    "order food",
+    "meal delivery",
+    "catering",
+    "bakery",
+    "coffee shop order",
 
-    // Retail & Products (non-construction)
+    // Retail Products (specific items)
     "shoes",
     "clothing",
     "shirt",
     "pants",
     "dress",
     "fashion",
-    "apparel",
     "sneakers",
     "watch",
     "jewelry",
-    "accessories",
     "handbag",
-    "wallet",
 
     // Services (non-construction)
     "haircut",
@@ -85,53 +103,23 @@ function hasNonConstructionKeywords(message: string): boolean {
     "spa",
     "massage",
     "laundry",
-    "cleaning service",
     "dry clean",
-    "photography",
-    "videography",
-    "event planning",
 
     // Entertainment
-    "movie",
-    "concert",
-    "show",
-    "ticket",
-    "entertainment",
-    "game",
-    "sports equipment",
+    "movie tickets",
+    "concert tickets",
 
     // Technology (non-construction)
+    "phone repair",
     "laptop",
-    "phone",
-    "smartphone",
-    "tablet",
-    "computer repair",
     "software",
-    "app development",
-
-    // Healthcare
-    "doctor",
-    "clinic",
-    "hospital",
-    "medicine",
-    "pharmacy",
-    "dental",
-
-    // Transport (non-construction)
-    "taxi",
-    "uber",
-    "grab",
-    "delivery service",
-    "shipping",
 
     // Test/Spam
-    "test",
-    "testing",
+    "test test",
     "hello hello",
     "hi hi",
   ];
 
-  const lowerMessage = message.toLowerCase();
   return nonConstructionKeywords.some((keyword) =>
     lowerMessage.includes(keyword)
   );
@@ -144,14 +132,46 @@ function isOnlyGreeting(message: string): boolean {
   return greetingPatterns.test(message.trim());
 }
 
+// ✅ NEW: Check if message needs more context before classifying as spam
+function needsMoreContext(
+  message: string,
+  conversationHistory: any[]
+): boolean {
+  const lowerMessage = message.toLowerCase().trim();
+
+  // Vague messages that need context
+  const vaguePatterns = [
+    /^(hi|hello|hey)$/i,
+    /^(yeah|yes|yep|ok|okay)$/i,
+    /^(maybe|perhaps)$/i,
+    /^construction$/i,
+    /^(i want to meet|can we meet|let's meet|i want to book)$/i,
+  ];
+
+  // If message is vague AND we have less than 3 lead messages, wait for more context
+  const leadMessages = conversationHistory.filter((m) => m.sender === "lead");
+
+  if (
+    leadMessages.length < 3 &&
+    vaguePatterns.some((pattern) => pattern.test(lowerMessage))
+  ) {
+    console.log(
+      "⏸️ Vague message detected, waiting for more context before classifying"
+    );
+    return true;
+  }
+
+  return false;
+}
+
 // ✅ NEW: Extract lead details from conversation using AI
 export async function extractLeadDetails(
   conversationHistory: any[]
 ): Promise<ExtractedLeadDetails> {
   try {
     const conversationText = conversationHistory
-      .filter(msg => msg.sender === "lead") // Only look at lead's messages
-      .map(msg => msg.content)
+      .filter((msg) => msg.sender === "lead") // Only look at lead's messages
+      .map((msg) => msg.content)
       .join("\n");
 
     const prompt = `Extract the lead's personal information from these messages:
@@ -272,6 +292,18 @@ export async function classifyIntent(
         reasoning: `Matches learned spam pattern: "${learnedPatternCheck.matchedPattern}" (${learnedPatternCheck.category})`,
       };
     }
+
+    // ✅ NEW: Check if we need more context BEFORE classifying as spam
+    if (needsMoreContext(message, conversationHistory)) {
+      console.log("⏸️ Waiting for more context before classification");
+      return {
+        isRelevant: true, // ✅ Assume relevant until proven otherwise
+        intent: "construction",
+        confidence: 0.5,
+        reasoning: "Waiting for more context - giving lead benefit of doubt",
+      };
+    }
+
     // Hardcoded keyword check (fast path)
     if (hasNonConstructionKeywords(message)) {
       console.log("🚫 Hardcoded keyword detected:", message);
@@ -391,7 +423,7 @@ Respond with JSON only:
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2, 
+      temperature: 0.2,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
@@ -430,7 +462,6 @@ export async function qualifyLead(
 
       console.log("🎯 Intent Classification:", intentClassification);
 
-      
       if (
         !intentClassification.isRelevant &&
         intentClassification.confidence > 0.6
@@ -506,7 +537,8 @@ Must have **BUDGET (2M+ PHP)** PLUS at least **TWO** of these:
 - "5M budget, URGENT, need in 4 weeks, I'm the CEO, when can we meet?" = **0.85** (HOT - budget + urgency + decision maker + meeting)
 - "3M budget, NEED to start next month, comparing 3 contractors, I decide" = **0.80** (HOT - budget + urgency + decision maker + competitive)
 - "How much?" = **0.15** (COLD)
-- "2M budget but no rush, maybe start next year" = **0.45** (WARM but low - budget but very flexible timeline)
+- "2M budget but no rush, maybe start next year" = **0.40** (WARM but low - budget but very flexible timeline, don't push)
+- "3M budget, 6-8 months timeline, just getting quotes" = **0.50** (WARM - engaged but not ready, nurture relationship)
 
 Lead Data:
 - Name: ${leadData.firstName} ${leadData.lastName}
@@ -577,6 +609,226 @@ Respond with JSON only:
   }
 }
 
+// ✅ NEW: Check if AI is about to repeat itself
+function isRepetitiveResponse(
+  proposedResponse: string,
+  conversationHistory: any[]
+): { isRepetitive: boolean; lastAIMessage?: string } {
+  // Get last 3 AI messages
+  const recentAIMessages = conversationHistory
+    .filter((msg) => msg.sender === "ai")
+    .slice(-3)
+    .map((msg) => msg.content.toLowerCase().trim());
+
+  if (recentAIMessages.length === 0) {
+    return { isRepetitive: false };
+  }
+
+  const proposedLower = proposedResponse.toLowerCase().trim();
+
+  // Check for exact or near-exact repetition
+  for (const prevMessage of recentAIMessages) {
+    // Exact match
+    if (prevMessage === proposedLower) {
+      console.warn("🚫 EXACT REPETITION DETECTED!");
+      return { isRepetitive: true, lastAIMessage: prevMessage };
+    }
+
+    // Similar match (>80% overlap)
+    const similarity = calculateSimilarity(proposedLower, prevMessage);
+    if (similarity > 0.8) {
+      console.warn(
+        `🚫 SIMILAR REPETITION DETECTED! (${(similarity * 100).toFixed(
+          0
+        )}% match)`
+      );
+      return { isRepetitive: true, lastAIMessage: prevMessage };
+    }
+  }
+
+  // Check if asking same question again
+  const questionPatterns = [
+    /are you available/i,
+    /what time works/i,
+    /which day/i,
+    /when (are|can|would) you/i,
+    /could you (share|tell|provide)/i,
+  ];
+
+  const lastAIMessage = recentAIMessages[recentAIMessages.length - 1];
+
+  for (const pattern of questionPatterns) {
+    const proposedHasQuestion = pattern.test(proposedResponse);
+    const lastHadQuestion = pattern.test(lastAIMessage);
+
+    if (proposedHasQuestion && lastHadQuestion) {
+      console.warn(`🚫 REPEATED QUESTION DETECTED: ${pattern}`);
+      return { isRepetitive: true, lastAIMessage };
+    }
+  }
+
+  return { isRepetitive: false };
+}
+
+// ✅ Helper: Calculate text similarity (Levenshtein-based)
+function calculateSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+
+  if (longer.length === 0) return 1.0;
+
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+}
+
+// ✅ Helper: Levenshtein distance
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[str2.length][str1.length];
+}
+
+// ✅ NEW: Extract lead's stated timeline from conversation
+function extractLeadTimeline(conversationHistory: any[]): {
+  hasTimeline: boolean;
+  timelineType:
+    | "immediate"
+    | "soon"
+    | "months"
+    | "next-year"
+    | "flexible"
+    | "unknown";
+  rawTimeline: string;
+} {
+  // Get all lead messages
+  const leadMessages = conversationHistory
+    .filter((msg) => msg.sender === "lead")
+    .map((msg) => msg.content.toLowerCase())
+    .join(" ");
+
+  // Timeline patterns (from most to least urgent)
+  const immediatePatterns = [
+    /asap/i,
+    /urgent/i,
+    /immediately/i,
+    /right away/i,
+    /as soon as possible/i,
+    /this week/i,
+    /next week/i,
+    /within.*\d+.*week/i,
+  ];
+
+  const soonPatterns = [
+    /in.*month/i,
+    /next month/i,
+    /1-2 months/i,
+    /2-3 months/i,
+    /couple.*months/i,
+  ];
+
+  const monthsPatterns = [
+    /\d+-\d+.*months/i, // "6-8 months"
+    /in.*\d+.*months/i, // "in 6 months"
+    /few months/i,
+    /several months/i,
+    /half.*year/i,
+  ];
+
+  const nextYearPatterns = [
+    /next year/i,
+    /2026/i,
+    /in a year/i,
+    /maybe.*year/i,
+  ];
+
+  const flexiblePatterns = [
+    /no rush/i,
+    /flexible/i,
+    /just browsing/i,
+    /just looking/i,
+    /getting quotes/i,
+    /planning stage/i,
+  ];
+
+  // Check patterns in order of urgency
+  if (immediatePatterns.some((p) => p.test(leadMessages))) {
+    const match = leadMessages.match(
+      /(asap|urgent|this week|next week|within.*week)/i
+    );
+    return {
+      hasTimeline: true,
+      timelineType: "immediate",
+      rawTimeline: match ? match[0] : "immediate",
+    };
+  }
+
+  if (soonPatterns.some((p) => p.test(leadMessages))) {
+    const match = leadMessages.match(/(in.*month|next month|\d+-\d+.*month)/i);
+    return {
+      hasTimeline: true,
+      timelineType: "soon",
+      rawTimeline: match ? match[0] : "in a month",
+    };
+  }
+
+  if (monthsPatterns.some((p) => p.test(leadMessages))) {
+    const match = leadMessages.match(
+      /(\d+-\d+.*months|in.*\d+.*months|few months)/i
+    );
+    return {
+      hasTimeline: true,
+      timelineType: "months",
+      rawTimeline: match ? match[0] : "several months",
+    };
+  }
+
+  if (nextYearPatterns.some((p) => p.test(leadMessages))) {
+    const match = leadMessages.match(/(next year|2026|in a year)/i);
+    return {
+      hasTimeline: true,
+      timelineType: "next-year",
+      rawTimeline: match ? match[0] : "next year",
+    };
+  }
+
+  if (flexiblePatterns.some((p) => p.test(leadMessages))) {
+    const match = leadMessages.match(/(no rush|flexible|planning stage)/i);
+    return {
+      hasTimeline: true,
+      timelineType: "flexible",
+      rawTimeline: match ? match[0] : "flexible timeline",
+    };
+  }
+
+  return {
+    hasTimeline: false,
+    timelineType: "unknown",
+    rawTimeline: "",
+  };
+}
+
 export async function generateAIResponse(
   conversationHistory: any[],
   leadData: any,
@@ -640,6 +892,95 @@ export async function generateAIResponse(
       }
     }
 
+    // ============================================
+    // ✅ STEP 1: ANALYZE CONTEXT FIRST (BEFORE PROMPT)
+    // ============================================
+
+    const lastLeadMessage =
+      conversationHistory.filter((msg) => msg.sender === "lead").slice(-1)[0]
+        ?.content || "";
+
+    const lastAIQuestion =
+      conversationHistory.filter((msg) => msg.sender === "ai").slice(-1)[0]
+        ?.content || "";
+
+    // ✅ Extract timeline from conversation
+    const timeline = extractLeadTimeline(conversationHistory);
+
+    // Detect if lead changed their preferred time
+    const timeChange = detectTimeChange(conversationHistory);
+
+    console.log("📊 Context Analysis:");
+    console.log(`   Last AI asked: "${lastAIQuestion.substring(0, 80)}..."`);
+    console.log(`   Lead responded: "${lastLeadMessage}"`);
+    console.log(
+      `   Lead timeline: ${timeline.timelineType} (${timeline.rawTimeline})`
+    );
+
+    // ✅ NEW: Log time change detection
+    if (timeChange.hasChange) {
+      console.log(`   ⚠️ TIME CHANGE DETECTED!`);
+      console.log(`      Original: ${timeChange.originalTime}`);
+      console.log(`      Changed to: ${timeChange.newTime}`);
+      console.log(
+        `      Change indicators: ${timeChange.changeIndicators.join(", ")}`
+      );
+    }
+
+    // ✅ Generate timeline-appropriate messaging
+    let timelineGuidance = "";
+    if (timeline.hasTimeline) {
+      switch (timeline.timelineType) {
+        case "immediate":
+          timelineGuidance = `\n\n⏰ TIMELINE: Lead said "${timeline.rawTimeline}" - URGENT. Offer meeting today/tomorrow.`;
+          break;
+        case "soon":
+          timelineGuidance = `\n\n⏰ TIMELINE: Lead said "${timeline.rawTimeline}" - offer meeting this/next week.`;
+          break;
+        case "months":
+          timelineGuidance = `\n\n⏰ TIMELINE: Lead said "${timeline.rawTimeline}" - DON'T push for immediate meeting. Offer to discuss plans now, meet closer to start date.`;
+          break;
+        case "next-year":
+          timelineGuidance = `\n\n⏰ TIMELINE: Lead said "${timeline.rawTimeline}" - DON'T suggest "today or tomorrow". Keep conversation light, offer to connect in a few months.`;
+          break;
+        case "flexible":
+          timelineGuidance = `\n\n⏰ TIMELINE: Lead said "${timeline.rawTimeline}" - No rush. Provide value, offer meeting when ready.`;
+          break;
+      }
+    }
+
+    // Add time change awareness
+if (timeChange.hasChange) {
+  timelineGuidance += `\n\n🔄 TIME CHANGE: Lead originally said "${timeChange.originalTime}" but changed to "${timeChange.newTime}". Use the NEW time (${timeChange.newTime}), NOT the old one!`;
+}
+
+    // Detect if lead just answered a scheduling question
+    const schedulingAnswerPatterns = [
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      /\b(today|tomorrow|next week|this week)\b/i,
+      /\b\d{1,2}\s*(am|pm|AM|PM)\b/,
+      /\b(morning|afternoon|evening)\b/i,
+    ];
+
+    const leadJustAnsweredScheduling = schedulingAnswerPatterns.some(
+      (pattern) => pattern.test(lastLeadMessage)
+    );
+
+    const aiJustAskedScheduling =
+      /are you available|what time|which day|when (can|would|are)/i.test(
+        lastAIQuestion
+      );
+
+    if (leadJustAnsweredScheduling && aiJustAskedScheduling) {
+      console.log(
+        "✅ Lead just answered scheduling question - must acknowledge and move forward"
+      );
+    }
+
+    // ============================================
+    // ✅ STEP 2: NOW CREATE PROMPT (AFTER CONTEXT)
+    // ============================================
+
     const conversationText = conversationHistory
       .map((msg) => {
         const sender =
@@ -664,178 +1005,150 @@ export async function generateAIResponse(
       ? `\n\n🚨 CRITICAL: This lead already has a PENDING BOOKING scheduled. 
 DO NOT ask to schedule again or offer meeting times!
 Instead, acknowledge the booking: "Great! Our team will send you the meeting details shortly." or move the conversation forward.`
-      : '';
+      : "";
 
-      const daySuggestionsText = daySuggestions || 'this week'
+    const daySuggestionsText = daySuggestions || "this week";
 
     const prompt = `You are a professional construction project manager for ${
       clientData?.name || "a construction company"
     }. You're chatting on WhatsApp with a potential client.
-    ${bookingAwareness}
+${bookingAwareness}
 
-CRITICAL RULES:
-1. **Read the ENTIRE conversation** - See what YOU already said and what THEY responded
-2. **Never repeat yourself** - Don't ask questions you already asked
-3. **Acknowledge their answers** - If they answered your question, confirm and move forward
-4. **Pattern Recognition** - If you see this pattern, you're repeating yourself:
-   - You: "Are you available today or tomorrow?"
-   - Them: "November 4th"
-   - You: "What time?"
-   - Them: "2 PM"
-   - You: ❌ "Are you available today or tomorrow?" ← NEVER DO THIS!
-   - You: ✅ "Perfect! November 4 at 2 PM..." ← DO THIS INSTEAD!
-5. **Be concise** - 2-3 sentences MAX for WhatsApp (use line breaks)
-6. **Professional tone** - Friendly but business-appropriate (minimal emojis for B2B)
-7. **Move forward** - Each message should progress the conversation toward a meeting
-8. **Smart scheduling** - Use "${daySuggestionsText}" for day suggestions (contextually appropriate)
+CONVERSATION HISTORY:
+${conversationText}
+${lastAIMessageText}
 
-**CONVERSATION FLOW RULES:**
-
-**IF you asked: "Are you available [days]?"**
-AND they answered with: "November 4th" or specific day
-→ NEVER ask about availability again
-→ Instead say: "Great! November 4th it is. What time works for you?"
-
-**IF you asked: "What time works?"**
-AND they answered with: "2 PM" or "afternoon"
-→ NEVER ask about time or availability again
-→ Instead say: "Perfect! November 4 at 2 PM. Let me get your details..."
-
-**IF they said: "I'm not available this week"**
-→ NEVER suggest "today or tomorrow" again
-→ NEVER say "Are you available this week"
-→ Instead focus on their available dates only
-
-**RED FLAGS - If you're about to say any of these, STOP:**
-❌ "Are you available today or tomorrow?" (if they already answered)
-❌ "What time works?" (if they already told you)
-❌ "Let's schedule a meeting" (if you already asked)
-❌ Any question you already asked in this conversation
-
-**GREEN FLAGS - Good responses:**
-✅ "Perfect! [Repeat their answer] - let me get your details"
-✅ "Great, November 4 at 2 PM works. What's your address?"
-✅ Acknowledging what they said before moving forward
-
-YOUR EXPERTISE:
-- 10+ years in commercial & residential construction
-- Experience with projects from $1M to $50M+
-- Specialties: Commercial buildings, residential developments, fit-outs
-
-CONVERSATION SO FAR:
-${conversationText}${lastAIMessageText}
-
-RESPONSE STRATEGY:
-
-**If they just said "Hello" or vague inquiry:**
-→ Warm greeting + Ask for: project type, location, budget, timeline
-
-**If they provided details:**
-→ Acknowledge EVERY specific detail they shared (budget, location, timeline, type)
-→ Show relevant experience: "We've done similar projects in [location]"
-→ Offer meeting: "Are you available ${daySuggestionsText}?"
-→ NEVER suggest days that have already passed or today if it's evening
-
-**If they said vague timing ("this week", "next week", "soon"):**
-→ "Perfect! Which day works best? I have availability ${daySuggestionsText}."
-→ DO NOT ask other questions until day is confirmed
-
-**If they confirmed a specific day ("Thursday", "Friday", "November 1", "next Monday"):**
-→ Confirm: "Perfect! Let's schedule for [day]. What time works for you - morning or afternoon?"
-→ DO NOT say "I'll send invite" until time is confirmed
-
-**If they confirmed day + time ("Thursday at 2 PM"):**
-→ STOP asking scheduling questions
-→ Instead say: "Perfect, I have you down for preliminary availability [day] at [time]."
-→ Then ask: "What's the specific address for the site visit?"
-
-**If they confirmed day + time + address:**
-→ "Great! Before I finalize, what's your full name and email for the calendar invite?"
-
-**If they're hesitant or shopping around:**
-→ Provide value: mention similar project timelines/outcomes
-→ Soft push toward meeting: "No commitment needed, just want to see the site and give you accurate numbers"
-
-HOT LEAD SIGNALS (score 0.7+):
-- Budget $3M+ mentioned
-- Urgency: "ASAP", "need to start soon", "choosing contractor this week"
-- Decision maker: "I own", "I decide", "my company"
-- Ready to meet: "when can we meet", "I'm available Thursday"
-
-TONE GUIDELINES:
-- Professional but conversational
-- Confident but not pushy
-- Use emojis sparingly (one per message max, only for emphasis)
-- For B2B projects ($3M+): minimal emojis, more professional
-- Show expertise through specifics, not buzzwords
-
-CRITICAL - AVOID THESE MISTAKES:
-- ❌ Asking same question twice
-- ❌ Asking to schedule when booking already pending
-- ❌ Repeating information already shared
-- ❌ Asking multiple scheduling questions when they just confirmed
-- ❌ Generic responses: "we offer construction services" (too vague)
-- ❌ Suggesting past days: "Are you free yesterday?" (use ${daySuggestionsText})
-
-**REAL CONVERSATION EXAMPLES - LEARN FROM THESE:**
-
-❌ **BAD Example (DON'T DO THIS):**
-You: "Are you available today or tomorrow?"
-Customer: "No, November 4th."
-You: "What time?"
-Customer: "2 PM"
-You: "We offer construction services. Are you available today or tomorrow?" ← WRONG!
-
-✅ **GOOD Example (DO THIS):**
-You: "Are you available today or tomorrow?"
-Customer: "No, November 4th."
-You: "Great! What time on November 4th?"
-Customer: "2 PM"
-You: "Perfect! November 4 at 2 PM. What's the address for the site visit?" ← RIGHT!
-
-❌ **BAD Example (DON'T DO THIS):**
-Customer: "I'm not available this week, only November onwards"
-You: "Are you available today or tomorrow to discuss?" ← IGNORED THEIR ANSWER!
-
-✅ **GOOD Example (DO THIS):**
-Customer: "I'm not available this week, only November onwards"
-You: "Understood! What day in November works best for you?" ← ACKNOWLEDGED!
-
-**MEMORY CHECK - Before sending your response:**
-1. Did they already answer this question? → Don't ask again
-2. Did they say they're NOT available (this week/today)? → Don't suggest it again
-3. Did I acknowledge their specific answer? → If not, fix it
-4. Am I moving the conversation forward? → If not, you're stuck
-
-REMEMBER: 
-- They just sent: "${
+LEAD JUST SENT: "${
       conversationHistory[conversationHistory.length - 1]?.content
     }"
-- Respond to THAT specific message, don't repeat yourself
+${timelineGuidance}
 
-Respond naturally (2-3 sentences max):`;
+**YOUR TASK:**
+Read the FULL conversation above. See what YOU already asked and what THEY already answered.
 
+**CRITICAL RULES:**
+1. ❌ NEVER repeat a question you already asked
+2. ❌ NEVER ignore their answer (if they said "Thursday", don't ask "When are you available?")
+3. ❌ NEVER suggest times they said they're NOT available
+4. ✅ ALWAYS acknowledge their specific answer first
+5. ✅ ALWAYS move the conversation forward
 
+**RESPONSE STRATEGY:**
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an experienced construction project manager. Read the full conversation. Never repeat yourself. Acknowledge what was said. Keep responses ultra-concise for WhatsApp (2-3 sentences). Move toward scheduling. NEVER ask to schedule if booking pending.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.5,
-      max_tokens: 150,
-    });
+**TIME CHANGE HANDLING:**
+IF lead said "9 AM" then later "afternoon is better" → Use afternoon (2 PM), NOT 9 AM
+IF lead said "morning" then later "3 PM" → Use 3 PM, NOT morning time
+IF they changed their mind → ALWAYS acknowledge: "Perfect! Let's do [NEW TIME] instead."
+❌ NEVER confirm the OLD time they changed from
+
+**TIMELINE-BASED APPROACH:**
+IF lead said "ASAP" or "urgent" or "this week" → Offer meeting today/tomorrow
+IF lead said "in a month" or "next month" → Offer meeting this/next week
+IF lead said "6-8 months" or "several months" → Say "Great! Let's discuss your plans now. We can schedule a detailed site visit closer to your start date."
+IF lead said "next year" → Say "Perfect! I'll make a note. Feel free to reach out when you're closer to starting. Happy to answer questions in the meantime."
+IF lead said "no rush" or "flexible" → Say "No problem! Take your time. Let me know when you'd like to discuss further."
+
+**CRITICAL TIMELINE RULE:**
+- ❌ NEVER suggest "today or tomorrow" if they said "next year"
+- ❌ NEVER push for immediate meeting if they said "6-8 months"
+- ✅ ALWAYS match your urgency to THEIR timeline
+
+IF they just answered your question → Acknowledge it and ask next question
+IF they said "Thursday 2 PM" → Say "Perfect! Thursday at 2 PM. What's your address?"
+IF they said "I'm not available this week" → Ask about NEXT week, NOT this week
+IF they're vague ("maybe", "ok") → Ask clarifying question about their project
+IF you asked "Are you available X?" and they answered → DON'T ask about availability again
+
+**TONE:**
+- Professional but conversational
+- 2-3 sentences max
+- Use "${daySuggestionsText}" when suggesting meeting days
+- Minimal emojis (1 per message max)
+
+**EXAMPLES:**
+
+✅ GOOD:
+You: "Are you available this week?"
+Them: "Thursday works"
+You: "Great! What time on Thursday?" ← ACKNOWLEDGE + NEXT STEP
+
+❌ BAD:
+You: "Are you available this week?"
+Them: "Thursday works"
+You: "Are you available this week?" ← REPEATED QUESTION
+
+Respond naturally (2-3 sentences):`;
+
+    // ============================================
+    // ✅ STEP 3: RETRY LOOP (AFTER PROMPT)
+    // ============================================
+
+    let attempts = 0;
+    let aiResponse = "";
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are an experienced construction project manager with PERFECT MEMORY.
+
+CRITICAL MEMORY RULES:
+1. You REMEMBER every question you asked
+2. You REMEMBER every answer they gave
+3. You NEVER ask the same question twice
+4. You ALWAYS acknowledge their answer before moving forward
+
+EXAMPLES OF GOOD MEMORY:
+- If you asked "Are you available Thursday?" and they said "Yes, 2 PM"
+  → You say "Perfect! Thursday at 2 PM. What's your address?"
+  → You DO NOT ask "Are you available Thursday?" again
+
+- If they said "I'm not available this week"
+  → You ask about next week, NOT this week again
+
+Keep responses ultra-concise for WhatsApp (2-3 sentences).`,
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.5 + attempts * 0.1,
+        max_tokens: 150,
+      });
+
+      aiResponse = response.choices[0].message.content || "";
+
+      const repetitionCheck = isRepetitiveResponse(
+        aiResponse,
+        conversationHistory
+      );
+
+      if (!repetitionCheck.isRepetitive) {
+        console.log(
+          `✅ Non-repetitive response generated (attempt ${attempts})`
+        );
+        break;
+      }
+
+      console.warn(
+        `⚠️ Attempt ${attempts}: Repetitive response detected, retrying...`
+      );
+
+      if (attempts === maxAttempts) {
+        console.error("❌ All retry attempts exhausted, using fallback");
+        aiResponse =
+          "Thanks for that information! Let me connect you with our team to discuss your project in detail. They'll be in touch shortly.";
+      }
+    }
 
     return (
-      response.choices[0].message.content ||
+      aiResponse ||
       "Thank you for your message! A team member will respond shortly."
     );
   } catch (error) {
@@ -856,6 +1169,77 @@ export interface BookingIntent {
   location?: string;
   meetingType?: "site-visit" | "consultation" | "follow-up";
   reasoning: string;
+}
+
+// ✅ NEW: Detect if lead changed their preferred time
+function detectTimeChange(conversationHistory: any[]): {
+  hasChange: boolean;
+  originalTime?: string;
+  newTime?: string;
+  changeIndicators: string[];
+} {
+  const leadMessages = conversationHistory
+    .filter((msg) => msg.sender === "lead")
+    .map((msg) => msg.content);
+
+  const timeChangeIndicators = [
+    /actually/i,
+    /instead/i,
+    /change/i,
+    /different time/i,
+    /rather/i,
+    /prefer/i,
+    /better/i,
+    /how about/i,
+    /what about/i,
+    /can we do/i,
+  ];
+
+  const changes: string[] = [];
+  let hasChange = false;
+  let originalTime: string | undefined;
+  let newTime: string | undefined;
+
+  // Look for time mentions
+  const timePattern = /\b(\d{1,2})\s*(am|pm|AM|PM|a\.m\.|p\.m\.)\b/g;
+  const timeOfDayPattern = /\b(morning|afternoon|evening)\b/i;
+
+  let firstTimeMention: string | undefined;
+  let lastTimeMention: string | undefined;
+
+  for (let i = 0; i < leadMessages.length; i++) {
+    const message = leadMessages[i];
+    const timeMatch = message.match(timePattern);
+    const timeOfDayMatch = message.match(timeOfDayPattern);
+
+    if (timeMatch || timeOfDayMatch) {
+      const extractedTime = timeMatch ? timeMatch[0] : timeOfDayMatch![0];
+
+      if (!firstTimeMention) {
+        firstTimeMention = extractedTime;
+      }
+      lastTimeMention = extractedTime;
+
+      // Check if this message contains change indicators
+      const hasChangeIndicator = timeChangeIndicators.some((indicator) =>
+        indicator.test(message)
+      );
+
+      if (hasChangeIndicator && firstTimeMention) {
+        hasChange = true;
+        changes.push(message);
+        originalTime = firstTimeMention;
+        newTime = lastTimeMention;
+      }
+    }
+  }
+
+  return {
+    hasChange,
+    originalTime,
+    newTime,
+    changeIndicators: changes,
+  };
 }
 
 export async function detectBookingIntent(
@@ -907,15 +1291,50 @@ ${conversationText}
 **EXTRACT IF MENTIONED:**
 - Specific date/day: "Thursday", "Friday", "November 15", "next Monday"
 - Specific time: MUST PRESERVE AM/PM exactly as stated
-  * "9AM" → extract as "9 AM"
-  * "9 AM" → extract as "9 AM"  
-  * "2PM" → extract as "2 PM"
-  * "afternoon" → extract as "2 PM" (default afternoon time)
-  * "morning" → extract as "10 AM" (default morning time)
-  * CRITICAL: If lead says "9AM should work" → time is "9 AM" NOT "2 PM" or any other time
-  * ALWAYS use the EXACT time the customer mentioned, not a default
+  * CRITICAL: Use the MOST RECENT time mentioned by customer
+  * If customer says "9 AM" then later "actually 3 PM", use "3 PM"
+  * If customer says "morning works" then later "afternoon is better", use "2 PM"
+  * ALWAYS extract the LAST time mentioned, not the first
 - Location/address: Complete address if mentioned
 - Meeting type: "site visit" vs "consultation"
+
+**TIME CHANGE DETECTION - CRITICAL:**
+
+Scan the ENTIRE conversation from START to END. If customer mentions multiple times, use the LAST one mentioned.
+
+**STEP-BY-STEP TIME EXTRACTION:**
+1. Read ALL customer messages from first to last
+2. Note EVERY time mentioned
+3. If customer uses words like "actually", "instead", "change", "better" → they're changing their mind
+4. ALWAYS use the MOST RECENT time mentioned
+
+**REAL EXAMPLES:**
+
+Example 1: Time Change
+Customer (message 1): "9AM should work"
+Customer (message 2): "Actually, can we do afternoon instead?"
+Customer (message 3): "3 PM is better"
+→ EXTRACT: time = "3 PM" ✅ (LATEST mention, not "9 AM")
+
+Example 2: Time Change with "instead"
+Customer (message 1): "Morning works, 10 AM"
+Customer (message 2): "Wait, afternoon is better instead"
+→ EXTRACT: time = "2 PM" ✅ (changed to afternoon)
+
+Example 3: Time Refinement
+Customer (message 1): "afternoon"
+Customer (message 2): "3 PM specifically"
+→ EXTRACT: time = "3 PM" ✅ (more specific time)
+
+Example 4: NO Change (just confirmation)
+Customer (message 1): "2 PM works"
+Agent: "Great, 2 PM on Thursday?"
+Customer (message 2): "Yes"
+→ EXTRACT: time = "2 PM" ✅ (confirmed, not changed)
+
+**WRONG EXAMPLES:**
+❌ Customer says "9 AM" then "3 PM is better" → Extracting "9 AM" (WRONG! Use "3 PM")
+❌ Customer says "morning" then "afternoon instead" → Extracting "10 AM" (WRONG! Use "2 PM")
 
 **TIME EXTRACTION EXAMPLES:**
 ✅ Customer: "9AM should work" → time: "9 AM"
@@ -945,7 +1364,7 @@ Respond with JSON only:
         {
           role: "system",
           content:
-            "You are a booking intent analyzer. Respond only with valid JSON. Be STRICT about isConfirmed - requires BOTH date AND time. CRITICAL: Extract the EXACT time the customer mentioned (preserve AM/PM). If customer says '9AM', extract '9 AM' NOT any other time.",
+            "You are a booking intent analyzer with PERFECT CHRONOLOGICAL AWARENESS. Respond only with valid JSON. Be STRICT about isConfirmed - requires BOTH date AND time. CRITICAL TIME EXTRACTION RULES: 1) Read the ENTIRE conversation chronologically, 2) If customer mentions multiple times, ALWAYS use the LAST/MOST RECENT time mentioned, 3) Look for change indicators like 'actually', 'instead', 'better', 'change', 4) If customer says '9AM' then later says '3 PM is better', extract '3 PM' NOT '9 AM'. Your job is to extract the FINAL, MOST RECENT time preference.",
         },
         { role: "user", content: prompt },
       ],
