@@ -47,20 +47,65 @@ function hasNonConstructionKeywords(message: string): boolean {
 
   // ✅ CRITICAL: Check for CONSTRUCTION CONTEXT first
   const constructionIndicators = [
+    // Kitchen/Restaurant Construction
     "kitchen renovation",
     "restaurant kitchen",
     "commercial kitchen",
     "kitchen remodel",
-    "warehouse",
+    "kitchen build",
+    "kitchen build out",
+    "kitchen buildout",
+
+    // Core Construction Terms
+    "build a house",
+    "build a home",
+    "build house",
+    "build home",
+    "home construction",
+    "house construction",
     "building",
     "construction",
+    "construct",
+
+    // Renovation/Remodel
     "renovation",
+    "renovation project",
     "remodel",
+    "remodeling",
+    "renovate",
+
+    // Specific Projects
+    "warehouse",
+    "deck",
+    "deck construction",
+    "deck addition",
+    "garage build",
+    "garage construction",
+
+    // Build-Out
+    "built out",
+    "build out",
+    "buildout",
+    "build-out",
+    "space build out",
+
+    // Trade/Technical
+    "MEP",
+    "MEP work",
+    "mechanical electrical plumbing",
+    "hvac",
+    "ventilation",
+    "gas lines",
+    "electrical work",
+    "plumbing work",
+
+    // General
     "site visit",
     "contractor",
     "build",
     "repair",
     "install",
+    "structural work",
   ];
 
   // If message contains construction context, DON'T mark as spam
@@ -82,7 +127,6 @@ function hasNonConstructionKeywords(message: string): boolean {
     "order food",
     "meal delivery",
     "catering",
-    "bakery",
     "coffee shop order",
 
     // Retail Products (specific items)
@@ -251,18 +295,44 @@ export async function classifyIntent(
   clientData: any
 ): Promise<IntentClassification> {
   try {
+
+    // ✅ NEW: IMMEDIATE CONSTRUCTION OVERRIDE
+    // If message clearly contains construction terms, mark as relevant immediately
+    const obviousConstructionTerms = [
+      "build a house",
+      "build a home",
+      "construction",
+      "renovation project",
+      "deck construction",
+      "MEP work",
+      "built out",
+      "build out",
+      "contractor",
+      "site visit",
+      "commercial kitchen",
+    ];
+
+    const lowerMessage = message.toLowerCase();
+    if (obviousConstructionTerms.some(term => lowerMessage.includes(term))) {
+      console.log("✅ IMMEDIATE CONSTRUCTION MATCH:", message);
+      return {
+        isRelevant: true,
+        intent: "construction",
+        confidence: 0.95,
+        reasoning: "Message contains explicit construction terminology",
+      };
+    }
+
     // First message spam detection (Proactive)
     if (conversationHistory.length <= 2) {
       const firstMessageSpamIndicators = [
         /test\s*test/i,
         /hello\s*hello/i,
         /hi\s*hi/i,
-        /^(ok|okay|k)$/i, // Single word responses
-        /^[0-9]+$/, // Just numbers
-        /^.{1,3}$/, // Very short messages (1-3 chars)
-        /^(yes|no|yeah|nope)$/i, // One-word yes/no
+        /^(ok|okay|k)$/i, 
+        /^[0-9]+$/, 
+        /^(yes|no|yeah|nope)$/i, 
       ];
-
       for (const indicator of firstMessageSpamIndicators) {
         if (indicator.test(message.trim())) {
           console.log("🚫 Proactive: First message spam detected:", message);
@@ -366,6 +436,12 @@ LATEST MESSAGE: "${message}"
 ✅ Materials for construction (cement, steel, etc.)
 ✅ Construction equipment rental
 ✅ Permits, licensing, compliance
+✅ "I want to build a house" → RELEVANT ✅
+✅ "Need deck construction" → RELEVANT ✅
+✅ "Renovation project" → RELEVANT ✅
+✅ "MEP work for bakery" → RELEVANT ✅ (construction service)
+✅ "Cloud kitchen build-out" → RELEVANT ✅ (construction project)
+✅ "Restaurant kitchen + ventilation + gas lines" → RELEVANT ✅ (construction)
 
 **NOT RELEVANT (mark as unrelated):**
 ❌ Food & beverages (burger, pizza, fries, restaurant, food delivery, meal orders)
@@ -848,10 +924,10 @@ export async function generateAIResponse(
 
       console.log("🎯 Response Intent Check:", intentClassification);
 
-      // Lower confidence threshold from 0.7 to 0.6
+      // Lower confidence threshold from 0.85
       if (
         !intentClassification.isRelevant &&
-        intentClassification.confidence > 0.6
+        intentClassification.confidence > 0.85
       ) {
         console.log("❌ Generating redirect response for off-topic inquiry");
 
@@ -950,9 +1026,9 @@ export async function generateAIResponse(
     }
 
     // Add time change awareness
-if (timeChange.hasChange) {
-  timelineGuidance += `\n\n🔄 TIME CHANGE: Lead originally said "${timeChange.originalTime}" but changed to "${timeChange.newTime}". Use the NEW time (${timeChange.newTime}), NOT the old one!`;
-}
+    if (timeChange.hasChange) {
+      timelineGuidance += `\n\n🔄 TIME CHANGE: Lead originally said "${timeChange.originalTime}" but changed to "${timeChange.newTime}". Use the NEW time (${timeChange.newTime}), NOT the old one!`;
+    }
 
     // Detect if lead just answered a scheduling question
     const schedulingAnswerPatterns = [

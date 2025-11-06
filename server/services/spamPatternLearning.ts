@@ -25,26 +25,36 @@ class SpamPatternLearning {
    * Initialize and load patterns from database
    */
   async initialize() {
-  if (this.initialized) return;
+    if (this.initialized) return;
 
-  try {
-    const savedPatterns = await storage.getSpamPatterns();
-    
-    // ✅ LOAD ALL PATTERNS from database
-    savedPatterns.forEach((p) => this.patterns.set(p.pattern, p));
-    
-    // ✅ COUNT high-quality patterns for reporting
-    const highQualityCount = savedPatterns.filter(
-      p => parseFloat(p.confidence) >= 0.5 && p.detectionCount >= this.MIN_DETECTIONS
-    ).length;
-    
-    console.log(`📚 Loaded ${this.patterns.size} spam patterns from database (${highQualityCount} high-quality, ${this.patterns.size - highQualityCount} learning)`);
-    this.initialized = true;
-  } catch (error) {
-    console.error("❌ Failed to load spam patterns:", error);
-    this.initialized = true; // Continue anyway
+    try {
+      const savedPatterns = await storage.getSpamPatterns();
+
+      // ✅ LOAD ALL PATTERNS from database
+      savedPatterns.forEach((p) => this.patterns.set(p.pattern, p));
+
+      // ✅ COUNT high-quality patterns for reporting
+      const highQualityCount = savedPatterns.filter(
+        (p) =>
+          parseFloat(p.confidence) >= 0.5 &&
+          p.detectionCount >= this.MIN_DETECTIONS
+      ).length;
+
+      console.log(
+        `📚 Loaded ${
+          this.patterns.size
+        } spam patterns from database (${highQualityCount} high-quality, ${
+          this.patterns.size - highQualityCount
+        } learning)`
+      );
+      // ✅ NEW: Clean any construction patterns that were wrongly learned
+      await this.cleanConstructionPatterns();
+      this.initialized = true;
+    } catch (error) {
+      console.error("❌ Failed to load spam patterns:", error);
+      this.initialized = true; // Continue anyway
+    }
   }
-}
 
   /**
    * Check if message matches learned spam patterns
@@ -58,6 +68,40 @@ class SpamPatternLearning {
     await this.ensureInitialized();
 
     const lowerMessage = message.toLowerCase();
+
+    // ✅ NEW: CONSTRUCTION WHITELIST - Never mark these as spam
+    const constructionWhitelist = [
+      "build a house",
+      "build a home",
+      "construction",
+      "renovation",
+      "renovation project",
+      "remodel",
+      "contractor",
+      "build out",
+      "built out",
+      "buildout",
+      "deck",
+      "garage",
+      "warehouse",
+      "commercial kitchen",
+      "restaurant kitchen",
+      "kitchen renovation",
+      "MEP",
+      "MEP work",
+      "ventilation",
+      "gas lines",
+      "electrical work",
+      "plumbing",
+      "structural",
+      "site visit",
+    ];
+
+    // ✅ If message contains ANY construction terms, bypass spam check
+    if (constructionWhitelist.some((term) => lowerMessage.includes(term))) {
+      console.log("✅ Construction whitelist bypass:", message);
+      return { isSpam: false, confidence: 0 };
+    }
 
     for (const [pattern, data] of Array.from(this.patterns.entries())) {
       const confidence = parseFloat(data.confidence);
@@ -90,6 +134,43 @@ class SpamPatternLearning {
     await this.ensureInitialized();
 
     console.log(`🧠 Learning from spam: "${message}" [${category}]`);
+
+    // ✅ NEW: PREVENT LEARNING CONSTRUCTION TERMS AS SPAM
+    const constructionWhitelist = [
+      "build a house",
+      "build a home",
+      "construction",
+      "renovation",
+      "renovation project",
+      "remodel",
+      "contractor",
+      "build out",
+      "built out",
+      "buildout",
+      "deck",
+      "garage",
+      "warehouse",
+      "commercial kitchen",
+      "restaurant kitchen",
+      "kitchen renovation",
+      "MEP",
+      "MEP work",
+      "ventilation",
+      "gas lines",
+      "electrical work",
+      "plumbing",
+      "structural",
+      "site visit",
+    ];
+
+    const lowerMessage = message.toLowerCase();
+    if (constructionWhitelist.some((term) => lowerMessage.includes(term))) {
+      console.warn(
+        "⚠️ BLOCKED: Attempted to learn construction term as spam:",
+        message
+      );
+      return; // ✅ Don't learn this pattern
+    }
 
     // Extract potential patterns (2-4 word phrases)
     const words = message.toLowerCase().split(/\s+/);
@@ -162,6 +243,53 @@ class SpamPatternLearning {
   }
 
   /**
+   * Clean up any construction terms that were wrongly learned as spam
+   */
+  async cleanConstructionPatterns() {
+    const constructionTerms = [
+      "build a",
+      "build house",
+      "build home",
+      "construction",
+      "renovation",
+      "remodel",
+      "contractor",
+      "build out",
+      "built out",
+      "deck",
+      "garage",
+      "warehouse",
+      "commercial kitchen",
+      "restaurant kitchen",
+      "kitchen renovation",
+      "mep",
+      "ventilation",
+      "gas lines",
+      "electrical",
+      "plumbing",
+      "structural",
+    ];
+
+    let removedCount = 0;
+    for (const [pattern, data] of Array.from(this.patterns.entries())) {
+      if (constructionTerms.some((term) => pattern.includes(term))) {
+        this.patterns.delete(pattern);
+        removedCount++;
+        console.log(`🧹 Removed construction pattern from spam: "${pattern}"`);
+      }
+    }
+
+    if (removedCount > 0) {
+      console.log(
+        `🧹 Cleaned ${removedCount} construction patterns from spam database`
+      );
+      await this.savePatterns();
+    }
+
+    return removedCount;
+  }
+
+  /**
    * Calculate confidence score based on accuracy, recency, and volume
    */
   private calculateConfidence(pattern: SpamPattern): string {
@@ -219,20 +347,22 @@ class SpamPatternLearning {
 
     try {
       await storage.saveSpamPatterns(patternsArray);
-      
+
       const highQuality = patternsArray.filter(
-        p => parseFloat(p.confidence) >= this.CONFIDENCE_THRESHOLD && 
-             p.detectionCount >= this.MIN_DETECTIONS
+        (p) =>
+          parseFloat(p.confidence) >= this.CONFIDENCE_THRESHOLD &&
+          p.detectionCount >= this.MIN_DETECTIONS
       ).length;
-      
+
       const learning = patternsArray.length - highQuality;
-      
-      console.log(`💾 Saved ${patternsArray.length} patterns (${highQuality} active, ${learning} learning)`);
+
+      console.log(
+        `💾 Saved ${patternsArray.length} patterns (${highQuality} active, ${learning} learning)`
+      );
     } catch (error) {
       console.error("❌ Failed to save spam patterns:", error);
     }
   }
-
 
   /**
    * Get top spam patterns for reporting
