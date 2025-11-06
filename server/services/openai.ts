@@ -295,7 +295,6 @@ export async function classifyIntent(
   clientData: any
 ): Promise<IntentClassification> {
   try {
-
     // ✅ NEW: IMMEDIATE CONSTRUCTION OVERRIDE
     // If message clearly contains construction terms, mark as relevant immediately
     const obviousConstructionTerms = [
@@ -313,7 +312,7 @@ export async function classifyIntent(
     ];
 
     const lowerMessage = message.toLowerCase();
-    if (obviousConstructionTerms.some(term => lowerMessage.includes(term))) {
+    if (obviousConstructionTerms.some((term) => lowerMessage.includes(term))) {
       console.log("✅ IMMEDIATE CONSTRUCTION MATCH:", message);
       return {
         isRelevant: true,
@@ -329,9 +328,9 @@ export async function classifyIntent(
         /test\s*test/i,
         /hello\s*hello/i,
         /hi\s*hi/i,
-        /^(ok|okay|k)$/i, 
-        /^[0-9]+$/, 
-        /^(yes|no|yeah|nope)$/i, 
+        /^(ok|okay|k)$/i,
+        /^[0-9]+$/,
+        /^(yes|no|yeah|nope)$/i,
       ];
       for (const indicator of firstMessageSpamIndicators) {
         if (indicator.test(message.trim())) {
@@ -1003,6 +1002,31 @@ export async function generateAIResponse(
       );
     }
 
+    // ✅ NEW: Extract current proposed time from conversation
+    let currentProposedTime: string | undefined;
+    const bookingMessages = conversationHistory.filter(
+      (msg) =>
+        msg.sender === "lead" &&
+        /\d{1,2}\s*(am|pm|AM|PM)|morning|afternoon|evening/i.test(msg.content)
+    );
+
+    if (bookingMessages.length > 0) {
+      const lastBookingMsg =
+        bookingMessages[bookingMessages.length - 1].content;
+      const timeMatch = lastBookingMsg.match(/\d{1,2}\s*(am|pm|AM|PM)/i);
+      const timeOfDayMatch = lastBookingMsg.match(
+        /\b(morning|afternoon|evening)\b/i
+      );
+
+      if (timeMatch) {
+        currentProposedTime = timeMatch[0];
+      } else if (timeOfDayMatch) {
+        currentProposedTime = timeOfDayMatch[0];
+      }
+
+      console.log(`   🕐 Current proposed time: ${currentProposedTime}`);
+    }
+
     // ✅ Generate timeline-appropriate messaging
     let timelineGuidance = "";
     if (timeline.hasTimeline) {
@@ -1028,6 +1052,11 @@ export async function generateAIResponse(
     // Add time change awareness
     if (timeChange.hasChange) {
       timelineGuidance += `\n\n🔄 TIME CHANGE: Lead originally said "${timeChange.originalTime}" but changed to "${timeChange.newTime}". Use the NEW time (${timeChange.newTime}), NOT the old one!`;
+    }
+
+    // ✅ NEW: Add current time tracking
+    if (currentProposedTime) {
+      timelineGuidance += `\n\n🕐 CURRENT PROPOSED TIME: ${currentProposedTime} - This is the LATEST time mentioned. Use this time, not any previous times!`;
     }
 
     // Detect if lead just answered a scheduling question
@@ -1111,11 +1140,90 @@ Read the FULL conversation above. See what YOU already asked and what THEY alrea
 
 **RESPONSE STRATEGY:**
 
-**TIME CHANGE HANDLING:**
-IF lead said "9 AM" then later "afternoon is better" → Use afternoon (2 PM), NOT 9 AM
-IF lead said "morning" then later "3 PM" → Use 3 PM, NOT morning time
-IF they changed their mind → ALWAYS acknowledge: "Perfect! Let's do [NEW TIME] instead."
-❌ NEVER confirm the OLD time they changed from
+**INFORMATION GATHERING PRIORITY (CRITICAL - DO THIS FIRST):**
+
+STEP 1: Assess what information you already have
+STEP 2: If missing critical details, gather them BEFORE suggesting meetings
+
+**WHEN TO GATHER INFORMATION (NOT schedule):**
+❌ Lead just said: "I want to build a house" → ASK about project details, DON'T ask availability
+❌ Lead just said: "Do you install equipment?" → ASK about project scope, DON'T ask availability
+❌ Lead just said: "I need renovation" → ASK about budget/location/scope, DON'T ask availability
+❌ You have < 3 pieces of info (budget, location, timeline, scope) → GATHER MORE, DON'T schedule
+
+**WHEN TO OFFER MEETINGS (schedule):**
+✅ Lead has shared: Budget + Location + Timeline → NOW you can offer meeting
+✅ Lead has shared: Detailed project scope + timeline → NOW you can offer meeting
+✅ Lead explicitly asks: "When can we meet?" → NOW you can schedule
+✅ You have 3+ key details (budget, location, scope, timeline) → NOW you can offer meeting
+
+**CORRECT EXAMPLES:**
+
+Example 1 - GATHERING PHASE:
+Lead: "I want to build a house"
+You: "Exciting! Could you tell me about your vision - location, approximate budget, and when you're hoping to start?" ✅
+NOT: "Are you available today or tomorrow?" ❌
+
+Example 2 - GATHERING PHASE:
+Lead: "Do you install commercial kitchen equipment?"
+You: "Yes, we handle full commercial kitchen installations. What type of space are you working with, and what's your timeline?" ✅
+NOT: "Would you like to discuss your project today or tomorrow?" ❌
+
+Example 3 - READY TO SCHEDULE:
+Lead: "Surrey, $800k budget, want to start in 4 months"
+You: "Perfect! Would you like to schedule a meeting this week or next to discuss your plans in detail?" ✅
+
+Example 4 - READY TO SCHEDULE:
+Lead: "3M budget, commercial building in Vancouver, need to start in 8 weeks"
+You: "Great! Since you're starting soon, let's arrange a site visit. Are you available this week?" ✅
+
+**NEVER assume availability:**
+- If lead says "Surrey, $800k", they did NOT say "I'm available"
+- Only ask about availability AFTER they've shared project details
+- NEVER say "Since you're available..." if they never mentioned availability
+
+**TIME CHANGE HANDLING (CRITICAL):**
+
+**RULE 1: ALWAYS USE THE MOST RECENT TIME**
+IF lead mentions multiple times, use the LAST one mentioned:
+- Lead: "10 AM" → You: confirm 10 AM ✅
+- Lead: "Actually 2 PM is better" → You: "Perfect! I've updated it to 2 PM" ✅
+- Lead: "Hmm, 4 PM would be even better" → You: "Got it! Let's do 4 PM instead" ✅
+
+**RULE 2: NEVER GET STUCK ON OLD TIMES**
+❌ WRONG:
+Lead: "10 AM"
+Lead: "Actually 2 PM"
+You: "Before I confirm booking for 10 AM..." ← STUCK ON OLD TIME!
+
+✅ CORRECT:
+Lead: "10 AM"
+Lead: "Actually 2 PM"
+You: "Perfect! I've updated it to 2 PM. Let me get your address..." ← USING NEW TIME!
+
+**RULE 3: ACKNOWLEDGE EVERY TIME CHANGE**
+When lead changes time, ALWAYS say:
+- "Perfect! Let's do [NEW TIME] instead."
+- "Got it, I've updated it to [NEW TIME]."
+- "No problem! [NEW TIME] works great."
+
+**RULE 4: IF ALREADY IN BOOKING PROCESS**
+IF you already asked for name/email/address, and lead changes time:
+→ STOP asking for details
+→ ACKNOWLEDGE the new time first
+→ THEN continue with booking details
+
+Example:
+You: "Before I confirm 10 AM, I need your name and email"
+Lead: "Actually, 2 PM is better"
+You: "Perfect! I've updated it to 2 PM. Now, could you provide your name and email?" ✅
+NOT: "Before I confirm 10 AM, I need..." ❌ (ignoring their change)
+
+**IF LEAD CHANGES TIME MULTIPLE TIMES:**
+- 1st change: Acknowledge and update ✅
+- 2nd change: Acknowledge and update ✅
+- 3rd change: Acknowledge and update ✅
+- EVERY time they change, you update. No limit.
 
 **TIMELINE-BASED APPROACH:**
 IF lead said "ASAP" or "urgent" or "this week" → Offer meeting today/tomorrow
@@ -1134,6 +1242,23 @@ IF they said "Thursday 2 PM" → Say "Perfect! Thursday at 2 PM. What's your add
 IF they said "I'm not available this week" → Ask about NEXT week, NOT this week
 IF they're vague ("maybe", "ok") → Ask clarifying question about their project
 IF you asked "Are you available X?" and they answered → DON'T ask about availability again
+
+**TERMINOLOGY RULES (CONSTRUCTION INDUSTRY):**
+✅ ALWAYS use: "meeting", "site visit", "consultation", "discussion"
+❌ NEVER use: "call", "phone call", "chat on the phone"
+
+Construction projects require in-person meetings, not phone calls.
+
+**CORRECT TERMINOLOGY:**
+✅ "Would you like to schedule a meeting?"
+✅ "Let's arrange a site visit to discuss your project"
+✅ "Are you available for a consultation this week?"
+✅ "When would be a good time to meet?"
+
+**WRONG TERMINOLOGY:**
+❌ "Are you available for a call?" ← NEVER say this!
+❌ "Let's schedule a phone call" ← NEVER say this!
+❌ "Can we chat on the phone?" ← NEVER say this!
 
 **TONE:**
 - Professional but conversational
@@ -1169,15 +1294,32 @@ Respond naturally (2-3 sentences):`;
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: `You are an experienced construction project manager with PERFECT MEMORY.
+{
+  role: "system",
+  content: `You are an experienced construction project manager with PERFECT MEMORY and STRICT ACCURACY.
 
 CRITICAL MEMORY RULES:
 1. You REMEMBER every question you asked
 2. You REMEMBER every answer they gave
 3. You NEVER ask the same question twice
 4. You ALWAYS acknowledge their answer before moving forward
+5. You NEVER assume or fabricate context that wasn't stated
+
+**RULE 5 IS CRITICAL:**
+❌ If lead says: "Surrey, $800k budget"
+   DON'T say: "Since you're available today or tomorrow..." ← THEY NEVER SAID THIS!
+   DO say: "Great! Surrey with $800k budget. When are you hoping to start?" ✅
+
+❌ If lead says: "I want to build a house"
+   DON'T say: "Since you mentioned starting soon..." ← THEY NEVER SAID THIS!
+   DO say: "Great! When are you hoping to start?" ✅
+
+**ONLY reference what lead ACTUALLY stated:**
+✅ They said "Surrey" → You can say "in Surrey"
+✅ They said "$800k" → You can say "with $800k budget"
+✅ They said "4 months" → You can say "starting in 4 months"
+❌ They NEVER said "I'm available" → DON'T say "since you're available"
+❌ They NEVER said "urgent" → DON'T say "since it's urgent"
 
 EXAMPLES OF GOOD MEMORY:
 - If you asked "Are you available Thursday?" and they said "Yes, 2 PM"
@@ -1187,8 +1329,13 @@ EXAMPLES OF GOOD MEMORY:
 - If they said "I'm not available this week"
   → You ask about next week, NOT this week again
 
-Keep responses ultra-concise for WhatsApp (2-3 sentences).`,
-          },
+- If they said "Surrey, $800k, starting in 4 months"
+  → You say "Great! Surrey with $800k budget, starting in 4 months. Would you like to schedule a meeting?"
+  → You DO NOT say "Since you're available today..." ← They never said this!
+
+Keep responses ultra-concise for WhatsApp (2-3 sentences).
+Use ONLY information the lead explicitly provided.`
+},
           {
             role: "user",
             content: prompt,
