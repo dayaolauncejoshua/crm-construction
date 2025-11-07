@@ -1473,8 +1473,26 @@ export async function detectBookingIntent(
     console.log("🔍 ========== DETECT BOOKING INTENT ==========");
     console.log(`📊 Processing ${conversationHistory.length} messages`);
 
+    // ✅ CRITICAL: Sort messages chronologically ONCE (oldest to newest)
+    // Database may return them in reverse order
+    const sortedMessages = [...conversationHistory].sort((a, b) => {
+      const timeA = a.sentAt ? new Date(a.sentAt).getTime() : 0;
+      const timeB = b.sentAt ? new Date(b.sentAt).getTime() : 0;
+      return timeA - timeB; // Ascending order (oldest first)
+    });
+
+    console.log("🔄 Messages sorted chronologically:");
+    console.log(
+      `   First (oldest): "${sortedMessages[0]?.content?.substring(0, 50)}..."`
+    );
+    console.log(
+      `   Last (newest): "${sortedMessages[
+        sortedMessages.length - 1
+      ]?.content?.substring(0, 50)}..."`
+    );
+
     // ✅ Extract all times mentioned by customer for logging
-    const customerTimeMentions = conversationHistory
+    const customerTimeMentions = sortedMessages
       .filter((msg) => msg.sender === "lead")
       .map((msg, index) => {
         const timeMatch = msg.content.match(/\d{1,2}\s*[AP]M/i);
@@ -1491,7 +1509,7 @@ export async function detectBookingIntent(
       })
       .filter(Boolean);
 
-    console.log(
+   console.log(
       `⏰ Customer mentioned ${customerTimeMentions.length} time(s):`
     );
     customerTimeMentions.forEach((mention: any) => {
@@ -1503,20 +1521,18 @@ export async function detectBookingIntent(
     if (customerTimeMentions.length > 0) {
       const lastTime = customerTimeMentions[customerTimeMentions.length - 1];
       console.log(
-        `⏰ EXPECTED EXTRACTION: "${
-          lastTime!.extractedTime
-        }" (from most recent message)`
+        `⏰ EXPECTED EXTRACTION: "${lastTime!.extractedTime}" (from most recent message)`
       );
     }
 
-    const conversationText = conversationHistory
+    const conversationText = sortedMessages
       .map(
         (msg) =>
           `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`
       )
       .join("\n");
 
-    console.log("📝 Full conversation being sent to AI:");
+    console.log("📝 Full conversation being sent to AI (chronologically ordered):");
     console.log(conversationText);
     console.log("=".repeat(50));
 
