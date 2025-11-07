@@ -1294,9 +1294,9 @@ Respond naturally (2-3 sentences):`;
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
-{
-  role: "system",
-  content: `You are an experienced construction project manager with PERFECT MEMORY and STRICT ACCURACY.
+          {
+            role: "system",
+            content: `You are an experienced construction project manager with PERFECT MEMORY and STRICT ACCURACY.
 
 CRITICAL MEMORY RULES:
 1. You REMEMBER every question you asked
@@ -1334,8 +1334,8 @@ EXAMPLES OF GOOD MEMORY:
   → You DO NOT say "Since you're available today..." ← They never said this!
 
 Keep responses ultra-concise for WhatsApp (2-3 sentences).
-Use ONLY information the lead explicitly provided.`
-},
+Use ONLY information the lead explicitly provided.`,
+          },
           {
             role: "user",
             content: prompt,
@@ -1470,12 +1470,55 @@ export async function detectBookingIntent(
   leadData: any
 ): Promise<BookingIntent> {
   try {
+    console.log("🔍 ========== DETECT BOOKING INTENT ==========");
+    console.log(`📊 Processing ${conversationHistory.length} messages`);
+
+    // ✅ Extract all times mentioned by customer for logging
+    const customerTimeMentions = conversationHistory
+      .filter((msg) => msg.sender === "lead")
+      .map((msg, index) => {
+        const timeMatch = msg.content.match(/\d{1,2}\s*[AP]M/i);
+        const timeOfDay = msg.content.match(/\b(morning|afternoon|evening)\b/i);
+
+        if (timeMatch || timeOfDay) {
+          return {
+            messageIndex: index + 1,
+            content: msg.content,
+            extractedTime: timeMatch ? timeMatch[0] : timeOfDay![0],
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    console.log(
+      `⏰ Customer mentioned ${customerTimeMentions.length} time(s):`
+    );
+    customerTimeMentions.forEach((mention: any) => {
+      console.log(
+        `   Msg ${mention.messageIndex}: "${mention.extractedTime}" in "${mention.content}"`
+      );
+    });
+
+    if (customerTimeMentions.length > 0) {
+      const lastTime = customerTimeMentions[customerTimeMentions.length - 1];
+      console.log(
+        `⏰ EXPECTED EXTRACTION: "${
+          lastTime!.extractedTime
+        }" (from most recent message)`
+      );
+    }
+
     const conversationText = conversationHistory
       .map(
         (msg) =>
           `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`
       )
       .join("\n");
+
+    console.log("📝 Full conversation being sent to AI:");
+    console.log(conversationText);
+    console.log("=".repeat(50));
 
     const prompt = `You are a booking intent detector for a construction company.
 
@@ -1586,8 +1629,52 @@ Respond with JSON only:
       messages: [
         {
           role: "system",
-          content:
-            "You are a booking intent analyzer with PERFECT CHRONOLOGICAL AWARENESS. Respond only with valid JSON. Be STRICT about isConfirmed - requires BOTH date AND time. CRITICAL TIME EXTRACTION RULES: 1) Read the ENTIRE conversation chronologically, 2) If customer mentions multiple times, ALWAYS use the LAST/MOST RECENT time mentioned, 3) Look for change indicators like 'actually', 'instead', 'better', 'change', 4) If customer says '9AM' then later says '3 PM is better', extract '3 PM' NOT '9 AM'. Your job is to extract the FINAL, MOST RECENT time preference.",
+          content: `You are a booking intent analyzer with ZERO MEMORY BIAS and PERFECT RECENCY DETECTION.
+
+**YOUR ONLY JOB: Extract the ABSOLUTE LAST time the customer mentioned**
+
+**CRITICAL PROTOCOL:**
+
+STEP 1: Read ALL customer messages from FIRST to LAST
+STEP 2: Build a list of EVERY time mentioned
+STEP 3: Return ONLY the LAST time in the list
+STEP 4: Ignore ALL previous times
+
+**RECENCY EXAMPLES:**
+
+Example 1: Simple Change
+Customer (msg 1): "10 AM works"
+Customer (msg 2): "Actually 2 PM is better"
+→ EXTRACT: time = "2 PM" ✅ (LAST time mentioned, ignore "10 AM")
+
+Example 2: Multiple Changes
+Customer (msg 1): "10 AM works"
+Customer (msg 2): "Actually 2 PM is better"
+Customer (msg 3): "Wait, 8 AM is better"
+→ EXTRACT: time = "8 AM" ✅ (LAST time mentioned, ignore "10 AM" and "2 PM")
+
+Example 3: Five Changes
+Customer (msg 1): "10 AM works"
+Customer (msg 2): "Actually 2 PM"
+Customer (msg 3): "Wait 8 AM"
+Customer (msg 4): "5 PM is better"
+Customer (msg 5): "Actually 3 PM"
+→ EXTRACT: time = "3 PM" ✅ (LAST time mentioned, ignore all previous)
+
+Example 4: With Agent Confirmation
+Customer (msg 1): "10 AM works"
+Agent: "Perfect! Tuesday at 10 AM"
+Customer (msg 2): "Actually 2 PM is better"
+→ EXTRACT: time = "2 PM" ✅ (Customer's LAST time, ignore agent's echo)
+
+**WRONG BEHAVIOR (DO NOT DO THIS):**
+❌ Customer says "10 AM", then "2 PM" → Extracting "10 AM" (FIRST, not LAST)
+❌ Customer says "2 PM", then "8 AM" → Extracting "2 PM" (MIDDLE, not LAST)
+❌ Agent echoes "10 AM", customer says "2 PM" → Extracting "10 AM" (AGENT'S, not customer's LAST)
+
+**RULE: If customer mentions MULTIPLE times, ONLY the LAST one matters. All previous times are OBSOLETE.**
+
+Respond with valid JSON only.`,
         },
         { role: "user", content: prompt },
       ],
@@ -1596,6 +1683,37 @@ Respond with JSON only:
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    console.log("🤖 AI Response:");
+    console.log(JSON.stringify(result, null, 2));
+
+    const extractedTime = result.proposedDateTime?.time;
+    console.log(`⏰ AI EXTRACTED TIME: "${extractedTime || "NONE"}"`);
+
+    // ✅ Verify extraction matches expectation
+    if (customerTimeMentions.length > 0 && extractedTime) {
+      const expectedTime =
+        customerTimeMentions[customerTimeMentions.length - 1]!.extractedTime;
+      const normalizedExpected = expectedTime.toUpperCase().replace(/\s/g, "");
+      const normalizedExtracted = extractedTime
+        .toUpperCase()
+        .replace(/\s/g, "");
+
+      if (normalizedExpected === normalizedExtracted) {
+        console.log("✅ CORRECT: AI extracted the most recent time");
+      } else {
+        console.error("❌❌❌ ERROR: AI EXTRACTION MISMATCH! ❌❌❌");
+        console.error(
+          `   Expected: "${expectedTime}" (from last customer message)`
+        );
+        console.error(`   Got: "${extractedTime}"`);
+        console.error(
+          "   This is a prompt/AI issue - the AI is not following instructions!"
+        );
+      }
+    }
+
+    console.log("🔍 ========== END DETECT BOOKING INTENT ==========\n");
 
     return {
       wantsToBook: result.wantsToBook ?? false,

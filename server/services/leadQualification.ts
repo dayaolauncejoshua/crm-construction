@@ -992,43 +992,83 @@ export class LeadQualificationService {
         // STEP 1: CHECK BOOKING INTENT FIRST (CRITICAL FIX)
         // ============================================
         console.log("🔍 Step 1: Checking booking intent...");
+        console.log("=".repeat(60));
 
-        // ✅ ALWAYS re-detect booking intent to catch time changes
-        const bookingIntent = await detectBookingIntent(messages, lead);
-        console.log("📅 Booking Intent:", bookingIntent);
-
-        // ✅ NEW: Check if this is a time change during booking flow
-        const lastTwoLeadMessages = messages
-          .filter((m) => m.sender === "lead")
-          .slice(-2);
-
-        const timeChangeKeywords = [
-          "actually",
-          "wait",
-          "instead",
-          "better",
-          "change",
-          "2 pm",
-          "3 pm",
-          "4 pm",
-          "afternoon",
-          "morning",
-          "evening",
-        ];
-
-        const recentTimeChange = lastTwoLeadMessages.some((msg) =>
-          timeChangeKeywords.some((keyword) =>
-            msg.content.toLowerCase().includes(keyword)
-          )
+        // ✅ ALWAYS get FRESH messages from database (no cache)
+        const freshMessages = await storage.getMessages(conversation.id);
+        console.log(
+          `📨 Total messages in conversation: ${freshMessages.length}`
         );
 
-        if (recentTimeChange) {
+        // ✅ Log recent lead messages for debugging
+        const recentLeadMessages = freshMessages
+          .filter((m) => m.sender === "lead")
+          .slice(-5)
+          .map((m) => ({
+            content: m.content,
+            timestamp: m.sentAt,
+          }));
+
+        console.log("📋 Last 5 lead messages:");
+        recentLeadMessages.forEach((msg, i) => {
+          console.log(`   ${i + 1}. "${msg.content}"`);
+        });
+
+        // ✅ CRITICAL: Detect booking intent with FRESH messages
+        console.log("🔍 Calling detectBookingIntent()...");
+        const bookingIntent = await detectBookingIntent(freshMessages, lead);
+
+        console.log("=".repeat(60));
+        console.log("📅 BOOKING INTENT DETECTION RESULT:");
+        console.log("=".repeat(60));
+        console.log("✓ Wants to book:", bookingIntent.wantsToBook);
+        console.log("✓ Is confirmed:", bookingIntent.isConfirmed);
+        console.log("✓ Confidence:", bookingIntent.confidence);
+        console.log(
+          "✓ Proposed date:",
+          bookingIntent.proposedDateTime?.date || "NOT SET"
+        );
+        console.log(
+          "✓ Proposed time:",
+          bookingIntent.proposedDateTime?.time || "NOT SET"
+        );
+        console.log("✓ Location:", bookingIntent.location || "NOT SET");
+        console.log("✓ Meeting type:", bookingIntent.meetingType || "NOT SET");
+        console.log("✓ Reasoning:", bookingIntent.reasoning);
+        console.log("=".repeat(60));
+
+        // ✅ CRITICAL: Verify the time is what we expect
+        if (bookingIntent.proposedDateTime?.time) {
           console.log(
-            "⚠️ POTENTIAL TIME CHANGE DETECTED - Using latest booking intent"
+            `⏰ TIME EXTRACTED: "${bookingIntent.proposedDateTime.time}"`
           );
-          console.log(
-            `   New proposed time: ${bookingIntent.proposedDateTime?.time}`
-          );
+
+          // Check if this time appears in the recent messages
+          const lastLeadMsg =
+            recentLeadMessages[recentLeadMessages.length - 1]?.content || "";
+          const timeInLastMessage = lastLeadMsg.match(/\d{1,2}\s*[AP]M/i);
+
+          if (timeInLastMessage) {
+            console.log(`⏰ TIME IN LAST MESSAGE: "${timeInLastMessage[0]}"`);
+
+            if (
+              timeInLastMessage[0].toUpperCase() !==
+              bookingIntent.proposedDateTime.time.toUpperCase()
+            ) {
+              console.warn("⚠️⚠️⚠️ WARNING: TIME MISMATCH! ⚠️⚠️⚠️");
+              console.warn(`   Lead said: "${timeInLastMessage[0]}"`);
+              console.warn(
+                `   AI extracted: "${bookingIntent.proposedDateTime.time}"`
+              );
+              console.warn(
+                "   This indicates the AI is not extracting the most recent time!"
+              );
+            } else {
+              console.log("✅ Time extraction verified - matches last message");
+            }
+          }
+        } else {
+          console.log("⚠️ No time extracted from conversation");
         }
 
         if (
