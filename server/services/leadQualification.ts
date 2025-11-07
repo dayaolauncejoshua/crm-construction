@@ -130,12 +130,29 @@ function parseDateFromNaturalLanguage(
       daysUntil += 7;
     }
 
+    // ✅ FIX: Create date in Pacific timezone (UTC-8 in winter, UTC-7 in summer)
+    // Calculate the date
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysUntil);
-    targetDate.setHours(hours, minutes, 0, 0);
 
-    console.log(`✅ Day name parsed: ${targetDate.toISOString()}`);
-    return targetDate;
+    // Create ISO string for Pacific timezone
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const hourStr = String(hours).padStart(2, "0");
+    const minStr = String(minutes).padStart(2, "0");
+
+    // Use -08:00 offset for Pacific Standard Time (adjust for DST if needed)
+    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
+    const pacificDate = new Date(pacificDateString);
+
+    console.log(`✅ Day name parsed: ${pacificDate.toISOString()}`);
+    console.log(
+      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
+        timeZone: "America/Vancouver",
+      })}`
+    );
+    return pacificDate;
   }
 
   // Handle full date strings with explicit month parsing
