@@ -111,6 +111,16 @@ function parseDateFromNaturalLanguage(
 
     const lowerDate = dateStr.toLowerCase().trim();
 
+    const dayNames = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+
   // ✅ NEW: Handle relative dates (today, tomorrow, next week)
   if (lowerDate === "today") {
     const targetDate = new Date(now);
@@ -181,19 +191,61 @@ function parseDateFromNaturalLanguage(
     return pacificDate;
   }
 
+  
+  // ✅ NEW: Handle "next [DayName]" and "this [DayName]"
+  // Examples: "next Monday", "this Friday", "next Tuesday"
+  const nextDayPattern = /^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+  const nextDayMatch = lowerDate.match(nextDayPattern);
+  
+  if (nextDayMatch) {
+     console.log(`🔍 Parsing "${lowerDate}" with pattern "next/this [Day]"`);
+    const modifier = nextDayMatch[1].toLowerCase(); // "next" or "this"
+    const dayName = nextDayMatch[2].toLowerCase();  // "monday", "friday", etc.
+    console.log(`   Modifier: "${modifier}", Day: "${dayName}"`);
+    
+    const targetDayIndex = dayNames.indexOf(dayName);
+    const currentDay = now.getDay();
+    
+    let daysUntil = targetDayIndex - currentDay;
+    
+    if (modifier === "next") {
+      // "next Monday" means next week's Monday
+      if (daysUntil <= 0) {
+        daysUntil += 7; // Jump to next week
+      } else {
+        // If target day is later this week, still go to next week
+        daysUntil += 7;
+      }
+    } else {
+      // "this Monday" means this week's Monday
+      if (daysUntil < 0) {
+        daysUntil += 7; // If day already passed, go to next week
+      }
+      // If today is the target day (daysUntil === 0), use today
+    }
+    
+    const targetDate = new Date(now);
+    targetDate.setDate(now.getDate() + daysUntil);
+    
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const hourStr = String(hours).padStart(2, "0");
+    const minStr = String(minutes).padStart(2, "0");
+    
+    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
+    const pacificDate = new Date(pacificDateString);
+    
+    console.log(`✅ "${lowerDate}" parsed: ${pacificDate.toISOString()}`);
+    console.log(`   Pacific Time: ${pacificDate.toLocaleString("en-US", { timeZone: "America/Vancouver" })}`);
+    console.log(`✅ "${lowerDate}" parsed successfully`);
+    console.log(`   Days until target: ${daysUntil}`);
+    console.log(`   Target date: ${pacificDate.toISOString()}`);
+    console.log(`   Current date: ${now.toISOString()}`);
+    return pacificDate;
+  }
 
-  // Handle day names (Monday, Tuesday, etc)
-  const dayNames = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
-
-
+    // Handle day names (Monday, Tuesday, etc)
   if (dayNames.includes(lowerDate)) {
     const targetDay = dayNames.indexOf(lowerDate);
     const currentDay = now.getDay();

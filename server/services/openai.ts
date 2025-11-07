@@ -363,7 +363,9 @@ export async function classifyIntent(
       };
     }
 
-    const leadMessageCount = conversationHistory.filter(m => m.sender === "lead").length;
+    const leadMessageCount = conversationHistory.filter(
+      (m) => m.sender === "lead"
+    ).length;
 
     // First message spam detection (Proactive)
     if (conversationHistory.length <= 2) {
@@ -416,11 +418,14 @@ export async function classifyIntent(
       // Only check spam patterns for non-construction messages
       const learnedPatternCheck =
         await spamPatternLearning.checkAgainstLearnedPatterns(message);
-      
+
       // ✅ IMPROVED: Higher confidence threshold for early messages
       const confidenceThreshold = leadMessageCount <= 2 ? 0.95 : 0.85;
-      
-      if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > confidenceThreshold) {
+
+      if (
+        learnedPatternCheck.isSpam &&
+        learnedPatternCheck.confidence > confidenceThreshold
+      ) {
         console.log(
           "🎯 Learned spam pattern detected:",
           learnedPatternCheck.matchedPattern
@@ -467,7 +472,7 @@ export async function classifyIntent(
         reasoning: "Greeting - waiting for project details",
       };
     }
-    
+
     // ✅ NEW: Give benefit of doubt for first few messages
     if (isLikelyInnocentMessage(message, leadMessageCount)) {
       console.log("✅ Early message - giving benefit of doubt");
@@ -475,7 +480,8 @@ export async function classifyIntent(
         isRelevant: true,
         intent: "construction",
         confidence: 0.4,
-        reasoning: "Early conversation - waiting for context before classifying",
+        reasoning:
+          "Early conversation - waiting for context before classifying",
       };
     }
 
@@ -825,27 +831,60 @@ function isRepetitiveResponse(
     }
   }
 
-  // ✅ NEW: Check for semantic repetition (key phrases)
-  const keyPhrases = [
-    "we provide structural engineering",
-    "we do provide structural engineering",
-    "structural engineering for residential",
-    "thanks for confirming",
-    "thanks for sharing",
-    "could you share more details",
-    "could you provide more details",
+  // ✅ IMPROVED: Pattern-based repetition detection (not just specific phrases)
+  const repetitivePatterns = [
+    // Opening phrases
+    /^(yes|yep|yeah),?\s+(we|i)\s+(do|handle|provide|offer)\s+/i,
+    /^(yes|yep|yeah),?\s+(we|i)\s+(specialize|focus)\s+/i,
+
+    // Question patterns
+    /could you (share|provide|tell|let me know)/i,
+    /would you (share|provide|tell|let me know)/i,
+    /can you (share|provide|tell|let me know)/i,
+
+    // Acknowledgment patterns
+    /thanks for (confirming|sharing|providing|that information)/i,
+    /thank you for (confirming|sharing|providing|that information)/i,
+    /i understand (you|your|that you)/i,
+
+    // Forward-moving phrases
+    /let's? (schedule|arrange|set up|discuss)/i,
+    /would you like to (schedule|meet|discuss)/i,
   ];
 
-  for (const phrase of keyPhrases) {
-    const proposedHasPhrase = proposedLower.includes(phrase);
-    const recentHadPhrase = recentAIMessages.some((msg) =>
-      msg.includes(phrase)
-    );
+  // Check if the proposed response matches a pattern that was used in recent messages
+  for (const pattern of repetitivePatterns) {
+    const proposedMatchesPattern = pattern.test(proposedResponse);
+    const recentUsedPattern = recentAIMessages.some((msg) => pattern.test(msg));
 
-    if (proposedHasPhrase && recentHadPhrase) {
-      console.warn(`🚫 SEMANTIC REPETITION DETECTED: "${phrase}"`);
-      return { isRepetitive: true, lastAIMessage };
+    if (proposedMatchesPattern && recentUsedPattern) {
+      // Count how many times this pattern was used
+      const usageCount = recentAIMessages.filter((msg) =>
+        pattern.test(msg)
+      ).length;
+
+      if (usageCount >= 2) {
+        console.warn(
+          `🚫 PATTERN REPETITION DETECTED: Used ${
+            usageCount + 1
+          } times - "${pattern}"`
+        );
+        return { isRepetitive: true, lastAIMessage };
+      }
     }
+  }
+
+  // ✅ NEW: Check for repeated sentence starts (first 6 words)
+  const getFirstWords = (text: string, count: number = 6) => {
+    return text.split(/\s+/).slice(0, count).join(" ").toLowerCase();
+  };
+
+  const proposedStart = getFirstWords(proposedResponse);
+  const recentStarts = recentAIMessages.map((msg) => getFirstWords(msg));
+
+  if (recentStarts.includes(proposedStart) && proposedStart.length > 15) {
+    console.warn(`🚫 REPEATED OPENING DETECTED: "${proposedStart}"`);
+    return { isRepetitive: true, lastAIMessage };
   }
 
   return { isRepetitive: false };
@@ -1048,7 +1087,7 @@ export async function generateAIResponse(
 
         console.log(`🔢 Redirect count: ${redirectCount}`);
 
-         if (redirectCount >= 2) {
+        if (redirectCount >= 2) {
           console.log(
             "⛔ Maximum redirects reached, sending termination message"
           );
@@ -1057,11 +1096,13 @@ export async function generateAIResponse(
           }. We only handle construction and building projects. This conversation will not receive further responses. Please verify your contact information.`;
         }
 
-        const leadMessages = conversationHistory.filter(m => m.sender === "lead");
-        
+        const leadMessages = conversationHistory.filter(
+          (m) => m.sender === "lead"
+        );
+
         const redirectResponses = [
           // ✅ FIRST MESSAGE: Super welcoming (assume they meant to reach us)
-          leadMessages.length <= 1 
+          leadMessages.length <= 1
             ? `Hi! Thanks for reaching out to ${
                 clientData?.name || "us"
               }. We specialize in construction, renovations, and building projects. How can we help with your project today?`
@@ -1333,6 +1374,25 @@ NOT: "Before I confirm 10 AM, I need..." ❌ (ignoring their change)
 - 3rd change: Acknowledge and update ✅
 - EVERY time they change, you update. No limit.
 
+**TIME EXTRACTION RULES:**
+
+When lead mentions a time, IMMEDIATELY acknowledge it:
+- Lead: "2 PM works" → You: "Perfect! 2 PM on [day]. Let me get your address..." ✅
+- Lead: "Morning is better" → You: "Great! Morning works. What time in the morning?" ✅
+- Lead: "10 AM good?" → You: "Yes! 10 AM is perfect. Let me confirm..." ✅
+
+❌ NEVER say "Could you confirm the time?" after they just gave you a time
+❌ NEVER ignore the time they stated
+✅ ALWAYS use the exact time they mentioned in your next response
+
+**EXAMPLE - CORRECT:**
+Lead: "2 PM works"
+You: "Perfect! Thursday at 2 PM. What's your address for the site visit?"
+
+**EXAMPLE - WRONG:**
+Lead: "2 PM works"  
+You: "Great! Could you confirm the exact time?" ← LEAD JUST TOLD YOU!
+
 **TIMELINE-BASED APPROACH:**
 IF lead said "ASAP" or "urgent" or "this week" → Offer meeting today/tomorrow
 IF lead said "in a month" or "next month" → Offer meeting this/next week
@@ -1473,8 +1533,25 @@ Use ONLY information the lead explicitly provided.`,
 
       if (attempts === maxAttempts) {
         console.error("❌ All retry attempts exhausted, using fallback");
-        aiResponse =
-          "Thanks for that information! Let me connect you with our team to discuss your project in detail. They'll be in touch shortly.";
+
+        // ✅ IMPROVED: Context-aware fallback (not misleading)
+        const hasProjectDetails = conversationHistory.some(
+          (msg) =>
+            msg.sender === "lead" &&
+            /budget|location|timeline|sq ft|square feet|\$\d+k?/i.test(
+              msg.content
+            )
+        );
+
+        if (hasProjectDetails) {
+          // Lead has shared details - acknowledge and move forward
+          aiResponse =
+            "Thank you for sharing those details. To better assist you, could you tell me a bit more about when you're hoping to start?";
+        } else {
+          // Lead hasn't shared much - ask for basics
+          aiResponse =
+            "I'd love to learn more about your project. Could you share the location, budget, and timeline you have in mind?";
+        }
       }
     }
 

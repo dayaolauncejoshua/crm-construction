@@ -268,8 +268,8 @@ class SpamPatternLearning {
       "electrical",
       "plumbing",
       "structural",
-      "want to", // ✅ CRITICAL: Remove this overly broad pattern
-      "we want", // ✅ CRITICAL: Remove this overly broad pattern
+      "want to", 
+      "we want",
       "addition",
     ];
 
