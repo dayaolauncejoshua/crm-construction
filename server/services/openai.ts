@@ -169,11 +169,52 @@ function hasNonConstructionKeywords(message: string): boolean {
   );
 }
 
-// ✅ NEW: Check if message is just a greeting
-function isOnlyGreeting(message: string): boolean {
-  const greetingPatterns =
-    /^(hi|hello|hey|good morning|good afternoon|good evening|greetings)[\s!?.]*$/i;
-  return greetingPatterns.test(message.trim());
+// ✅ IMPROVED: Check if message is a greeting (flexible)
+function isGreeting(message: string): boolean {
+  const trimmed = message.trim().toLowerCase();
+
+  // Simple greetings (1-4 words max)
+  const greetingPatterns = [
+    /^(hi|hello|hey|yo|sup|howdy)[\s!?.]*$/i, // "Hi", "Hello!"
+    /^(hi|hello|hey)\s+(there|everyone|guys|team)[\s!?.]*$/i, // "Hi there!", "Hello everyone"
+    /^good\s+(morning|afternoon|evening|day)[\s!?.]*$/i, // "Good morning!"
+    /^greetings[\s!?.]*$/i, // "Greetings"
+    /^what'?s\s+up[\s!?.]*$/i, // "What's up", "Whats up"
+    /^how\s+(are\s+you|r\s+u|are\s+ya|ya\s+doing)[\s!?.]*$/i, // "How are you"
+    /^(hi|hello|hey)\s+(how\s+are\s+you|how'?s\s+it\s+going)[\s!?.]*$/i, // "Hi how are you"
+  ];
+
+  return greetingPatterns.some((pattern) => pattern.test(trimmed));
+}
+
+// ✅ NEW: Check if message is likely innocent/exploratory
+function isLikelyInnocentMessage(
+  message: string,
+  messageCount: number
+): boolean {
+  const trimmed = message.trim().toLowerCase();
+
+  // If it's the first or second message and it's short/vague, give benefit of doubt
+  if (messageCount <= 2) {
+    const innocentPatterns = [
+      /^(hi|hello|hey)/i, // Any greeting
+      /^(yes|yeah|yep|yup|ok|okay)$/i, // Confirmations
+      /^(thanks|thank you|ty)$/i, // Gratitude
+      /^(i need|i want|we need|we want)$/i, // Incomplete requests
+      /^(can you|do you|are you)$/i, // Incomplete questions
+    ];
+
+    // Short messages (< 20 chars) in first 2 messages = probably not spam
+    if (trimmed.length < 20) {
+      return true;
+    }
+
+    if (innocentPatterns.some((pattern) => pattern.test(trimmed))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ✅ NEW: Check if message needs more context before classifying as spam
@@ -322,6 +363,8 @@ export async function classifyIntent(
       };
     }
 
+    const leadMessageCount = conversationHistory.filter(m => m.sender === "lead").length;
+
     // First message spam detection (Proactive)
     if (conversationHistory.length <= 2) {
       const firstMessageSpamIndicators = [
@@ -373,7 +416,11 @@ export async function classifyIntent(
       // Only check spam patterns for non-construction messages
       const learnedPatternCheck =
         await spamPatternLearning.checkAgainstLearnedPatterns(message);
-      if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > 0.85) {
+      
+      // ✅ IMPROVED: Higher confidence threshold for early messages
+      const confidenceThreshold = leadMessageCount <= 2 ? 0.95 : 0.85;
+      
+      if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > confidenceThreshold) {
         console.log(
           "🎯 Learned spam pattern detected:",
           learnedPatternCheck.matchedPattern
@@ -410,14 +457,25 @@ export async function classifyIntent(
       };
     }
 
-    // Handle greetings
-    if (isOnlyGreeting(message) && conversationHistory.length <= 1) {
-      console.log("👋 Initial greeting detected, waiting for context");
+    // ✅ IMPROVED: Handle greetings more intelligently
+    if (isGreeting(message)) {
+      console.log("👋 Greeting detected, welcoming lead");
       return {
         isRelevant: true,
         intent: "construction",
         confidence: 0.5,
-        reasoning: "Initial greeting - waiting for context",
+        reasoning: "Greeting - waiting for project details",
+      };
+    }
+    
+    // ✅ NEW: Give benefit of doubt for first few messages
+    if (isLikelyInnocentMessage(message, leadMessageCount)) {
+      console.log("✅ Early message - giving benefit of doubt");
+      return {
+        isRelevant: true,
+        intent: "construction",
+        confidence: 0.4,
+        reasoning: "Early conversation - waiting for context before classifying",
       };
     }
 
@@ -770,7 +828,7 @@ function isRepetitiveResponse(
   // ✅ NEW: Check for semantic repetition (key phrases)
   const keyPhrases = [
     "we provide structural engineering",
-    "we do provide structural engineering", 
+    "we do provide structural engineering",
     "structural engineering for residential",
     "thanks for confirming",
     "thanks for sharing",
@@ -990,7 +1048,7 @@ export async function generateAIResponse(
 
         console.log(`🔢 Redirect count: ${redirectCount}`);
 
-        if (redirectCount >= 2) {
+         if (redirectCount >= 2) {
           console.log(
             "⛔ Maximum redirects reached, sending termination message"
           );
@@ -999,18 +1057,20 @@ export async function generateAIResponse(
           }. We only handle construction and building projects. This conversation will not receive further responses. Please verify your contact information.`;
         }
 
+        const leadMessages = conversationHistory.filter(m => m.sender === "lead");
+        
         const redirectResponses = [
-          // First redirect (friendly)
-          `Hi! I think there might be some confusion. We're ${
-            clientData?.name || "a construction company"
-          } specializing in building projects. We handle construction, renovations, and development projects. If you have a construction project in mind, I'd be happy to help!`,
+          // ✅ FIRST MESSAGE: Super welcoming (assume they meant to reach us)
+          leadMessages.length <= 1 
+            ? `Hi! Thanks for reaching out to ${
+                clientData?.name || "us"
+              }. We specialize in construction, renovations, and building projects. How can we help with your project today?`
+            : `Hi! I think there might be some confusion. We're ${
+                clientData?.name || "a construction company"
+              } specializing in building projects. We handle construction, renovations, and development projects. If you have a construction project in mind, I'd be happy to help!`,
 
           // Second redirect (firmer)
           `Just to clarify: we're a construction company. We build commercial buildings, homes, and handle renovation projects. If you're looking for construction services, I'm here to assist. Otherwise, you may have reached us by mistake.`,
-        ];
-
-        return redirectResponses[
-          Math.min(redirectCount, redirectResponses.length - 1)
         ];
       }
     }
