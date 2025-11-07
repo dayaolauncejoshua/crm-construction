@@ -346,20 +346,45 @@ export async function classifyIntent(
       }
     }
 
-    // Check learned patterns FIRST (before hardcoded keywords)
-    const learnedPatternCheck =
-      await spamPatternLearning.checkAgainstLearnedPatterns(message);
-    if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > 0.85) {
-      console.log(
-        "🎯 Learned spam pattern detected:",
-        learnedPatternCheck.matchedPattern
-      );
-      return {
-        isRelevant: false,
-        intent: "unrelated",
-        confidence: learnedPatternCheck.confidence,
-        reasoning: `Matches learned spam pattern: "${learnedPatternCheck.matchedPattern}" (${learnedPatternCheck.category})`,
-      };
+    // ✅ FIXED: Check construction terms BEFORE checking spam patterns
+    // This prevents construction terms from being caught by overly broad spam patterns
+    const constructionTermsInMessage = [
+      "build a house",
+      "build a home",
+      "build an addition",
+      "construction",
+      "renovation",
+      "remodel",
+      "contractor",
+      "deck",
+      "garage",
+      "warehouse",
+      "kitchen",
+      "bathroom",
+      "addition",
+    ];
+
+    if (
+      constructionTermsInMessage.some((term) => lowerMessage.includes(term))
+    ) {
+      console.log("✅ Construction context detected - bypassing spam check");
+      // Don't check spam patterns for obvious construction inquiries
+    } else {
+      // Only check spam patterns for non-construction messages
+      const learnedPatternCheck =
+        await spamPatternLearning.checkAgainstLearnedPatterns(message);
+      if (learnedPatternCheck.isSpam && learnedPatternCheck.confidence > 0.85) {
+        console.log(
+          "🎯 Learned spam pattern detected:",
+          learnedPatternCheck.matchedPattern
+        );
+        return {
+          isRelevant: false,
+          intent: "unrelated",
+          confidence: learnedPatternCheck.confidence,
+          reasoning: `Matches learned spam pattern: "${learnedPatternCheck.matchedPattern}" (${learnedPatternCheck.category})`,
+        };
+      }
     }
 
     // ✅ NEW: Check if we need more context BEFORE classifying as spam
@@ -738,6 +763,29 @@ function isRepetitiveResponse(
 
     if (proposedHasQuestion && lastHadQuestion) {
       console.warn(`🚫 REPEATED QUESTION DETECTED: ${pattern}`);
+      return { isRepetitive: true, lastAIMessage };
+    }
+  }
+
+  // ✅ NEW: Check for semantic repetition (key phrases)
+  const keyPhrases = [
+    "we provide structural engineering",
+    "we do provide structural engineering", 
+    "structural engineering for residential",
+    "thanks for confirming",
+    "thanks for sharing",
+    "could you share more details",
+    "could you provide more details",
+  ];
+
+  for (const phrase of keyPhrases) {
+    const proposedHasPhrase = proposedLower.includes(phrase);
+    const recentHadPhrase = recentAIMessages.some((msg) =>
+      msg.includes(phrase)
+    );
+
+    if (proposedHasPhrase && recentHadPhrase) {
+      console.warn(`🚫 SEMANTIC REPETITION DETECTED: "${phrase}"`);
       return { isRepetitive: true, lastAIMessage };
     }
   }
@@ -1509,7 +1557,7 @@ export async function detectBookingIntent(
       })
       .filter(Boolean);
 
-   console.log(
+    console.log(
       `⏰ Customer mentioned ${customerTimeMentions.length} time(s):`
     );
     customerTimeMentions.forEach((mention: any) => {
@@ -1521,7 +1569,9 @@ export async function detectBookingIntent(
     if (customerTimeMentions.length > 0) {
       const lastTime = customerTimeMentions[customerTimeMentions.length - 1];
       console.log(
-        `⏰ EXPECTED EXTRACTION: "${lastTime!.extractedTime}" (from most recent message)`
+        `⏰ EXPECTED EXTRACTION: "${
+          lastTime!.extractedTime
+        }" (from most recent message)`
       );
     }
 
@@ -1532,7 +1582,9 @@ export async function detectBookingIntent(
       )
       .join("\n");
 
-    console.log("📝 Full conversation being sent to AI (chronologically ordered):");
+    console.log(
+      "📝 Full conversation being sent to AI (chronologically ordered):"
+    );
     console.log(conversationText);
     console.log("=".repeat(50));
 

@@ -109,6 +109,79 @@ function parseDateFromNaturalLanguage(
     `⏰ Parsed time: ${hours}:${String(minutes).padStart(2, "0")} (24h format)`
   );
 
+    const lowerDate = dateStr.toLowerCase().trim();
+
+  // ✅ NEW: Handle relative dates (today, tomorrow, next week)
+  if (lowerDate === "today") {
+    const targetDate = new Date(now);
+    
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const hourStr = String(hours).padStart(2, "0");
+    const minStr = String(minutes).padStart(2, "0");
+
+    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
+    const pacificDate = new Date(pacificDateString);
+
+    console.log(`✅ "Today" parsed: ${pacificDate.toISOString()}`);
+    console.log(
+      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
+        timeZone: "America/Vancouver",
+      })}`
+    );
+    return pacificDate;
+  }
+
+  if (lowerDate === "tomorrow") {
+    const targetDate = new Date(now);
+    targetDate.setDate(now.getDate() + 1);
+    
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const hourStr = String(hours).padStart(2, "0");
+    const minStr = String(minutes).padStart(2, "0");
+
+    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
+    const pacificDate = new Date(pacificDateString);
+
+    console.log(`✅ "Tomorrow" parsed: ${pacificDate.toISOString()}`);
+    console.log(
+      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
+        timeZone: "America/Vancouver",
+      })}`
+    );
+    return pacificDate;
+  }
+
+  // Handle "next week", "this week"
+  if (lowerDate.includes("next week") || lowerDate.includes("this week")) {
+    const daysToAdd = lowerDate.includes("next week") ? 7 : 0;
+    const targetDate = new Date(now);
+    targetDate.setDate(now.getDate() + daysToAdd);
+    
+    // Default to next Monday if "next week" without specific day
+    if (!lowerDate.includes("monday") && !lowerDate.includes("tuesday")) {
+      const currentDay = targetDate.getDay();
+      const daysUntilMonday = currentDay === 0 ? 1 : 8 - currentDay;
+      targetDate.setDate(targetDate.getDate() + daysUntilMonday);
+    }
+    
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const hourStr = String(hours).padStart(2, "0");
+    const minStr = String(minutes).padStart(2, "0");
+
+    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
+    const pacificDate = new Date(pacificDateString);
+
+    console.log(`✅ "${lowerDate}" parsed: ${pacificDate.toISOString()}`);
+    return pacificDate;
+  }
+
+
   // Handle day names (Monday, Tuesday, etc)
   const dayNames = [
     "sunday",
@@ -119,7 +192,7 @@ function parseDateFromNaturalLanguage(
     "friday",
     "saturday",
   ];
-  const lowerDate = dateStr.toLowerCase().trim();
+
 
   if (dayNames.includes(lowerDate)) {
     const targetDay = dayNames.indexOf(lowerDate);
