@@ -695,14 +695,42 @@ Must have **BUDGET (2M+ PHP)** PLUS at least **TWO** of these:
 - Just browsing, tire-kicker behavior
 - One-word responses repeatedly
 
-**EXAMPLES:**
-- "3M budget, commercial building, Pago La Union, 6-12 months timeline" = **0.55** (WARM - budget + details but no urgency)
-- "3M budget, commercial building, I'm ready to meet Thursday" = **0.65** (HIGHER WARM - accepted meeting quickly)
-- "5M budget, URGENT, need in 4 weeks, I'm the CEO, when can we meet?" = **0.85** (HOT - budget + urgency + decision maker + meeting)
-- "3M budget, NEED to start next month, comparing 3 contractors, I decide" = **0.80** (HOT - budget + urgency + decision maker + competitive)
-- "How much?" = **0.15** (COLD)
-- "2M budget but no rush, maybe start next year" = **0.40** (WARM but low - budget but very flexible timeline, don't push)
-- "3M budget, 6-8 months timeline, just getting quotes" = **0.50** (WARM - engaged but not ready, nurture relationship)
+**TIMELINE IMPACT ON SCORING:**
+
+⏰ **IMMEDIATE (1-4 weeks):** Add +0.10 to +0.20
+- "ASAP" or "urgent" or "need to start next week" → Base score + 0.15-0.20
+- "Need to start in 2 weeks" → Base score + 0.10-0.15
+
+⏰ **SOON (1-3 months):** Add +0.05
+- "Want to start in 6-8 weeks" → Base score + 0.05
+- "Starting next month" → Base score + 0.05
+
+⏰ **MODERATE (3-6 months):** No change
+- "In 4 months" → Base score (no bonus, no penalty)
+- "Few months" → Base score (no change)
+
+⏰ **LONG-TERM (6+ months):** Subtract -0.10 to -0.15
+- "In 6-8 months" → Base score - 0.10
+- "Planning stage" → Base score - 0.10
+- "Next year" → Base score - 0.15
+- "Just exploring options" → Base score - 0.15
+
+**REVISED EXAMPLES WITH TIMELINE IMPACT:**
+- "$25k deck, Surrey, 'want to start soon' (vague)" = **0.50** (WARM - no specific timeline)
+- "$25k deck, Surrey, 'start tomorrow'" = **0.65** (WARM→HOT - immediate timeline +0.15)
+- "$85k addition, Coquitlam, 'start in 4 months'" = **0.50** (WARM - long timeline, no urgency)
+- "$85k addition, 'start in 4 months', I'm the owner" = **0.60** (WARM - decision maker +0.10, but timeline cancels it)
+- "$18k bathroom, Richmond, 'start next week'" = **0.60** (WARM - small job but urgent +0.10)
+- "$150k addition, 'few months', exploring" = **0.45** (WARM - exploratory, long timeline -0.10)
+- "$180k commercial, 'need in 8 weeks', I'm the owner" = **0.75** (HOT - urgency +0.10, decision maker +0.15)
+
+**CRITICAL RULES:**
+1. ❌ "soon" without specific timeline (1-2 weeks) = WARM 0.50-0.60, NOT HOT
+2. ❌ Timeline > 3 months = WARM maximum (0.60 max), unless urgent decision maker
+3. ❌ "few months", "next year", "flexible" = WARM 0.40-0.55, NEVER HOT
+4. ✅ Timeline < 4 weeks + budget + decision maker = HOT 0.70-0.80
+5. ✅ "ASAP", "urgent", "need to move fast" = Strong hot signal (+0.15-0.20)
+6. ✅ Meeting acceptance = +0.05-0.10 (depending on how quickly they agreed)
 
 Lead Data:
 - Name: ${leadData.firstName} ${leadData.lastName}
@@ -778,10 +806,10 @@ function isRepetitiveResponse(
   proposedResponse: string,
   conversationHistory: any[]
 ): { isRepetitive: boolean; lastAIMessage?: string } {
-  // Get last 3 AI messages
+  // Get last 5 AI messages (increased from 3)
   const recentAIMessages = conversationHistory
     .filter((msg) => msg.sender === "ai")
-    .slice(-3)
+    .slice(-5)
     .map((msg) => msg.content.toLowerCase().trim());
 
   if (recentAIMessages.length === 0) {
@@ -790,7 +818,46 @@ function isRepetitiveResponse(
 
   const proposedLower = proposedResponse.toLowerCase().trim();
 
-  // Check for exact or near-exact repetition
+  // ✅ NEW: Remove emojis for cleaner comparison
+  // ✅ Simplified emoji removal (ES5 compatible)
+  const cleanProposed = proposedLower.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
+  
+  // ✅ IMPROVED: Check for EXACT or NEAR-EXACT repetition (>90% match)
+  for (const prevMessage of recentAIMessages) {
+    const cleanPrev = prevMessage.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
+    
+    // Exact match
+    if (cleanProposed === cleanPrev) {
+      console.warn("🚫 EXACT REPETITION DETECTED!");
+      console.warn(`   Previous: "${prevMessage.substring(0, 80)}..."`);
+      console.warn(`   Proposed: "${proposedResponse.substring(0, 80)}..."`);
+      return { isRepetitive: true, lastAIMessage: prevMessage };
+    }
+
+    // Near-exact match (>90% similarity)
+    const similarity = calculateSimilarity(cleanProposed, cleanPrev);
+    if (similarity > 0.9) {
+      console.warn(`🚫 NEAR-EXACT REPETITION! (${(similarity * 100).toFixed(0)}% match)`);
+      console.warn(`   Previous: "${prevMessage.substring(0, 80)}..."`);
+      console.warn(`   Proposed: "${proposedResponse.substring(0, 80)}..."`);
+      return { isRepetitive: true, lastAIMessage: prevMessage };
+    }
+  }
+
+  // ✅ NEW: Check if core message is repeated (first 40 chars)
+  const proposedCore = cleanProposed.substring(0, 40);
+  const recentCores = recentAIMessages.map(msg => 
+    msg.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim().substring(0, 40)
+  );
+  
+  const coreRepeatCount = recentCores.filter(core => core === proposedCore && core.length > 15).length;
+  if (coreRepeatCount >= 2) {
+    console.warn(`🚫 CORE MESSAGE REPEATED ${coreRepeatCount} times!`);
+    console.warn(`   Core: "${proposedCore}"`);
+    return { isRepetitive: true, lastAIMessage: recentAIMessages[recentAIMessages.length - 1] };
+  }
+
+  // Check for exact or near-exact repetition (original code continues below)
   for (const prevMessage of recentAIMessages) {
     // Exact match
     if (prevMessage === proposedLower) {
@@ -1263,6 +1330,18 @@ Instead, acknowledge the booking: "Great! Our team will send you the meeting det
 
     const daySuggestionsText = daySuggestions || "this week";
 
+    // Detect if lead is asking a question or answering one
+    const leadAskedQuestion =
+      /\?$|what|how|do you|can you|when|where|why|tell me about|explain/i.test(
+        lastLeadMessage
+      );
+    const aiAskedQuestion =
+      /\?$|could you|would you|can you|what time|when are|which day|please (share|provide|tell)/i.test(
+        lastAIQuestion
+      );
+    const leadIsAnswering =
+      !leadAskedQuestion && aiAskedQuestion && lastLeadMessage.length > 5;
+
     const prompt = `You are a professional construction project manager for ${
       clientData?.name || "a construction company"
     }. You're chatting on WhatsApp with a potential client.
@@ -1272,9 +1351,55 @@ CONVERSATION HISTORY:
 ${conversationText}
 ${lastAIMessageText}
 
-LEAD JUST SENT: "${
-      conversationHistory[conversationHistory.length - 1]?.content
-    }"
+**🚨 CRITICAL - THE LEAD JUST SAID:**
+"${conversationHistory[conversationHistory.length - 1]?.content}"
+
+${
+  leadAskedQuestion
+    ? `
+**⚠️⚠️⚠️ THE LEAD ASKED YOU A QUESTION! ⚠️⚠️⚠️**
+
+YOU MUST ANSWER THEIR QUESTION FIRST!
+
+DO NOT say "I'd love to learn more about your project..."
+DO NOT redirect to asking for project details
+DO NOT ignore their question
+
+ANSWER THE QUESTION, THEN (if appropriate) ask ONE follow-up.
+
+**Examples:**
+Lead: "Do you handle permits?"
+✅ CORRECT: "Yes, we handle all permits and approvals. What type of project are you planning?"
+❌ WRONG: "I'd love to learn more about your project. Could you share location, budget, and timeline?"
+
+Lead: "What's included in a bathroom reno?"
+✅ CORRECT: "A typical bathroom renovation includes fixtures, vanity, toilet, tiling, plumbing, and electrical. What scope are you considering?"
+❌ WRONG: "Could you share more details about your project?"
+`
+    : ""
+}
+
+${
+  leadIsAnswering
+    ? `
+**⚠️⚠️⚠️ THE LEAD JUST ANSWERED YOUR QUESTION! ⚠️⚠️⚠️**
+
+YOU ASKED: "${lastAIQuestion.substring(0, 100)}..."
+THEY SAID: "${lastLeadMessage}"
+
+DO NOT ask the same question again!
+DO NOT ignore their answer!
+ACKNOWLEDGE their answer specifically and move forward.
+
+**Example:**
+You: "What's your address?"
+Lead: "123 Main St, Vancouver"
+✅ CORRECT: "Perfect! 123 Main St, Vancouver. What's your email?"
+❌ WRONG: "Could you confirm your address?" (THEY JUST GAVE IT!)
+`
+    : ""
+}
+
 ${timelineGuidance}
 
 **YOUR TASK:**
@@ -1462,16 +1587,44 @@ Respond naturally (2-3 sentences):`;
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
-          {
-            role: "system",
-            content: `You are an experienced construction project manager with PERFECT MEMORY and STRICT ACCURACY.
+ {
+          role: "system",
+          content: `You are an experienced construction project manager with PERFECT MEMORY, STRICT ACCURACY, and NO REPETITION ALLOWED.
 
-CRITICAL MEMORY RULES:
+**🚨 CRITICAL MEMORY RULES:**
 1. You REMEMBER every question you asked
 2. You REMEMBER every answer they gave
 3. You NEVER ask the same question twice
 4. You ALWAYS acknowledge their answer before moving forward
 5. You NEVER assume or fabricate context that wasn't stated
+
+**🚨 CRITICAL ANTI-REPETITION RULES:**
+6. You NEVER send the same message twice
+7. You NEVER start consecutive messages the same way
+8. If you said "I'd love to learn more..." in your last message, DO NOT say it again
+9. If you said "Could you share..." in your last message, phrase it differently
+10. VARY your language - use synonyms, different sentence structures
+11. If asked a question, ANSWER IT - don't deflect to "tell me about your project"
+
+**🚨 CRITICAL QUESTION ANSWERING:**
+12. If lead asks "Do you handle permits?" → Answer: "Yes, we handle all permits"
+13. If lead asks "What's included?" → Answer: "A typical renovation includes..."
+14. If lead asks "How long does it take?" → Answer: "Usually X weeks, depending on..."
+15. NEVER respond to a question with "I'd love to learn more about your project"
+
+**EXAMPLES OF GOOD VARIATION:**
+Message 1: "I'd love to learn more about your project..."
+Message 2: "Thanks for that! To help you better, what's your timeline?" ✅ (DIFFERENT)
+NOT Message 2: "I'd love to learn more..." ❌ (SAME AS BEFORE!)
+
+**QUESTION ANSWERING EXAMPLES:**
+Lead: "Do you handle permits?"
+✅ "Yes, we handle all permits and approvals. What type of project?"
+❌ "I'd love to learn more about your project. Could you share location, budget, timeline?"
+
+Lead: "What's included?"
+✅ "A bathroom reno typically includes fixtures, tiling, plumbing, electrical. What's your budget?"
+❌ "Could you share more details about your project?"
 
 **RULE 5 IS CRITICAL:**
 ❌ If lead says: "Surrey, $800k budget"
@@ -1524,8 +1677,37 @@ Use ONLY information the lead explicitly provided.`,
         console.log(
           `✅ Non-repetitive response generated (attempt ${attempts})`
         );
-        break;
+         // ✅ NEW: Verify response addresses the lead's last message
+        const leadAskedAbout = {
+          permits: /permit|licensing|approval/i.test(lastLeadMessage),
+          cost: /cost|price|how much|expensive/i.test(lastLeadMessage),
+          timeline: /how long|duration|take|timeline/i.test(lastLeadMessage),
+          included: /include|what'?s included|typical|scope/i.test(lastLeadMessage),
+          process: /process|how (do|does)|what happens/i.test(lastLeadMessage),
+        };
+        
+        const aiAnswered = {
+          permits: /yes.*permit|handle.*permit|we.*permit|permit.*handle/i.test(aiResponse.toLowerCase()),
+          cost: /\$|cost|price|budget|range|typically.*\$|around.*\$/i.test(aiResponse.toLowerCase()),
+          timeline: /week|month|day|typically|usually|generally|take.*week/i.test(aiResponse.toLowerCase()),
+          included: /include|typical|usually|scope|involve|consists of/i.test(aiResponse.toLowerCase()),
+          process: /first|step|process|typically|start|begins with/i.test(aiResponse.toLowerCase()),
+        };
+        
+        // Check if lead asked a specific question and AI didn't answer it
+        const askedButNotAnswered = Object.keys(leadAskedAbout).find(
+          topic => leadAskedAbout[topic as keyof typeof leadAskedAbout] && 
+                   !aiAnswered[topic as keyof typeof aiAnswered]
+        );
+        
+        if (askedButNotAnswered && attempts < maxAttempts) {
+          console.warn(`⚠️ Attempt ${attempts}: AI didn't answer question about "${askedButNotAnswered}", retrying...`);
+          continue; // Retry with higher temperature
+        }
+        
+        break; // Good response - exit loop
       }
+      
 
       console.warn(
         `⚠️ Attempt ${attempts}: Repetitive response detected, retrying...`
