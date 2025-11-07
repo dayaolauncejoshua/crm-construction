@@ -190,19 +190,37 @@ function parseDateFromNaturalLanguage(
     if (month !== -1 && day > 0 && day <= 31) {
       // ✅ CRITICAL FIX: Create date string for Pacific timezone, then parse
       // This ensures the time is interpreted as Pacific Time, not server's local time
-      const dateString = `${currentYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-08:00`;
-      
+      const dateString = `${currentYear}-${String(month + 1).padStart(
+        2,
+        "0"
+      )}-${String(day).padStart(2, "0")}T${String(hours).padStart(
+        2,
+        "0"
+      )}:${String(minutes).padStart(2, "0")}:00-08:00`;
+
       console.log(`📅 Creating date string: ${dateString}`);
       const targetDate = new Date(dateString);
 
       console.log(`✅ Explicit date created: ${targetDate.toISOString()}`);
-      console.log(`   Year: ${currentYear}, Month: ${month + 1}, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`);
-      console.log(`   Pacific Time: ${targetDate.toLocaleString('en-US', { timeZone: 'America/Vancouver' })}`);
+      console.log(
+        `   Year: ${currentYear}, Month: ${
+          month + 1
+        }, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`
+      );
+      console.log(
+        `   Pacific Time: ${targetDate.toLocaleString("en-US", {
+          timeZone: "America/Vancouver",
+        })}`
+      );
 
       // Validate it's not in the past
       if (targetDate < now) {
         console.warn(`⚠️ Date is in the past, trying next year...`);
-        const nextYearDateString = `${currentYear + 1}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-08:00`;
+        const nextYearDateString = `${currentYear + 1}-${String(
+          month + 1
+        ).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(
+          hours
+        ).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00-08:00`;
         return new Date(nextYearDateString);
       }
 
@@ -974,8 +992,44 @@ export class LeadQualificationService {
         // STEP 1: CHECK BOOKING INTENT FIRST (CRITICAL FIX)
         // ============================================
         console.log("🔍 Step 1: Checking booking intent...");
+
+        // ✅ ALWAYS re-detect booking intent to catch time changes
         const bookingIntent = await detectBookingIntent(messages, lead);
         console.log("📅 Booking Intent:", bookingIntent);
+
+        // ✅ NEW: Check if this is a time change during booking flow
+        const lastTwoLeadMessages = messages
+          .filter((m) => m.sender === "lead")
+          .slice(-2);
+
+        const timeChangeKeywords = [
+          "actually",
+          "wait",
+          "instead",
+          "better",
+          "change",
+          "2 pm",
+          "3 pm",
+          "4 pm",
+          "afternoon",
+          "morning",
+          "evening",
+        ];
+
+        const recentTimeChange = lastTwoLeadMessages.some((msg) =>
+          timeChangeKeywords.some((keyword) =>
+            msg.content.toLowerCase().includes(keyword)
+          )
+        );
+
+        if (recentTimeChange) {
+          console.log(
+            "⚠️ POTENTIAL TIME CHANGE DETECTED - Using latest booking intent"
+          );
+          console.log(
+            `   New proposed time: ${bookingIntent.proposedDateTime?.time}`
+          );
+        }
 
         if (
           bookingIntent.wantsToBook &&
@@ -1054,12 +1108,7 @@ export class LeadQualificationService {
           const detailsCheck = validateBookingDetails(bookingIntent, lead);
 
           if (detailsCheck.missingDetails.length > 0) {
-            // ============================================
-            // STEP 3A: REQUEST MISSING DETAILS
-            // ============================================
-            console.log("❓ Missing details:", detailsCheck.missingDetails);
-
-            // ✅ Check if lead JUST provided details in last message
+            // ✅ NEW: Check if lead just provided details that failed validation
             const lastLeadMessage =
               messages
                 .filter((m) => m.sender === "lead")
@@ -1088,8 +1137,7 @@ export class LeadQualificationService {
                 email: lead.email,
               });
 
-              // Don't ask again - something is wrong with validation or extraction
-              // Log error and notify human
+              // Don't ask again - escalate to human
               this.broadcastUpdate({
                 type: "validation_error",
                 conversationId: conversation.id,
@@ -1099,8 +1147,7 @@ export class LeadQualificationService {
                 leadMessage: lastLeadMessage,
               });
 
-              // Send acknowledgment instead of asking again
-              const acknowledgment = `Thank you for providing those details! Let me review this information and our team will reach out shortly to confirm your booking for November 3 at 2 PM. 📋`;
+              const acknowledgment = `Thank you for providing those details! Let me review this information and our team will reach out shortly to confirm your booking. 📋`;
 
               this.broadcastUpdate({
                 type: "typing_indicator",
@@ -1130,6 +1177,32 @@ export class LeadQualificationService {
               return;
             }
 
+            // ✅ IMPROVED: Use current time, acknowledge changes
+            const currentTime =
+              bookingIntent.proposedDateTime?.time || "the specified time";
+            const currentDate =
+              bookingIntent.proposedDateTime?.date || "the meeting";
+
+            // ✅ NEW: Check if time was recently changed
+            const previousAIMessages = messages
+              .filter((m) => m.sender === "ai")
+              .slice(-2);
+
+            const previouslyMentionedTime = previousAIMessages
+              .map((m) => m.content.match(/\d{1,2}\s*[AP]M/i))
+              .filter((m) => m !== null)
+              .map((m) => m![0])
+              .slice(-1)[0];
+
+            let timeAcknowledgment = "";
+            if (
+              previouslyMentionedTime &&
+              previouslyMentionedTime !== currentTime &&
+              currentTime !== "the specified time"
+            ) {
+              timeAcknowledgment = `I've updated the time to ${currentTime}. `;
+            }
+
             this.broadcastUpdate({
               type: "typing_indicator",
               conversationId: conversation.id,
@@ -1143,11 +1216,7 @@ export class LeadQualificationService {
               )
               .join("\n");
 
-            const detailsRequest = `Perfect! Before I confirm the booking for ${
-              bookingIntent.proposedDateTime?.date || "the meeting"
-            } at ${
-              bookingIntent.proposedDateTime?.time || "the specified time"
-            }, I need a few more details:
+            const detailsRequest = `${timeAcknowledgment}Perfect! Before I confirm the booking for ${currentDate} at ${currentTime}, I need a few more details:
 
 ${missingList}
 
@@ -1170,7 +1239,10 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               message: { content: detailsRequest, sender: "ai" },
             });
 
-            console.log("✅ Requested missing details, waiting for response");
+            console.log(
+              "✅ Requested missing details with CURRENT time:",
+              currentTime
+            );
             return; // Stop processing, wait for details
           }
 
