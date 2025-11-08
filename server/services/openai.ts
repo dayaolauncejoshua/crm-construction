@@ -11,6 +11,16 @@ const anthropic = new Anthropic({
 // ✅ Use Claude Sonnet 4.5 (latest, best performance)
 const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 
+// ✅ Helper: Strip markdown code blocks from JSON responses
+function parseClaudeJSON(text: string): any {
+  // Remove ```json and ``` wrappers
+  const cleaned = text
+    .replace(/```json\s*/g, '')
+    .replace(/```\s*/g, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
 // ============================================
 // ✅ TYPES (UNCHANGED)
 // ============================================
@@ -159,7 +169,7 @@ Respond with JSON only:
       throw new Error("Unexpected response type");
     }
     
-    const result = JSON.parse(content.text);
+    const result = parseClaudeJSON(content.text);
     
     console.log("🎯 Intent Classification:", {
       message: message.substring(0, 50),
@@ -276,7 +286,7 @@ Respond with JSON only:
       throw new Error("Unexpected response type");
     }
     
-    const result = JSON.parse(content.text);
+    const result = parseClaudeJSON(content.text);
     
     console.log("📅 Booking Detection Result:", {
       wantsToBook: result.wantsToBook,
@@ -428,7 +438,7 @@ Respond with JSON only:
       throw new Error("Unexpected response type");
     }
     
-    const result = JSON.parse(content.text);
+    const result = parseClaudeJSON(content.text);
     
     console.log("📊 Lead Qualification:", {
       score: result.score,
@@ -678,7 +688,7 @@ Respond with JSON only:
       return { confidence: 0 };
     }
     
-    const result = JSON.parse(content.text);
+    const result = parseClaudeJSON(content.text);
     
     return {
       name: result.name || undefined,
@@ -733,7 +743,7 @@ export async function generateAudit(
       throw new Error("Unexpected response");
     }
     
-    const result = JSON.parse(content.text);
+    const result = parseClaudeJSON(content.text);
     
     return {
       wins: result.wins || ["Improvement opportunity identified"],
