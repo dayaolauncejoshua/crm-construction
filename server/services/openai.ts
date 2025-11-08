@@ -784,8 +784,8 @@ Respond with JSON only:
 
     console.log(`📊 Base AI score: ${baseScore.toFixed(2)}`);
 
-      const leadMessagesText = conversationHistory
-      .map(m => m.sender === "lead" ? m.content : "")
+    const leadMessagesText = conversationHistory
+      .map((m) => (m.sender === "lead" ? m.content : ""))
       .join(" ")
       .toLowerCase();
 
@@ -794,7 +794,11 @@ Respond with JSON only:
     let timelineReasoning = "";
 
     // ✅ IMMEDIATE (1-4 weeks) → +0.10 to +0.20
-    if (/asap|urgent|immediately|right away|as soon as possible/i.test(leadMessagesText)) {
+    if (
+      /asap|urgent|immediately|right away|as soon as possible/i.test(
+        leadMessagesText
+      )
+    ) {
       timelineAdjustment = 0.15;
       detectedTimeline = "immediate (ASAP/urgent)";
       timelineReasoning = "Urgent timeline detected";
@@ -805,13 +809,13 @@ Respond with JSON only:
     } else if (/in (\d+) weeks?/i.test(leadMessagesText)) {
       const weekMatch = leadMessagesText.match(/in (\d+) weeks?/i);
       const weeks = weekMatch ? parseInt(weekMatch[1]) : 4;
-      
+
       if (weeks <= 2) {
         timelineAdjustment = 0.15;
         detectedTimeline = `immediate (${weeks} weeks)`;
         timelineReasoning = `Starting in ${weeks} weeks`;
       } else if (weeks <= 4) {
-        timelineAdjustment = 0.10;
+        timelineAdjustment = 0.1;
         detectedTimeline = `urgent (${weeks} weeks)`;
         timelineReasoning = `Starting in ${weeks} weeks`;
       }
@@ -820,10 +824,10 @@ Respond with JSON only:
     else if (/next month|in a month|in (\d+) months?/i.test(leadMessagesText)) {
       const monthMatch = leadMessagesText.match(/in (\d+) months?/i);
       const months = monthMatch ? parseInt(monthMatch[1]) : 1;
-      
+
       if (months <= 3) {
         timelineAdjustment = 0.05;
-        detectedTimeline = `soon (${months} month${months > 1 ? 's' : ''})`;
+        detectedTimeline = `soon (${months} month${months > 1 ? "s" : ""})`;
         timelineReasoning = `Starting in ${months} month(s)`;
       } else if (months <= 6) {
         timelineAdjustment = 0;
@@ -836,20 +840,33 @@ Respond with JSON only:
       }
     }
     // ✅ LONG-TERM (next year, planning stage) → -0.10 to -0.15
-    else if (/next year|2026|in a year|12 months|planning stage|just exploring|just looking|no rush|flexible/i.test(leadMessagesText)) {
+    else if (
+      /next year|2026|in a year|12 months|planning stage|just exploring|just looking|no rush|flexible/i.test(
+        leadMessagesText
+      )
+    ) {
       timelineAdjustment = -0.15;
       detectedTimeline = "long-term (12+ months or exploring)";
       timelineReasoning = "Long-term planning or exploratory phase";
     }
 
     // ✅ Apply adjustment with bounds
-    const adjustedScore = Math.max(0.05, Math.min(0.95, baseScore + timelineAdjustment));
+    const adjustedScore = Math.max(
+      0.05,
+      Math.min(0.95, baseScore + timelineAdjustment)
+    );
 
     console.log(`📊 Timeline Analysis:`);
     console.log(`   Detected: ${detectedTimeline}`);
     console.log(`   Reasoning: ${timelineReasoning}`);
-    console.log(`   Adjustment: ${timelineAdjustment >= 0 ? '+' : ''}${timelineAdjustment.toFixed(2)}`);
-    console.log(`   Final: ${baseScore.toFixed(2)} → ${adjustedScore.toFixed(2)}`);
+    console.log(
+      `   Adjustment: ${
+        timelineAdjustment >= 0 ? "+" : ""
+      }${timelineAdjustment.toFixed(2)}`
+    );
+    console.log(
+      `   Final: ${baseScore.toFixed(2)} → ${adjustedScore.toFixed(2)}`
+    );
 
     const finalScore = adjustedScore;
 
@@ -889,12 +906,24 @@ function isRepetitiveResponse(
 
   const proposedLower = proposedResponse.toLowerCase().trim();
 
-  const cleanProposed = proposedLower.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
-  
+  const cleanProposed = proposedLower
+    .replace(
+      /[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
   // Check for EXACT or NEAR-EXACT repetition (>90% match)
   for (const prevMessage of recentAIMessages) {
-    const cleanPrev = prevMessage.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
-    
+    const cleanPrev = prevMessage
+      .replace(
+        /[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g,
+        ""
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+
     // Exact match
     if (cleanProposed === cleanPrev) {
       console.warn("🚫 EXACT REPETITION DETECTED!");
@@ -906,7 +935,9 @@ function isRepetitiveResponse(
     // Near-exact match (>90% similarity)
     const similarity = calculateSimilarity(cleanProposed, cleanPrev);
     if (similarity > 0.9) {
-      console.warn(`🚫 NEAR-EXACT REPETITION! (${(similarity * 100).toFixed(0)}% match)`);
+      console.warn(
+        `🚫 NEAR-EXACT REPETITION! (${(similarity * 100).toFixed(0)}% match)`
+      );
       console.warn(`   Previous: "${prevMessage.substring(0, 80)}..."`);
       console.warn(`   Proposed: "${proposedResponse.substring(0, 80)}..."`);
       return { isRepetitive: true, lastAIMessage: prevMessage };
@@ -915,15 +946,27 @@ function isRepetitiveResponse(
 
   // Check if core message is repeated (first 40 chars)
   const proposedCore = cleanProposed.substring(0, 40);
-  const recentCores = recentAIMessages.map(msg => 
-    msg.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim().substring(0, 40)
+  const recentCores = recentAIMessages.map((msg) =>
+    msg
+      .replace(
+        /[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g,
+        ""
+      )
+      .replace(/\s+/g, " ")
+      .trim()
+      .substring(0, 40)
   );
-  
-  const coreRepeatCount = recentCores.filter(core => core === proposedCore && core.length > 15).length;
+
+  const coreRepeatCount = recentCores.filter(
+    (core) => core === proposedCore && core.length > 15
+  ).length;
   if (coreRepeatCount >= 2) {
     console.warn(`🚫 CORE MESSAGE REPEATED ${coreRepeatCount} times!`);
     console.warn(`   Core: "${proposedCore}"`);
-    return { isRepetitive: true, lastAIMessage: recentAIMessages[recentAIMessages.length - 1] };
+    return {
+      isRepetitive: true,
+      lastAIMessage: recentAIMessages[recentAIMessages.length - 1],
+    };
   }
 
   // Check for exact or near-exact repetition (original code continues below)
@@ -1368,22 +1411,26 @@ export async function generateAIResponse(
       /how much (does|is|for)/i,
     ];
 
-    const leadAskedDirectQuestion = questionIndicators.some(pattern => 
+    const leadAskedDirectQuestion = questionIndicators.some((pattern) =>
       pattern.test(lastLeadMessage.toLowerCase().trim())
     );
 
     // If lead asked a question, use DEDICATED question-answering mode
-        if (leadAskedDirectQuestion && !hasPendingBooking) {
+    if (leadAskedDirectQuestion && !hasPendingBooking) {
       console.log("🔍 QUESTION DETECTED - Using dedicated Q&A mode");
       console.log(`   Question: "${lastLeadMessage}"`);
-      console.log(`   Last lead message from context: "${conversationHistory[conversationHistory.length - 1]?.content}"`);
-      
-      const actualLastLeadMessage = conversationHistory
-        .filter((msg) => msg.sender === "lead")
-        .slice(-1)[0]?.content || lastLeadMessage;
-      
+      console.log(
+        `   Last lead message from context: "${
+          conversationHistory[conversationHistory.length - 1]?.content
+        }"`
+      );
+
+      const actualLastLeadMessage =
+        conversationHistory.filter((msg) => msg.sender === "lead").slice(-1)[0]
+          ?.content || lastLeadMessage;
+
       console.log(`   Using question for API: "${actualLastLeadMessage}"`);
-      
+
       // ✅ Build simple, focused question-answering prompt
       const qaPrompt = `You are a construction expert. A customer asked you this question:
 
@@ -1419,31 +1466,35 @@ Now answer the question naturally and concisely:`;
           messages: [
             {
               role: "system",
-              content: "You are a construction expert. Answer questions directly and concisely. Never deflect. Always answer the question in your first sentence."
+              content:
+                "You are a construction expert. Answer questions directly and concisely. Never deflect. Always answer the question in your first sentence.",
             },
             {
               role: "user",
-              content: qaPrompt  // This now uses actualLastLeadMessage
-            }
+              content: qaPrompt, // This now uses actualLastLeadMessage
+            },
           ],
           temperature: 0.7,
           max_tokens: 100,
         });
 
         const directAnswer = qaResponse.choices[0].message.content || "";
-        
+
         console.log("✅ Direct answer generated:");
         console.log(`   "${directAnswer}"`);
-        
+
         // Verify answer isn't a deflection
-        const isDeflection = /i'd love to learn more|could you share|tell me (more |about )/i.test(directAnswer.toLowerCase());
-        
+        const isDeflection =
+          /i'd love to learn more|could you share|tell me (more |about )/i.test(
+            directAnswer.toLowerCase()
+          );
+
         if (isDeflection) {
           console.warn("⚠️ Q&A mode still deflecting, using fallback");
           // Fallback: simple direct answer
           return "Yes, we handle that. Could you share more details about your project?";
         }
-        
+
         return directAnswer;
       } catch (error) {
         console.error("❌ Q&A mode error:", error);
@@ -1768,9 +1819,9 @@ Respond naturally (2-3 sentences):`;
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
- {
-          role: "system",
-          content: `You are an experienced construction project manager with PERFECT MEMORY, STRICT ACCURACY, and NO REPETITION ALLOWED.
+          {
+            role: "system",
+            content: `You are an experienced construction project manager with PERFECT MEMORY, STRICT ACCURACY, and NO REPETITION ALLOWED.
 
 **🚨 CRITICAL MEMORY RULES:**
 1. You REMEMBER every question you asked
@@ -1858,37 +1909,52 @@ Use ONLY information the lead explicitly provided.`,
         console.log(
           `✅ Non-repetitive response generated (attempt ${attempts})`
         );
-         // ✅ NEW: Verify response addresses the lead's last message
+        // ✅ NEW: Verify response addresses the lead's last message
         const leadAskedAbout = {
           permits: /permit|licensing|approval/i.test(lastLeadMessage),
           cost: /cost|price|how much|expensive/i.test(lastLeadMessage),
           timeline: /how long|duration|take|timeline/i.test(lastLeadMessage),
-          included: /include|what'?s included|typical|scope/i.test(lastLeadMessage),
+          included: /include|what'?s included|typical|scope/i.test(
+            lastLeadMessage
+          ),
           process: /process|how (do|does)|what happens/i.test(lastLeadMessage),
         };
-        
+
         const aiAnswered = {
-          permits: /yes.*permit|handle.*permit|we.*permit|permit.*handle/i.test(aiResponse.toLowerCase()),
-          cost: /\$|cost|price|budget|range|typically.*\$|around.*\$/i.test(aiResponse.toLowerCase()),
-          timeline: /week|month|day|typically|usually|generally|take.*week/i.test(aiResponse.toLowerCase()),
-          included: /include|typical|usually|scope|involve|consists of/i.test(aiResponse.toLowerCase()),
-          process: /first|step|process|typically|start|begins with/i.test(aiResponse.toLowerCase()),
+          permits: /yes.*permit|handle.*permit|we.*permit|permit.*handle/i.test(
+            aiResponse.toLowerCase()
+          ),
+          cost: /\$|cost|price|budget|range|typically.*\$|around.*\$/i.test(
+            aiResponse.toLowerCase()
+          ),
+          timeline:
+            /week|month|day|typically|usually|generally|take.*week/i.test(
+              aiResponse.toLowerCase()
+            ),
+          included: /include|typical|usually|scope|involve|consists of/i.test(
+            aiResponse.toLowerCase()
+          ),
+          process: /first|step|process|typically|start|begins with/i.test(
+            aiResponse.toLowerCase()
+          ),
         };
-        
+
         // Check if lead asked a specific question and AI didn't answer it
         const askedButNotAnswered = Object.keys(leadAskedAbout).find(
-          topic => leadAskedAbout[topic as keyof typeof leadAskedAbout] && 
-                   !aiAnswered[topic as keyof typeof aiAnswered]
+          (topic) =>
+            leadAskedAbout[topic as keyof typeof leadAskedAbout] &&
+            !aiAnswered[topic as keyof typeof aiAnswered]
         );
-        
+
         if (askedButNotAnswered && attempts < maxAttempts) {
-          console.warn(`⚠️ Attempt ${attempts}: AI didn't answer question about "${askedButNotAnswered}", retrying...`);
+          console.warn(
+            `⚠️ Attempt ${attempts}: AI didn't answer question about "${askedButNotAnswered}", retrying...`
+          );
           continue; // Retry with higher temperature
         }
-        
+
         break; // Good response - exit loop
       }
-      
 
       console.warn(
         `⚠️ Attempt ${attempts}: Repetitive response detected, retrying...`
@@ -2013,68 +2079,110 @@ function detectTimeChange(conversationHistory: any[]): {
   };
 }
 
+// ✅ NEW: Extract times in CODE (not prompts)
+interface TimeExtraction {
+  time: string;
+  confidence: number;
+  messageIndex: number;
+}
+
+// ✅ FIXED: Proper TypeScript types
+// ✅ SIMPLIFIED: No complex typing issues
+function extractTimesFromConversation(messages: any[]): TimeExtraction[] {
+  const timeExtractions: TimeExtraction[] = [];
+
+  messages.forEach((msg, index) => {
+    if (msg.sender !== "lead") return;
+
+    const content = msg.content;
+
+    // Pattern 1: Full time "2:30 PM"
+    let fullTimeRegex = /\b(\d{1,2})\s*:\s*(\d{2})\s*(am|pm|AM|PM)\b/gi;
+    let match = fullTimeRegex.exec(content);
+    while (match !== null) {
+      const hours = match[1];
+      const minutes = match[2];
+      const period = match[3].toUpperCase();
+      timeExtractions.push({
+        time: `${hours}:${minutes} ${period}`,
+        confidence: 0.95,
+        messageIndex: index,
+      });
+      match = fullTimeRegex.exec(content);
+    }
+
+    // Pattern 2: Short time "2 PM" (but not if we already found full time)
+    if (!fullTimeRegex.test(content)) {
+      let shortTimeRegex = /\b(\d{1,2})\s*(am|pm|AM|PM)\b/gi;
+      let match2 = shortTimeRegex.exec(content);
+      while (match2 !== null) {
+        const hours = match2[1];
+        const period = match2[2].toUpperCase();
+        timeExtractions.push({
+          time: `${hours}:00 ${period}`,
+          confidence: 0.95,
+          messageIndex: index,
+        });
+        match2 = shortTimeRegex.exec(content);
+      }
+    }
+
+    // Pattern 3: General time of day
+    if (/\bmorning\b/i.test(content)) {
+      timeExtractions.push({
+        time: "10:00 AM",
+        confidence: 0.7,
+        messageIndex: index,
+      });
+    } else if (/\bafternoon\b/i.test(content)) {
+      timeExtractions.push({
+        time: "2:00 PM",
+        confidence: 0.7,
+        messageIndex: index,
+      });
+    } else if (/\bevening\b/i.test(content)) {
+      timeExtractions.push({
+        time: "6:00 PM",
+        confidence: 0.7,
+        messageIndex: index,
+      });
+    }
+  });
+
+  return timeExtractions;
+}
+
+function getMostRecentTime(extractions: TimeExtraction[]): string | undefined {
+  if (extractions.length === 0) return undefined;
+
+  // Sort by message index (oldest to newest)
+  const sorted = [...extractions].sort((a, b) => a.messageIndex - b.messageIndex);
+
+  // Return the LAST one (most recent)
+  return sorted[sorted.length - 1].time;
+}
+
 export async function detectBookingIntent(
   conversationHistory: any[],
   leadData: any
 ): Promise<BookingIntent> {
   try {
     console.log("🔍 ========== DETECT BOOKING INTENT ==========");
-    console.log(`📊 Processing ${conversationHistory.length} messages`);
 
-    // ✅ CRITICAL: Sort messages chronologically ONCE (oldest to newest)
-    // Database may return them in reverse order
+    // ✅ STEP 1: Extract times in CODE (not AI)
     const sortedMessages = [...conversationHistory].sort((a, b) => {
       const timeA = a.sentAt ? new Date(a.sentAt).getTime() : 0;
       const timeB = b.sentAt ? new Date(b.sentAt).getTime() : 0;
-      return timeA - timeB; // Ascending order (oldest first)
+      return timeA - timeB;
     });
 
-    console.log("🔄 Messages sorted chronologically:");
-    console.log(
-      `   First (oldest): "${sortedMessages[0]?.content?.substring(0, 50)}..."`
-    );
-    console.log(
-      `   Last (newest): "${sortedMessages[
-        sortedMessages.length - 1
-      ]?.content?.substring(0, 50)}..."`
-    );
+    const timeExtractions = extractTimesFromConversation(sortedMessages);
+    const mostRecentTime = getMostRecentTime(timeExtractions);
 
-    // ✅ Extract all times mentioned by customer for logging
-    const customerTimeMentions = sortedMessages
-      .filter((msg) => msg.sender === "lead")
-      .map((msg, index) => {
-        const timeMatch = msg.content.match(/\d{1,2}\s*[AP]M/i);
-        const timeOfDay = msg.content.match(/\b(morning|afternoon|evening)\b/i);
+    console.log("⏰ Extracted times:", timeExtractions);
+    console.log("⏰ Most recent time:", mostRecentTime);
 
-        if (timeMatch || timeOfDay) {
-          return {
-            messageIndex: index + 1,
-            content: msg.content,
-            extractedTime: timeMatch ? timeMatch[0] : timeOfDay![0],
-          };
-        }
-        return null;
-      })
-      .filter(Boolean);
-
-    console.log(
-      `⏰ Customer mentioned ${customerTimeMentions.length} time(s):`
-    );
-    customerTimeMentions.forEach((mention: any) => {
-      console.log(
-        `   Msg ${mention.messageIndex}: "${mention.extractedTime}" in "${mention.content}"`
-      );
-    });
-
-    if (customerTimeMentions.length > 0) {
-      const lastTime = customerTimeMentions[customerTimeMentions.length - 1];
-      console.log(
-        `⏰ EXPECTED EXTRACTION: "${
-          lastTime!.extractedTime
-        }" (from most recent message)`
-      );
-    }
-
+    // ✅ STEP 2: Build simple conversation text
     const conversationText = sortedMessages
       .map(
         (msg) =>
@@ -2082,114 +2190,26 @@ export async function detectBookingIntent(
       )
       .join("\n");
 
-    console.log(
-      "📝 Full conversation being sent to AI (chronologically ordered):"
-    );
-    console.log(conversationText);
-    console.log("=".repeat(50));
+    // ✅ STEP 3: SIMPLIFIED PROMPT (was 300 lines, now 50 lines)
+    const prompt = `Analyze this conversation for booking intent:
 
-    const prompt = `You are a booking intent detector for a construction company.
-
-CONVERSATION:
 ${conversationText}
 
-**TASK:** Detect if customer wants to schedule a meeting AND if date/time are CONFIRMED.
+Determine if customer wants to book a meeting and if details are confirmed.
 
-**HIGH CONFIDENCE BOOKING (wantsToBook: true, isConfirmed: true, confidence > 0.8):**
-✅ Lead says: "November 4 at 2PM" → CONFIRMED
-✅ Lead says: "Yes, Thursday at 2PM works" → CONFIRMED
-✅ Lead says: "Let's meet Friday afternoon at 3" → CONFIRMED
-✅ Agent: "Thursday at 2?" Lead: "Yes" → CONFIRMED
-
-**MEDIUM CONFIDENCE (wantsToBook: true, isConfirmed: false, confidence 0.5-0.7):**
-⚠️ Lead says: "I'm available Thursday" (NO time specified) → NOT CONFIRMED
-⚠️ Lead says: "this week works" (NO specific day) → NOT CONFIRMED
-⚠️ Lead says: "I'd like to meet" (NO date at all) → NOT CONFIRMED
-⚠️ Agent just asked: "morning or afternoon?" and lead hasn't responded → NOT CONFIRMED
-
-**LOW CONFIDENCE (wantsToBook: false):**
-❌ Just asking questions about services
-❌ Vague interest: "maybe later", "I'll think about it"
-❌ Still gathering information
-
-**TASK:** Detect if the customer wants to schedule a meeting AND if a FINAL, SPECIFIC date and time have been agreed upon.
-
-...
-**CRITICAL RULES:**
-1. isConfirmed = true ONLY when BOTH date AND time are specified by lead
-2. If agent just asked a follow-up question about booking details → isConfirmed = false
-3. "Thursday" without time → NOT confirmed
-4. "2 PM" without date → NOT confirmed  
-5. "this week" or "next week" → NOT confirmed (too vague)
-
-**EXTRACT IF MENTIONED:**
-- Specific date/day: "Thursday", "Friday", "November 15", "next Monday"
-- Specific time: MUST PRESERVE AM/PM exactly as stated
-  * CRITICAL: Use the MOST RECENT time mentioned by customer
-  * If customer says "9 AM" then later "actually 3 PM", use "3 PM"
-  * If customer says "morning works" then later "afternoon is better", use "2 PM"
-  * ALWAYS extract the LAST time mentioned, not the first
-- Location/address: Complete address if mentioned
-- Meeting type: "site visit" vs "consultation"
-
-**TIME CHANGE DETECTION - CRITICAL:**
-
-Scan the ENTIRE conversation from START to END. If customer mentions multiple times, use the LAST one mentioned.
-
-**STEP-BY-STEP TIME EXTRACTION:**
-1. Read ALL customer messages from first to last
-2. Note EVERY time mentioned
-3. If customer uses words like "actually", "instead", "change", "better" → they're changing their mind
-4. ALWAYS use the MOST RECENT time mentioned
-
-**REAL EXAMPLES:**
-
-Example 1: Time Change
-Customer (message 1): "9AM should work"
-Customer (message 2): "Actually, can we do afternoon instead?"
-Customer (message 3): "3 PM is better"
-→ EXTRACT: time = "3 PM" ✅ (LATEST mention, not "9 AM")
-
-Example 2: Time Change with "instead"
-Customer (message 1): "Morning works, 10 AM"
-Customer (message 2): "Wait, afternoon is better instead"
-→ EXTRACT: time = "2 PM" ✅ (changed to afternoon)
-
-Example 3: Time Refinement
-Customer (message 1): "afternoon"
-Customer (message 2): "3 PM specifically"
-→ EXTRACT: time = "3 PM" ✅ (more specific time)
-
-Example 4: NO Change (just confirmation)
-Customer (message 1): "2 PM works"
-Agent: "Great, 2 PM on Thursday?"
-Customer (message 2): "Yes"
-→ EXTRACT: time = "2 PM" ✅ (confirmed, not changed)
-
-**WRONG EXAMPLES:**
-❌ Customer says "9 AM" then "3 PM is better" → Extracting "9 AM" (WRONG! Use "3 PM")
-❌ Customer says "morning" then "afternoon instead" → Extracting "10 AM" (WRONG! Use "2 PM")
-
-**TIME EXTRACTION EXAMPLES:**
-✅ Customer: "9AM should work" → time: "9 AM"
-✅ Customer: "2 PM works for me" → time: "2 PM"
-✅ Customer: "Let's meet at 3" → time: "3 PM" (assume PM for single digit 3+)
-✅ Customer: "morning works" → time: "10 AM"
-❌ Customer: "9AM should work" → time: "5 PM" ← WRONG! Use what they said!
+**HIGH CONFIDENCE (0.8+):** Customer says "Yes, Thursday at 2 PM" or "Book me for Nov 15"
+**MEDIUM (0.5-0.7):** Customer says "I'm available Thursday" (no time) or "this week works"
+**LOW (0.3-0.5):** Customer says "maybe later" or asking questions
 
 Respond with JSON only:
 {
   "wantsToBook": true/false,
-  "isConfirmed": true/false,
+  "isConfirmed": true/false (both date AND time confirmed),
   "confidence": 0.85,
-  "proposedDateTime": {
-    "date": "Thursday" or null if not specific,
-    "time": "9 AM" or "2 PM" (EXACT time customer stated with AM/PM),
-    "isFlexible": true/false
-  },
-  "meetingType": "site-visit" or "consultation" or null,
-  "location": "site address" or null,
-  "reasoning": "Why this confidence level? What's confirmed/missing?"
+  "proposedDate": "Thursday" or "November 15" or null,
+  "location": "123 Main St, Vancouver" or null,
+  "meetingType": "site-visit" or "consultation",
+  "reasoning": "Brief explanation"
 }`;
 
     const response = await openai.chat.completions.create({
@@ -2197,100 +2217,31 @@ Respond with JSON only:
       messages: [
         {
           role: "system",
-          content: `You are a booking intent analyzer with ZERO MEMORY BIAS and PERFECT RECENCY DETECTION.
-
-**YOUR ONLY JOB: Extract the ABSOLUTE LAST time the customer mentioned**
-
-**CRITICAL PROTOCOL:**
-
-STEP 1: Read ALL customer messages from FIRST to LAST
-STEP 2: Build a list of EVERY time mentioned
-STEP 3: Return ONLY the LAST time in the list
-STEP 4: Ignore ALL previous times
-
-**RECENCY EXAMPLES:**
-
-Example 1: Simple Change
-Customer (msg 1): "10 AM works"
-Customer (msg 2): "Actually 2 PM is better"
-→ EXTRACT: time = "2 PM" ✅ (LAST time mentioned, ignore "10 AM")
-
-Example 2: Multiple Changes
-Customer (msg 1): "10 AM works"
-Customer (msg 2): "Actually 2 PM is better"
-Customer (msg 3): "Wait, 8 AM is better"
-→ EXTRACT: time = "8 AM" ✅ (LAST time mentioned, ignore "10 AM" and "2 PM")
-
-Example 3: Five Changes
-Customer (msg 1): "10 AM works"
-Customer (msg 2): "Actually 2 PM"
-Customer (msg 3): "Wait 8 AM"
-Customer (msg 4): "5 PM is better"
-Customer (msg 5): "Actually 3 PM"
-→ EXTRACT: time = "3 PM" ✅ (LAST time mentioned, ignore all previous)
-
-Example 4: With Agent Confirmation
-Customer (msg 1): "10 AM works"
-Agent: "Perfect! Tuesday at 10 AM"
-Customer (msg 2): "Actually 2 PM is better"
-→ EXTRACT: time = "2 PM" ✅ (Customer's LAST time, ignore agent's echo)
-
-**WRONG BEHAVIOR (DO NOT DO THIS):**
-❌ Customer says "10 AM", then "2 PM" → Extracting "10 AM" (FIRST, not LAST)
-❌ Customer says "2 PM", then "8 AM" → Extracting "2 PM" (MIDDLE, not LAST)
-❌ Agent echoes "10 AM", customer says "2 PM" → Extracting "10 AM" (AGENT'S, not customer's LAST)
-
-**RULE: If customer mentions MULTIPLE times, ONLY the LAST one matters. All previous times are OBSOLETE.**
-
-Respond with valid JSON only.`,
+          content: "Extract booking intent. Respond with valid JSON only.",
         },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3,
+      temperature: 0.2,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
 
-    console.log("🤖 AI Response:");
-    console.log(JSON.stringify(result, null, 2));
+    console.log("🤖 AI Response:", result);
 
-    const extractedTime = result.proposedDateTime?.time;
-    console.log(`⏰ AI EXTRACTED TIME: "${extractedTime || "NONE"}"`);
-
-    // ✅ Verify extraction matches expectation
-    if (customerTimeMentions.length > 0 && extractedTime) {
-      const expectedTime =
-        customerTimeMentions[customerTimeMentions.length - 1]!.extractedTime;
-      const normalizedExpected = expectedTime.toUpperCase().replace(/\s/g, "");
-      const normalizedExtracted = extractedTime
-        .toUpperCase()
-        .replace(/\s/g, "");
-
-      if (normalizedExpected === normalizedExtracted) {
-        console.log("✅ CORRECT: AI extracted the most recent time");
-      } else {
-        console.error("❌❌❌ ERROR: AI EXTRACTION MISMATCH! ❌❌❌");
-        console.error(
-          `   Expected: "${expectedTime}" (from last customer message)`
-        );
-        console.error(`   Got: "${extractedTime}"`);
-        console.error(
-          "   This is a prompt/AI issue - the AI is not following instructions!"
-        );
-      }
-    }
-
-    console.log("🔍 ========== END DETECT BOOKING INTENT ==========\n");
-
+    // ✅ STEP 4: INJECT time from code (don't trust AI)
     return {
       wantsToBook: result.wantsToBook ?? false,
       isConfirmed: result.isConfirmed ?? false,
       confidence: result.confidence ?? 0,
-      proposedDateTime: result.proposedDateTime,
+      proposedDateTime: {
+        date: result.proposedDate,
+        time: mostRecentTime ?? undefined, // ✅ FIXED: undefined instead of null
+        isFlexible: result.confidence < 0.7,
+      },
       location: result.location,
       meetingType: result.meetingType || "consultation",
-      reasoning: result.reasoning || "Unable to determine booking intent",
+      reasoning: result.reasoning || "Unable to determine",
     };
   } catch (error) {
     console.error("Error detecting booking intent:", error);
