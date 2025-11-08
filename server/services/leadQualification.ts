@@ -1256,10 +1256,9 @@ export class LeadQualificationService {
         }
 
         if (
-          bookingIntent.wantsToBook &&
-          bookingIntent.isConfirmed &&
-          bookingIntent.confidence > BOOKING_CONFIDENCE_THRESHOLD
-        ) {
+  bookingIntent.wantsToBook &&
+  bookingIntent.confidence > 0.5  // Lower threshold
+) {
           console.log("✅ Confirmed booking intent detected!");
 
           // ============================================

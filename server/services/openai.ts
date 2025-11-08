@@ -150,7 +150,11 @@ export async function classifyIntent(
       "home addition",
     ];
 
-    if (obviousConstructionTerms.some((term) => message.toLowerCase().includes(term))) {
+    if (
+      obviousConstructionTerms.some((term) =>
+        message.toLowerCase().includes(term)
+      )
+    ) {
       console.log("✅ FAST PATH: Obvious construction term detected");
       return {
         isRelevant: true,
@@ -174,9 +178,13 @@ export async function classifyIntent(
     ];
 
     // Only flag as spam if it's the FIRST message AND matches pattern
-    const isFirstMessage = conversationHistory.filter((m) => m.sender === "lead").length <= 1;
+    const isFirstMessage =
+      conversationHistory.filter((m) => m.sender === "lead").length <= 1;
 
-    if (isFirstMessage && obviousSpamPatterns.some((pattern) => pattern.test(message.trim()))) {
+    if (
+      isFirstMessage &&
+      obviousSpamPatterns.some((pattern) => pattern.test(message.trim()))
+    ) {
       console.log("🚫 FAST PATH: Obvious spam/test pattern (first message)");
       return {
         isRelevant: false,
@@ -189,7 +197,9 @@ export async function classifyIntent(
     // ============================================
     // ✅ BENEFIT OF DOUBT: Early messages
     // ============================================
-    const leadMessageCount = conversationHistory.filter((m) => m.sender === "lead").length;
+    const leadMessageCount = conversationHistory.filter(
+      (m) => m.sender === "lead"
+    ).length;
 
     if (leadMessageCount <= 2 && message.length < 20) {
       console.log("✅ Early message, giving benefit of doubt");
@@ -208,11 +218,16 @@ export async function classifyIntent(
 
     const recentContext = conversationHistory
       .slice(-5)
-      .map((msg) => `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`)
+      .map(
+        (msg) =>
+          `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`
+      )
       .join("\n");
 
     // ✅ SIMPLIFIED PROMPT (was 200 lines, now 40 lines)
-    const prompt = `Classify if this inquiry is relevant to ${clientData?.name || "a construction company"}:
+    const prompt = `Classify if this inquiry is relevant to ${
+      clientData?.name || "a construction company"
+    }:
 
 Recent conversation:
 ${recentContext}
@@ -244,9 +259,10 @@ EXAMPLES:
       messages: [
         {
           role: "system",
-          content: "You are a strict intent classifier. Respond with valid JSON only. Be decisive and concise."
+          content:
+            "You are a strict intent classifier. Respond with valid JSON only. Be decisive and concise.",
         },
-        { role: "user", content: prompt }
+        { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
@@ -263,12 +279,13 @@ EXAMPLES:
       confidence: result.confidence || 0.5,
       reasoning: result.reasoning || "Unable to classify intent",
     };
-
   } catch (error) {
     console.error("❌ Intent classification error:", error);
 
     // ✅ Safe fallback: Give benefit of doubt for early messages
-    const leadCount = conversationHistory.filter((m) => m.sender === "lead").length;
+    const leadCount = conversationHistory.filter(
+      (m) => m.sender === "lead"
+    ).length;
 
     if (leadCount <= 2) {
       return {
@@ -463,8 +480,8 @@ Respond with JSON only:
 
     console.log(`📊 Base AI score: ${baseScore.toFixed(2)}`);
 
-      const leadMessagesText = conversationHistory
-      .map(m => m.sender === "lead" ? m.content : "")
+    const leadMessagesText = conversationHistory
+      .map((m) => (m.sender === "lead" ? m.content : ""))
       .join(" ")
       .toLowerCase();
 
@@ -473,7 +490,11 @@ Respond with JSON only:
     let timelineReasoning = "";
 
     // ✅ IMMEDIATE (1-4 weeks) → +0.10 to +0.20
-    if (/asap|urgent|immediately|right away|as soon as possible/i.test(leadMessagesText)) {
+    if (
+      /asap|urgent|immediately|right away|as soon as possible/i.test(
+        leadMessagesText
+      )
+    ) {
       timelineAdjustment = 0.15;
       detectedTimeline = "immediate (ASAP/urgent)";
       timelineReasoning = "Urgent timeline detected";
@@ -484,13 +505,13 @@ Respond with JSON only:
     } else if (/in (\d+) weeks?/i.test(leadMessagesText)) {
       const weekMatch = leadMessagesText.match(/in (\d+) weeks?/i);
       const weeks = weekMatch ? parseInt(weekMatch[1]) : 4;
-      
+
       if (weeks <= 2) {
         timelineAdjustment = 0.15;
         detectedTimeline = `immediate (${weeks} weeks)`;
         timelineReasoning = `Starting in ${weeks} weeks`;
       } else if (weeks <= 4) {
-        timelineAdjustment = 0.10;
+        timelineAdjustment = 0.1;
         detectedTimeline = `urgent (${weeks} weeks)`;
         timelineReasoning = `Starting in ${weeks} weeks`;
       }
@@ -499,10 +520,10 @@ Respond with JSON only:
     else if (/next month|in a month|in (\d+) months?/i.test(leadMessagesText)) {
       const monthMatch = leadMessagesText.match(/in (\d+) months?/i);
       const months = monthMatch ? parseInt(monthMatch[1]) : 1;
-      
+
       if (months <= 3) {
         timelineAdjustment = 0.05;
-        detectedTimeline = `soon (${months} month${months > 1 ? 's' : ''})`;
+        detectedTimeline = `soon (${months} month${months > 1 ? "s" : ""})`;
         timelineReasoning = `Starting in ${months} month(s)`;
       } else if (months <= 6) {
         timelineAdjustment = 0;
@@ -515,20 +536,33 @@ Respond with JSON only:
       }
     }
     // ✅ LONG-TERM (next year, planning stage) → -0.10 to -0.15
-    else if (/next year|2026|in a year|12 months|planning stage|just exploring|just looking|no rush|flexible/i.test(leadMessagesText)) {
+    else if (
+      /next year|2026|in a year|12 months|planning stage|just exploring|just looking|no rush|flexible/i.test(
+        leadMessagesText
+      )
+    ) {
       timelineAdjustment = -0.15;
       detectedTimeline = "long-term (12+ months or exploring)";
       timelineReasoning = "Long-term planning or exploratory phase";
     }
 
     // ✅ Apply adjustment with bounds
-    const adjustedScore = Math.max(0.05, Math.min(0.95, baseScore + timelineAdjustment));
+    const adjustedScore = Math.max(
+      0.05,
+      Math.min(0.95, baseScore + timelineAdjustment)
+    );
 
     console.log(`📊 Timeline Analysis:`);
     console.log(`   Detected: ${detectedTimeline}`);
     console.log(`   Reasoning: ${timelineReasoning}`);
-    console.log(`   Adjustment: ${timelineAdjustment >= 0 ? '+' : ''}${timelineAdjustment.toFixed(2)}`);
-    console.log(`   Final: ${baseScore.toFixed(2)} → ${adjustedScore.toFixed(2)}`);
+    console.log(
+      `   Adjustment: ${
+        timelineAdjustment >= 0 ? "+" : ""
+      }${timelineAdjustment.toFixed(2)}`
+    );
+    console.log(
+      `   Final: ${baseScore.toFixed(2)} → ${adjustedScore.toFixed(2)}`
+    );
 
     const finalScore = adjustedScore;
 
@@ -551,8 +585,6 @@ Respond with JSON only:
   }
 }
 
-
-
 interface ConversationContext {
   leadAskedQuestion: boolean;
   questionContent?: string;
@@ -571,13 +603,11 @@ function analyzeConversationContext(
   messages: any[],
   hasPendingBooking: boolean
 ): ConversationContext {
-  const lastLeadMsg = messages
-    .filter((m) => m.sender === "lead")
-    .slice(-1)[0]?.content || "";
+  const lastLeadMsg =
+    messages.filter((m) => m.sender === "lead").slice(-1)[0]?.content || "";
 
-  const lastAIMsg = messages
-    .filter((m) => m.sender === "ai")
-    .slice(-1)[0]?.content || "";
+  const lastAIMsg =
+    messages.filter((m) => m.sender === "ai").slice(-1)[0]?.content || "";
 
   console.log("📊 Analyzing conversation context...");
   console.log(`   Last lead message: "${lastLeadMsg.substring(0, 50)}..."`);
@@ -594,7 +624,9 @@ function analyzeConversationContext(
     /\?$/,
   ];
 
-  const leadAskedQuestion = questionPatterns.some((p) => p.test(lastLeadMsg.trim()));
+  const leadAskedQuestion = questionPatterns.some((p) =>
+    p.test(lastLeadMsg.trim())
+  );
 
   if (leadAskedQuestion) {
     console.log("   ✅ Lead asked a question - will answer directly");
@@ -608,8 +640,12 @@ function analyzeConversationContext(
     /\b(today|tomorrow|this week|next week)\b/i,
   ];
 
-  const aiAskedScheduling = /are you available|what time|which day|when (can|would|are)/i.test(lastAIMsg);
-  const leadAnsweredScheduling = aiAskedScheduling && schedulingPatterns.some((p) => p.test(lastLeadMsg));
+  const aiAskedScheduling =
+    /are you available|what time|which day|when (can|would|are)/i.test(
+      lastAIMsg
+    );
+  const leadAnsweredScheduling =
+    aiAskedScheduling && schedulingPatterns.some((p) => p.test(lastLeadMsg));
 
   if (leadAnsweredScheduling) {
     console.log("   ✅ Lead answered scheduling question - will acknowledge");
@@ -633,15 +669,23 @@ function analyzeConversationContext(
   } else if (/few months|several months|6-8 months/i.test(allLeadMessages)) {
     leadTimeline = "later";
     console.log("   ⏰ Timeline: LATER (6+ months)");
-  } else if (/next year|planning stage|just looking|no rush|flexible/i.test(allLeadMessages)) {
+  } else if (
+    /next year|planning stage|just looking|no rush|flexible/i.test(
+      allLeadMessages
+    )
+  ) {
     leadTimeline = "exploring";
     console.log("   ⏰ Timeline: EXPLORING (no rush)");
   }
 
   // ✅ DETERMINE: Conversation stage
   const leadMessageCount = messages.filter((m) => m.sender === "lead").length;
-  const hasProjectDetails = /\$|budget|location|sq ft|square feet/i.test(allLeadMessages);
-  const hasTimeDiscussion = schedulingPatterns.some((p) => p.test(allLeadMessages));
+  const hasProjectDetails = /\$|budget|location|sq ft|square feet/i.test(
+    allLeadMessages
+  );
+  const hasTimeDiscussion = schedulingPatterns.some((p) =>
+    p.test(allLeadMessages)
+  );
 
   let conversationStage: ConversationContext["conversationStage"] = "greeting";
 
@@ -684,8 +728,10 @@ export async function generateAIResponse(
 
     // ✅ STEP 2: Build recent conversation (last 10 messages only)
     const recentConversation = conversationHistory
-      .slice(-10)
-      .map((msg) => `${msg.sender === "lead" ? "Customer" : "You"}: ${msg.content}`)
+  .slice(-15)
+      .map(
+        (msg) => `${msg.sender === "lead" ? "Customer" : "You"}: ${msg.content}`
+      )
       .join("\n");
 
     // ✅ STEP 3: Choose response strategy based on context
@@ -741,7 +787,9 @@ RULES:
 ${recentConversation}
 
 You asked: "${context.lastAIQuestion}"
-Customer answered: "${conversationHistory[conversationHistory.length - 1].content}"
+Customer answered: "${
+        conversationHistory[conversationHistory.length - 1].content
+      }"
 
 Acknowledge their answer specifically and ask the NEXT logical question:`;
     }
@@ -752,7 +800,9 @@ Acknowledge their answer specifically and ask the NEXT logical question:`;
     else {
       console.log("📋 Strategy: NORMAL CONVERSATION");
 
-      systemPrompt = `You are a professional construction project manager for ${clientData?.name || "a construction company"}.
+      systemPrompt = `You are a professional construction project manager for ${
+        clientData?.name || "a construction company"
+      }.
 
 GUIDELINES:
 - Professional but conversational (WhatsApp tone)
@@ -761,14 +811,20 @@ GUIDELINES:
 - Use "meeting" or "site visit", never "call"
 - Minimal emojis (max 1 per message)
 
-${context.hasPendingBooking ? "⚠️ CRITICAL: Booking already pending. DO NOT ask to schedule again. Just acknowledge and continue conversation." : ""}`;
+${
+  context.hasPendingBooking
+    ? "⚠️ CRITICAL: Booking already pending. DO NOT ask to schedule again. Just acknowledge and continue conversation."
+    : ""
+}`;
 
       // Timeline-specific guidance
       let timelineGuidance = "";
       if (context.leadTimeline === "immediate") {
-        timelineGuidance = "\n⏰ Customer needs ASAP - offer meeting today or tomorrow";
+        timelineGuidance =
+          "\n⏰ Customer needs ASAP - offer meeting today or tomorrow";
       } else if (context.leadTimeline === "exploring") {
-        timelineGuidance = "\n⏰ Customer is in planning phase - don't push for immediate meeting";
+        timelineGuidance =
+          "\n⏰ Customer is in planning phase - don't push for immediate meeting";
       }
 
       userPrompt = `Recent conversation:
@@ -807,7 +863,12 @@ Respond naturally in 2-3 sentences. Ask ONE question to move the conversation fo
         .slice(-3)
         .map((m) => m.content.toLowerCase().trim());
 
-      const isRepetitive = lastAIMessages.includes(aiResponse.toLowerCase().trim());
+      // Check if response starts the same way (first 20 chars)
+      const isRepetitive = lastAIMessages.some(
+        (msg) =>
+          msg.substring(0, 20) ===
+          aiResponse.toLowerCase().trim().substring(0, 20)
+      );
 
       if (!isRepetitive) {
         console.log("✅ Response is unique, using it");
@@ -815,13 +876,14 @@ Respond naturally in 2-3 sentences. Ask ONE question to move the conversation fo
         return aiResponse;
       }
 
-      console.warn(`⚠️ Repetitive response detected (attempt ${attempts}), retrying...`);
+      console.warn(
+        `⚠️ Repetitive response detected (attempt ${attempts}), retrying...`
+      );
     }
 
     // ✅ Fallback (should rarely happen)
     console.warn("⚠️ All retry attempts exhausted, using fallback");
     return "Thanks for sharing that! Could you tell me more about your project timeline and budget?";
-
   } catch (error) {
     console.error("❌ Error generating AI response:", error);
     return "Thank you for your message. A team member will respond shortly.";
@@ -853,13 +915,18 @@ interface TimeExtraction {
  * Extract all times mentioned by the lead in chronological order
  * This replaces AI-based time extraction for 98% accuracy
  */
-export function extractTimesFromConversation(messages: any[]): TimeExtraction[] {
+export function extractTimesFromConversation(
+  messages: any[]
+): TimeExtraction[] {
   const timeExtractions: TimeExtraction[] = [];
 
   // Comprehensive time patterns
   const timePatterns = [
     // "2:30 PM", "10:00 AM"
-    { pattern: /\b(\d{1,2})\s*:\s*(\d{2})\s*(am|pm|AM|PM)\b/g, confidence: 0.98 },
+    {
+      pattern: /\b(\d{1,2})\s*:\s*(\d{2})\s*(am|pm|AM|PM)\b/g,
+      confidence: 0.98,
+    },
     // "2PM", "2 PM", "10AM"
     { pattern: /\b(\d{1,2})\s*(am|pm|AM|PM)\b/g, confidence: 0.95 },
     // "morning", "afternoon", "evening"
@@ -876,8 +943,10 @@ export function extractTimesFromConversation(messages: any[]): TimeExtraction[] 
     for (const { pattern, confidence } of timePatterns) {
       // Reset regex state (important for global flags)
       pattern.lastIndex = 0;
-      
-      const matches = Array.from(content.matchAll(pattern)) as RegExpMatchArray[];
+
+      const matches = Array.from(
+        content.matchAll(pattern)
+      ) as RegExpMatchArray[];
 
       matches.forEach((match: RegExpMatchArray) => {
         let normalizedTime = "";
@@ -912,7 +981,9 @@ export function extractTimesFromConversation(messages: any[]): TimeExtraction[] 
             rawMatch: match[0] as string,
           });
 
-          console.log(`⏰ Extracted time: "${normalizedTime}" from message ${index}: "${content}"`);
+          console.log(
+            `⏰ Extracted time: "${normalizedTime}" from message ${index}: "${content}"`
+          );
         }
       });
     }
@@ -925,7 +996,9 @@ export function extractTimesFromConversation(messages: any[]): TimeExtraction[] 
  * Get the MOST RECENT time mentioned (simple!)
  * This is the key fix - sorting by message index ensures we always get the latest
  */
-export function getMostRecentTime(extractions: TimeExtraction[]): string | null {
+export function getMostRecentTime(
+  extractions: TimeExtraction[]
+): string | null {
   if (extractions.length === 0) {
     console.log("⏰ No times extracted from conversation");
     return null;
@@ -937,8 +1010,13 @@ export function getMostRecentTime(extractions: TimeExtraction[]): string | null 
   // Return the LAST one (most recent)
   const mostRecent = sorted[sorted.length - 1];
 
-  console.log(`⏰ Most recent time: "${mostRecent.time}" (from ${extractions.length} total extractions)`);
-  console.log(`   All extracted times:`, sorted.map(t => `"${t.time}" (msg ${t.messageIndex})`));
+  console.log(
+    `⏰ Most recent time: "${mostRecent.time}" (from ${extractions.length} total extractions)`
+  );
+  console.log(
+    `   All extracted times:`,
+    sorted.map((t) => `"${t.time}" (msg ${t.messageIndex})`)
+  );
 
   return mostRecent.time;
 }
@@ -955,7 +1033,9 @@ export async function detectBookingIntent(
     const timeExtractions = extractTimesFromConversation(conversationHistory);
     const mostRecentTime = getMostRecentTime(timeExtractions);
 
-    console.log(`⏰ Time extraction complete. Found: ${timeExtractions.length} times`);
+    console.log(
+      `⏰ Time extraction complete. Found: ${timeExtractions.length} times`
+    );
     if (mostRecentTime) {
       console.log(`⏰ Using most recent: "${mostRecentTime}"`);
     }
@@ -963,7 +1043,10 @@ export async function detectBookingIntent(
     // ✅ STEP 2: Build conversation for AI (last 10 messages only)
     const conversationText = conversationHistory
       .slice(-10)
-      .map((msg) => `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`)
+      .map(
+        (msg) =>
+          `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`
+      )
       .join("\n");
 
     // ✅ STEP 3: SIMPLIFIED PROMPT (was 300 lines, now 50 lines!)
@@ -1009,9 +1092,10 @@ Respond with JSON only:
       messages: [
         {
           role: "system",
-          content: "You are a booking intent analyzer. Respond with valid JSON only. Be concise and decisive."
+          content:
+            "You are a booking intent analyzer. Respond with valid JSON only. Be concise and decisive.",
         },
-        { role: "user", content: prompt }
+        { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
       temperature: 0.2, // Low temp for consistency
@@ -1037,11 +1121,13 @@ Respond with JSON only:
       reasoning: result.reasoning || "Unable to determine booking intent",
     };
 
-    console.log("✅ Final booking intent:", JSON.stringify(finalIntent, null, 2));
+    console.log(
+      "✅ Final booking intent:",
+      JSON.stringify(finalIntent, null, 2)
+    );
     console.log("🔍 ========== END DETECT BOOKING INTENT ==========\n");
 
     return finalIntent;
-
   } catch (error) {
     console.error("❌ Error detecting booking intent:", error);
     return {
