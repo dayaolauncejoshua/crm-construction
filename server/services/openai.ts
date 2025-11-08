@@ -780,7 +780,78 @@ Respond with JSON only:
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
 
-    const finalScore = Math.max(0, Math.min(1, result.score || 0.5));
+    let baseScore = result.score || 0.5;
+
+    console.log(`📊 Base AI score: ${baseScore.toFixed(2)}`);
+
+      const leadMessagesText = conversationHistory
+      .map(m => m.sender === "lead" ? m.content : "")
+      .join(" ")
+      .toLowerCase();
+
+    let timelineAdjustment = 0;
+    let detectedTimeline = "unknown";
+    let timelineReasoning = "";
+
+    // ✅ IMMEDIATE (1-4 weeks) → +0.10 to +0.20
+    if (/asap|urgent|immediately|right away|as soon as possible/i.test(leadMessagesText)) {
+      timelineAdjustment = 0.15;
+      detectedTimeline = "immediate (ASAP/urgent)";
+      timelineReasoning = "Urgent timeline detected";
+    } else if (/this week|next week/i.test(leadMessagesText)) {
+      timelineAdjustment = 0.15;
+      detectedTimeline = "immediate (this/next week)";
+      timelineReasoning = "Very short timeline (1-2 weeks)";
+    } else if (/in (\d+) weeks?/i.test(leadMessagesText)) {
+      const weekMatch = leadMessagesText.match(/in (\d+) weeks?/i);
+      const weeks = weekMatch ? parseInt(weekMatch[1]) : 4;
+      
+      if (weeks <= 2) {
+        timelineAdjustment = 0.15;
+        detectedTimeline = `immediate (${weeks} weeks)`;
+        timelineReasoning = `Starting in ${weeks} weeks`;
+      } else if (weeks <= 4) {
+        timelineAdjustment = 0.10;
+        detectedTimeline = `urgent (${weeks} weeks)`;
+        timelineReasoning = `Starting in ${weeks} weeks`;
+      }
+    }
+    // ✅ SOON (1-3 months) → +0.05
+    else if (/next month|in a month|in (\d+) months?/i.test(leadMessagesText)) {
+      const monthMatch = leadMessagesText.match(/in (\d+) months?/i);
+      const months = monthMatch ? parseInt(monthMatch[1]) : 1;
+      
+      if (months <= 3) {
+        timelineAdjustment = 0.05;
+        detectedTimeline = `soon (${months} month${months > 1 ? 's' : ''})`;
+        timelineReasoning = `Starting in ${months} month(s)`;
+      } else if (months <= 6) {
+        timelineAdjustment = 0;
+        detectedTimeline = `moderate (${months} months)`;
+        timelineReasoning = `Mid-term timeline (${months} months)`;
+      } else {
+        timelineAdjustment = -0.15;
+        detectedTimeline = `long-term (${months} months)`;
+        timelineReasoning = `Long planning phase (${months} months)`;
+      }
+    }
+    // ✅ LONG-TERM (next year, planning stage) → -0.10 to -0.15
+    else if (/next year|2026|in a year|12 months|planning stage|just exploring|just looking|no rush|flexible/i.test(leadMessagesText)) {
+      timelineAdjustment = -0.15;
+      detectedTimeline = "long-term (12+ months or exploring)";
+      timelineReasoning = "Long-term planning or exploratory phase";
+    }
+
+    // ✅ Apply adjustment with bounds
+    const adjustedScore = Math.max(0.05, Math.min(0.95, baseScore + timelineAdjustment));
+
+    console.log(`📊 Timeline Analysis:`);
+    console.log(`   Detected: ${detectedTimeline}`);
+    console.log(`   Reasoning: ${timelineReasoning}`);
+    console.log(`   Adjustment: ${timelineAdjustment >= 0 ? '+' : ''}${timelineAdjustment.toFixed(2)}`);
+    console.log(`   Final: ${baseScore.toFixed(2)} → ${adjustedScore.toFixed(2)}`);
+
+    const finalScore = adjustedScore;
 
     return {
       score: finalScore,
@@ -1287,6 +1358,94 @@ export async function generateAIResponse(
       (pattern) => pattern.test(lastLeadMessage)
     );
 
+    const questionIndicators = [
+      /^do you (do|handle|offer|provide|have|install|build)/i,
+      /^what'?s (the|your|included|typical)/i,
+      /^how (long|much|many|does)/i,
+      /^can you/i,
+      /^are you/i,
+      /^does (it|this|that)/i,
+      /^will (you|it)/i,
+      /what'?s included/i,
+      /how much (does|is|for)/i,
+    ];
+
+    const leadAskedDirectQuestion = questionIndicators.some(pattern => 
+      pattern.test(lastLeadMessage.toLowerCase().trim())
+    );
+
+    // ✅ If lead asked a question, use DEDICATED question-answering mode
+    if (leadAskedDirectQuestion && !hasPendingBooking) {
+      console.log("🔍 QUESTION DETECTED - Using dedicated Q&A mode");
+      console.log(`   Question: "${lastLeadMessage}"`);
+      
+      // ✅ Build simple, focused question-answering prompt
+      const qaPrompt = `You are a construction expert. A customer asked you this question:
+
+"${lastLeadMessage}"
+
+**YOUR TASK:** Answer this question directly in 1-2 sentences, then ask ONE follow-up question.
+
+**RULES:**
+1. Answer the question FIRST (don't deflect)
+2. Be specific and helpful
+3. Then ask ONE relevant follow-up
+4. Keep response under 50 words total
+
+**EXAMPLES:**
+
+Q: "Do you do basement finishing?"
+A: "Yes, we do basement finishing including framing, insulation, electrical, and flooring. What's the size of your basement?" ✅
+
+Q: "What's the typical cost per square foot?"
+A: "Basement finishing typically costs $50-150 per square foot depending on finishes. What's your budget range?" ✅
+
+Q: "Do you handle electrical and plumbing?"
+A: "Yes, we handle all MEP work including electrical, plumbing, and HVAC. What type of project are you planning?" ✅
+
+Q: "How long does a 600 sq ft basement take?"
+A: "A 600 sq ft basement typically takes 4-6 weeks depending on complexity. When are you hoping to start?" ✅
+
+Now answer the question naturally and concisely:`;
+
+      try {
+        const qaResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: "You are a construction expert. Answer questions directly and concisely. Never deflect. Always answer the question in your first sentence."
+            },
+            {
+              role: "user",
+              content: qaPrompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 100,
+        });
+
+        const directAnswer = qaResponse.choices[0].message.content || "";
+        
+        console.log("✅ Direct answer generated:");
+        console.log(`   "${directAnswer}"`);
+        
+        // ✅ Verify answer isn't a deflection
+        const isDeflection = /i'd love to learn more|could you share|tell me (more |about )/i.test(directAnswer.toLowerCase());
+        
+        if (isDeflection) {
+          console.warn("⚠️ Q&A mode still deflecting, using fallback");
+          // Fallback: simple direct answer
+          return "Yes, we handle that. Could you share more details about your project?";
+        }
+        
+        return directAnswer;
+      } catch (error) {
+        console.error("❌ Q&A mode error:", error);
+        // Continue to normal flow
+      }
+    }
+
     const aiJustAskedScheduling =
       /are you available|what time|which day|when (can|would|are)/i.test(
         lastAIQuestion
@@ -1475,11 +1634,28 @@ Lead: "10 AM"
 Lead: "Actually 2 PM"
 You: "Perfect! I've updated it to 2 PM. Let me get your address..." ← USING NEW TIME!
 
-**RULE 3: ACKNOWLEDGE EVERY TIME CHANGE**
-When lead changes time, ALWAYS say:
-- "Perfect! Let's do [NEW TIME] instead."
-- "Got it, I've updated it to [NEW TIME]."
-- "No problem! [NEW TIME] works great."
+**RULE 3: ACKNOWLEDGE EVERY TIME CHANGE (MANDATORY - NO EXCEPTIONS)**
+
+When lead says "Actually [TIME]" or "Instead [TIME]" or "[TIME] is better":
+
+**FIRST SENTENCE MUST BE ONE OF THESE (EXACT FORMAT):**
+✅ "Perfect! I've updated it to [NEW TIME]."
+✅ "Got it! Let's do [NEW TIME] instead."
+✅ "No problem! [NEW TIME] works better."
+
+**THEN, SECOND SENTENCE:**
+Continue with booking details if asking for name/email/address.
+
+**MANDATORY EXAMPLE:**
+Lead: "Actually, can we do 2 PM instead?"
+You: "Perfect! I've updated it to 2 PM. What's your address for the site visit?" ✅
+
+**WRONG (DO NOT DO THIS):**
+Lead: "Actually, can we do 2 PM instead?"
+You: "Perfect! Before I confirm the booking for 2 PM, I need..." ❌
+(Missing explicit acknowledgment "I've updated it to 2 PM")
+
+**IF YOU DON'T ACKNOWLEDGE THE TIME CHANGE, THE BOOKING WILL FAIL.**
 
 **RULE 4: IF ALREADY IN BOOKING PROCESS**
 IF you already asked for name/email/address, and lead changes time:
@@ -1662,8 +1838,8 @@ Use ONLY information the lead explicitly provided.`,
             content: prompt,
           },
         ],
-        temperature: 0.5 + attempts * 0.1,
-        max_tokens: 150,
+        temperature: 0.6 + attempts * 0.1,
+        max_tokens: 200,
       });
 
       aiResponse = response.choices[0].message.content || "";

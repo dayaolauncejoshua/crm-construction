@@ -1044,10 +1044,19 @@ export class LeadQualificationService {
         // ============================================
         // HOT LEAD: Immediate human handoff (score-based)
         // ============================================
-        if (qualification.needsHumanAttention || qualification.score >= 0.7) {
+         // ✅ Don't handoff immediately on first message with "ASAP"
+        const leadMessageCount = messages.filter((m: any) => m.sender === "lead").length;
+        const hasMultipleSignals = (
+          (qualification.urgency === "high" || qualification.urgency === "urgent") &&
+          (qualification.budget !== "unknown" && qualification.budget !== "unqualified") &&
+          leadMessageCount >= 2
+        );
+        
+        if (leadMessageCount === 1 && qualification.score >= 0.7 && !hasMultipleSignals) {
+          console.log("⚠️ First message scored hot, but gathering context first");
+          // Continue conversation to gather details
+        } else if (qualification.needsHumanAttention || qualification.score >= 0.7) {
           console.log("🔥 HOT LEAD - Immediate human handoff");
-          console.log("🔥 HOT LEAD SCORE:", qualification.score); // ✅ ADD THIS
-          console.log("🔥 QUALIFICATION:", qualification);
 
           await storage.updateConversation(conversation.id, {
             isAiHandled: false,
