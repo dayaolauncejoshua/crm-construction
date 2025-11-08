@@ -1228,6 +1228,35 @@ function extractLeadTimeline(conversationHistory: any[]): {
   };
 }
 
+// ✅ NEW: Detect if lead asked a question
+function detectLeadQuestion(messages: any[]): {
+  isQuestion: boolean;
+  questionText?: string;
+} {
+  const lastLeadMsg = messages
+    .filter((m) => m.sender === "lead")
+    .slice(-1)[0]?.content || "";
+
+  const questionPatterns = [
+    /^do you (do|handle|offer|provide|have|install|build)/i,
+    /^can you/i,
+    /^what'?s (the|your|included|typical)/i,
+    /^how (much|long|many|does)/i,
+    /^are you/i,
+    /^does (it|this|that)/i,
+    /\?$/,
+  ];
+
+  const isQuestion = questionPatterns.some((pattern) =>
+    pattern.test(lastLeadMsg)
+  );
+
+  return {
+    isQuestion,
+    questionText: isQuestion ? lastLeadMsg : undefined,
+  };
+}
+
 export async function generateAIResponse(
   conversationHistory: any[],
   leadData: any,
@@ -1235,6 +1264,46 @@ export async function generateAIResponse(
   hasPendingBooking?: boolean,
   daySuggestions?: string
 ): Promise<string> {
+  // ✅ NEW: Check if lead asked a question FIRST
+  const questionCheck = detectLeadQuestion(conversationHistory);
+
+  if (questionCheck.isQuestion) {
+    console.log("❓ Lead asked a question:", questionCheck.questionText);
+
+    // Simple, focused prompt for questions
+    const qaPrompt = `Customer asked: "${questionCheck.questionText}"
+
+Answer directly in 1-2 sentences, then ask ONE relevant follow-up.
+
+Examples:
+Q: "Do you handle permits?" → "Yes, we handle all permits and approvals. What type of project are you planning?"
+Q: "How long does it take?" → "Typically 4-8 weeks depending on scope. What's your timeline?"
+Q: "Do you install equipment?" → "Yes, we handle full installations. What type of equipment?"
+
+Answer naturally:`;
+
+    try {
+      const qaResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a construction expert. Answer questions directly. First sentence MUST answer the question. Max 50 words."
+          },
+          { role: "user", content: qaPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 100,
+      });
+
+      const directAnswer = qaResponse.choices[0].message.content || "";
+      console.log("✅ Direct answer generated:", directAnswer);
+      return directAnswer;
+    } catch (error) {
+      console.error("❌ Q&A mode error:", error);
+      // Fall through to normal flow
+    }
+  }
   try {
     const latestMessage = conversationHistory[conversationHistory.length - 1];
 
