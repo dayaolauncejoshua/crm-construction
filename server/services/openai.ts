@@ -41,214 +41,6 @@ export interface ExtractedLeadDetails {
   confidence: number;
 }
 
-// ✅ IMPROVED: Context-aware keyword detection
-function hasNonConstructionKeywords(message: string): boolean {
-  const lowerMessage = message.toLowerCase();
-
-  // ✅ CRITICAL: Check for CONSTRUCTION CONTEXT first
-  const constructionIndicators = [
-    // Kitchen/Restaurant Construction
-    "kitchen renovation",
-    "restaurant kitchen",
-    "commercial kitchen",
-    "kitchen remodel",
-    "kitchen build",
-    "kitchen build out",
-    "kitchen buildout",
-
-    // Core Construction Terms
-    "build a house",
-    "build a home",
-    "build house",
-    "build home",
-    "home construction",
-    "house construction",
-    "building",
-    "construction",
-    "construct",
-
-    // Renovation/Remodel
-    "renovation",
-    "renovation project",
-    "remodel",
-    "remodeling",
-    "renovate",
-
-    // Specific Projects
-    "warehouse",
-    "deck",
-    "deck construction",
-    "deck addition",
-    "garage build",
-    "garage construction",
-
-    // Build-Out
-    "built out",
-    "build out",
-    "buildout",
-    "build-out",
-    "space build out",
-
-    // Trade/Technical
-    "MEP",
-    "MEP work",
-    "mechanical electrical plumbing",
-    "hvac",
-    "ventilation",
-    "gas lines",
-    "electrical work",
-    "plumbing work",
-
-    // General
-    "site visit",
-    "contractor",
-    "build",
-    "repair",
-    "install",
-    "structural work",
-  ];
-
-  // If message contains construction context, DON'T mark as spam
-  if (
-    constructionIndicators.some((indicator) => lowerMessage.includes(indicator))
-  ) {
-    console.log("✅ Construction context detected, not spam");
-    return false;
-  }
-
-  // ✅ NOW check for non-construction keywords (more specific)
-  const nonConstructionKeywords = [
-    // Food & Beverages (SPECIFIC items only, NOT "restaurant")
-    "burger",
-    "pizza",
-    "fries",
-    "food delivery",
-    "menu",
-    "order food",
-    "meal delivery",
-    "catering",
-    "coffee shop order",
-
-    // Retail Products (specific items)
-    "shoes",
-    "clothing",
-    "shirt",
-    "pants",
-    "dress",
-    "fashion",
-    "sneakers",
-    "watch",
-    "jewelry",
-    "handbag",
-
-    // Services (non-construction)
-    "haircut",
-    "salon",
-    "spa",
-    "massage",
-    "laundry",
-    "dry clean",
-
-    // Entertainment
-    "movie tickets",
-    "concert tickets",
-
-    // Technology (non-construction)
-    "phone repair",
-    "laptop",
-    "software",
-
-    // Test/Spam
-    "test test",
-    "hello hello",
-    "hi hi",
-  ];
-
-  return nonConstructionKeywords.some((keyword) =>
-    lowerMessage.includes(keyword)
-  );
-}
-
-// ✅ IMPROVED: Check if message is a greeting (flexible)
-function isGreeting(message: string): boolean {
-  const trimmed = message.trim().toLowerCase();
-
-  // Simple greetings (1-4 words max)
-  const greetingPatterns = [
-    /^(hi|hello|hey|yo|sup|howdy)[\s!?.]*$/i, // "Hi", "Hello!"
-    /^(hi|hello|hey)\s+(there|everyone|guys|team)[\s!?.]*$/i, // "Hi there!", "Hello everyone"
-    /^good\s+(morning|afternoon|evening|day)[\s!?.]*$/i, // "Good morning!"
-    /^greetings[\s!?.]*$/i, // "Greetings"
-    /^what'?s\s+up[\s!?.]*$/i, // "What's up", "Whats up"
-    /^how\s+(are\s+you|r\s+u|are\s+ya|ya\s+doing)[\s!?.]*$/i, // "How are you"
-    /^(hi|hello|hey)\s+(how\s+are\s+you|how'?s\s+it\s+going)[\s!?.]*$/i, // "Hi how are you"
-  ];
-
-  return greetingPatterns.some((pattern) => pattern.test(trimmed));
-}
-
-// ✅ NEW: Check if message is likely innocent/exploratory
-function isLikelyInnocentMessage(
-  message: string,
-  messageCount: number
-): boolean {
-  const trimmed = message.trim().toLowerCase();
-
-  // If it's the first or second message and it's short/vague, give benefit of doubt
-  if (messageCount <= 2) {
-    const innocentPatterns = [
-      /^(hi|hello|hey)/i, // Any greeting
-      /^(yes|yeah|yep|yup|ok|okay)$/i, // Confirmations
-      /^(thanks|thank you|ty)$/i, // Gratitude
-      /^(i need|i want|we need|we want)$/i, // Incomplete requests
-      /^(can you|do you|are you)$/i, // Incomplete questions
-    ];
-
-    // Short messages (< 20 chars) in first 2 messages = probably not spam
-    if (trimmed.length < 20) {
-      return true;
-    }
-
-    if (innocentPatterns.some((pattern) => pattern.test(trimmed))) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-// ✅ NEW: Check if message needs more context before classifying as spam
-function needsMoreContext(
-  message: string,
-  conversationHistory: any[]
-): boolean {
-  const lowerMessage = message.toLowerCase().trim();
-
-  // Vague messages that need context
-  const vaguePatterns = [
-    /^(hi|hello|hey)$/i,
-    /^(yeah|yes|yep|ok|okay)$/i,
-    /^(maybe|perhaps)$/i,
-    /^construction$/i,
-    /^(i want to meet|can we meet|let's meet|i want to book)$/i,
-  ];
-
-  // If message is vague AND we have less than 3 lead messages, wait for more context
-  const leadMessages = conversationHistory.filter((m) => m.sender === "lead");
-
-  if (
-    leadMessages.length < 3 &&
-    vaguePatterns.some((pattern) => pattern.test(lowerMessage))
-  ) {
-    console.log(
-      "⏸️ Vague message detected, waiting for more context before classifying"
-    );
-    return true;
-  }
-
-  return false;
-}
-
 // ✅ NEW: Extract lead details from conversation using AI
 export async function extractLeadDetails(
   conversationHistory: any[]
@@ -336,64 +128,12 @@ export async function classifyIntent(
   clientData: any
 ): Promise<IntentClassification> {
   try {
-    // ✅ NEW: IMMEDIATE CONSTRUCTION OVERRIDE
-    // If message clearly contains construction terms, mark as relevant immediately
+    console.log("🎯 Classifying intent for message:", message);
+
+    // ============================================
+    // ✅ FAST PATH 1: Obvious construction terms
+    // ============================================
     const obviousConstructionTerms = [
-      "build a house",
-      "build a home",
-      "construction",
-      "renovation project",
-      "deck construction",
-      "MEP work",
-      "built out",
-      "build out",
-      "contractor",
-      "site visit",
-      "commercial kitchen",
-    ];
-
-    const lowerMessage = message.toLowerCase();
-    if (obviousConstructionTerms.some((term) => lowerMessage.includes(term))) {
-      console.log("✅ IMMEDIATE CONSTRUCTION MATCH:", message);
-      return {
-        isRelevant: true,
-        intent: "construction",
-        confidence: 0.95,
-        reasoning: "Message contains explicit construction terminology",
-      };
-    }
-
-    const leadMessageCount = conversationHistory.filter(
-      (m) => m.sender === "lead"
-    ).length;
-
-    // First message spam detection (Proactive)
-    if (conversationHistory.length <= 2) {
-      const firstMessageSpamIndicators = [
-        /test\s*test/i,
-        /hello\s*hello/i,
-        /hi\s*hi/i,
-        /^(ok|okay|k)$/i,
-        /^[0-9]+$/,
-        /^(yes|no|yeah|nope)$/i,
-      ];
-      for (const indicator of firstMessageSpamIndicators) {
-        if (indicator.test(message.trim())) {
-          console.log("🚫 Proactive: First message spam detected:", message);
-          return {
-            isRelevant: false,
-            intent: "test",
-            confidence: 0.9,
-            reasoning:
-              "First message matches spam pattern (test/short/low-effort)",
-          };
-        }
-      }
-    }
-
-    // ✅ FIXED: Check construction terms BEFORE checking spam patterns
-    // This prevents construction terms from being caught by overly broad spam patterns
-    const constructionTermsInMessage = [
       "build a house",
       "build a home",
       "build an addition",
@@ -401,196 +141,121 @@ export async function classifyIntent(
       "renovation",
       "remodel",
       "contractor",
-      "deck",
-      "garage",
-      "warehouse",
-      "kitchen",
-      "bathroom",
-      "addition",
+      "site visit",
+      "commercial kitchen",
+      "MEP work",
+      "deck construction",
+      "garage build",
+      "basement finishing",
+      "home addition",
     ];
 
-    if (
-      constructionTermsInMessage.some((term) => lowerMessage.includes(term))
-    ) {
-      console.log("✅ Construction context detected - bypassing spam check");
-      // Don't check spam patterns for obvious construction inquiries
-    } else {
-      // Only check spam patterns for non-construction messages
-      const learnedPatternCheck =
-        await spamPatternLearning.checkAgainstLearnedPatterns(message);
-
-      // ✅ IMPROVED: Higher confidence threshold for early messages
-      const confidenceThreshold = leadMessageCount <= 2 ? 0.95 : 0.85;
-
-      if (
-        learnedPatternCheck.isSpam &&
-        learnedPatternCheck.confidence > confidenceThreshold
-      ) {
-        console.log(
-          "🎯 Learned spam pattern detected:",
-          learnedPatternCheck.matchedPattern
-        );
-        return {
-          isRelevant: false,
-          intent: "unrelated",
-          confidence: learnedPatternCheck.confidence,
-          reasoning: `Matches learned spam pattern: "${learnedPatternCheck.matchedPattern}" (${learnedPatternCheck.category})`,
-        };
-      }
-    }
-
-    // ✅ NEW: Check if we need more context BEFORE classifying as spam
-    if (needsMoreContext(message, conversationHistory)) {
-      console.log("⏸️ Waiting for more context before classification");
+    if (obviousConstructionTerms.some((term) => message.toLowerCase().includes(term))) {
+      console.log("✅ FAST PATH: Obvious construction term detected");
       return {
-        isRelevant: true, // ✅ Assume relevant until proven otherwise
+        isRelevant: true,
         intent: "construction",
-        confidence: 0.5,
-        reasoning: "Waiting for more context - giving lead benefit of doubt",
+        confidence: 0.95,
+        reasoning: "Clear construction terminology detected",
       };
     }
 
-    // Hardcoded keyword check (fast path)
-    if (hasNonConstructionKeywords(message)) {
-      console.log("🚫 Hardcoded keyword detected:", message);
+    // ============================================
+    // ✅ FAST PATH 2: Obvious spam/test
+    // ============================================
+    const obviousSpamPatterns = [
+      /^test\s*test$/i,
+      /^hello\s*hello$/i,
+      /^hi\s*hi$/i,
+      /^ok$/i,
+      /^k$/i,
+      /^yes$/i,
+      /^no$/i,
+    ];
+
+    // Only flag as spam if it's the FIRST message AND matches pattern
+    const isFirstMessage = conversationHistory.filter((m) => m.sender === "lead").length <= 1;
+
+    if (isFirstMessage && obviousSpamPatterns.some((pattern) => pattern.test(message.trim()))) {
+      console.log("🚫 FAST PATH: Obvious spam/test pattern (first message)");
       return {
         isRelevant: false,
-        intent: "unrelated",
-        confidence: 0.95,
-        reasoning:
-          "Message contains non-construction keywords (shoes, food, etc.)",
+        intent: "test",
+        confidence: 0.9,
+        reasoning: "First message matches test pattern",
       };
     }
 
-    // ✅ IMPROVED: Handle greetings more intelligently
-    if (isGreeting(message)) {
-      console.log("👋 Greeting detected, welcoming lead");
+    // ============================================
+    // ✅ BENEFIT OF DOUBT: Early messages
+    // ============================================
+    const leadMessageCount = conversationHistory.filter((m) => m.sender === "lead").length;
+
+    if (leadMessageCount <= 2 && message.length < 20) {
+      console.log("✅ Early message, giving benefit of doubt");
       return {
         isRelevant: true,
         intent: "construction",
         confidence: 0.5,
-        reasoning: "Greeting - waiting for project details",
+        reasoning: "Early message - waiting for more context",
       };
     }
 
-    // ✅ NEW: Give benefit of doubt for first few messages
-    if (isLikelyInnocentMessage(message, leadMessageCount)) {
-      console.log("✅ Early message - giving benefit of doubt");
-      return {
-        isRelevant: true,
-        intent: "construction",
-        confidence: 0.4,
-        reasoning:
-          "Early conversation - waiting for context before classifying",
-      };
-    }
+    // ============================================
+    // ✅ AI CLASSIFICATION (simplified prompt)
+    // ============================================
+    console.log("🤖 Using AI classification (ambiguous case)");
 
-    // ✅ Analyze conversation trend (not just latest message)
-    const conversationText = conversationHistory
-      .map((msg) => {
-        const sender = msg.sender === "lead" ? "Customer" : "Agent";
-        return `${sender}: ${msg.content}`;
-      })
+    const recentContext = conversationHistory
+      .slice(-5)
+      .map((msg) => `${msg.sender === "lead" ? "Customer" : "Agent"}: ${msg.content}`)
       .join("\n");
 
-    const prompt = `You are a STRICT intent classifier for ${
-      clientData?.name || "a construction company"
-    }.
+    // ✅ SIMPLIFIED PROMPT (was 200 lines, now 40 lines)
+    const prompt = `Classify if this inquiry is relevant to ${clientData?.name || "a construction company"}:
 
-COMPANY SERVICES (ONLY THESE):
-- Commercial building construction
-- Residential construction
-- Fit-outs and renovations
-- Project management
-- Construction consulting
-- Site development
-- Engineering services
-- Architecture
+Recent conversation:
+${recentContext}
 
-CONVERSATION HISTORY:
-${conversationText}
+Latest message: "${message}"
 
-LATEST MESSAGE: "${message}"
-
-**TASK:** Determine if this inquiry is relevant to construction services.
-
-**RELEVANT (construction-related ONLY):**
-✅ Building, construction, renovation, remodeling
-✅ Project inquiries (residential, commercial, industrial)
-✅ Site development, land development
-✅ Engineering, architecture, design services
-✅ Construction quotes, estimates, pricing
-✅ Timeline, project scheduling
-✅ Materials for construction (cement, steel, etc.)
-✅ Construction equipment rental
-✅ Permits, licensing, compliance
-✅ "I want to build a house" → RELEVANT ✅
-✅ "Need deck construction" → RELEVANT ✅
-✅ "Renovation project" → RELEVANT ✅
-✅ "MEP work for bakery" → RELEVANT ✅ (construction service)
-✅ "Cloud kitchen build-out" → RELEVANT ✅ (construction project)
-✅ "Restaurant kitchen + ventilation + gas lines" → RELEVANT ✅ (construction)
-
-**NOT RELEVANT (mark as unrelated):**
-❌ Food & beverages (burger, pizza, fries, restaurant, food delivery, meal orders)
-❌ Retail products (shoes, clothing, fashion, accessories, watches, jewelry)
-❌ Personal services (salon, spa, massage, cleaning, laundry)
-❌ Entertainment (movies, concerts, tickets, events)
-❌ Healthcare (doctor, clinic, medicine, pharmacy)
-❌ Technology products (phones, laptops, software, apps)
-❌ Transportation (taxi, delivery service, shipping)
-❌ Test messages ("test test", "hello hello" without context)
-❌ Spam or advertising other businesses
-❌ Random questions unrelated to construction
-
-**CRITICAL RULES:**
-1. If mentions shoes, food, clothing, retail → ALWAYS NOT RELEVANT
-2. If about services NOT related to construction → ALWAYS NOT RELEVANT
-3. BE STRICT - When in doubt, mark as NOT RELEVANT
-4. Greeting alone (first message) can be neutral
-
-**EXAMPLES:**
-
-✅ "I want to build a house" → RELEVANT (construction)
-✅ "How much for commercial building?" → RELEVANT (construction quote)
-✅ "Do you do renovations?" → RELEVANT (construction service)
-✅ "Can you construct a warehouse?" → RELEVANT (construction project)
-
-❌ "Do you sell shoes?" → NOT RELEVANT (retail product)
-❌ "I need a burger" → NOT RELEVANT (food order)
-❌ "Can you deliver pizza?" → NOT RELEVANT (food delivery)
-❌ "Do you build customized shoes?" → NOT RELEVANT (shoes are NOT construction)
-❌ "I want to eat" → NOT RELEVANT (food)
-❌ "How about fries?" → NOT RELEVANT (food)
-❌ "testing testing" → NOT RELEVANT (test message)
-❌ "Do you fix phones?" → NOT RELEVANT (tech repair)
+Construction company services:
+- Building (commercial, residential, industrial)
+- Renovations, remodeling, fit-outs
+- Site development, project management
+- Engineering, architecture
 
 Respond with JSON only:
 {
   "isRelevant": true/false,
-  "intent": "construction" | "unrelated" | "spam" | "test",
-  "confidence": 0.95,
+  "intent": "construction" | "unrelated" | "spam",
+  "confidence": 0.85,
   "reasoning": "Brief explanation"
-}`;
+}
+
+EXAMPLES:
+✅ "I want to build a house" → {"isRelevant": true, "intent": "construction", "confidence": 0.95}
+✅ "Do you do renovations?" → {"isRelevant": true, "intent": "construction", "confidence": 0.9}
+❌ "Do you sell shoes?" → {"isRelevant": false, "intent": "unrelated", "confidence": 0.95}
+❌ "I need a burger" → {"isRelevant": false, "intent": "unrelated", "confidence": 0.9}`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content:
-            "You are a STRICT intent classification expert. Respond only with valid JSON. Be VERY strict - only mark as relevant if it's CLEARLY construction-related.",
+          content: "You are a strict intent classifier. Respond with valid JSON only. Be decisive and concise."
         },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "user", content: prompt }
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
+      max_tokens: 100,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    console.log("🤖 AI classification result:", result);
 
     return {
       isRelevant: result.isRelevant ?? false,
@@ -598,13 +263,27 @@ Respond with JSON only:
       confidence: result.confidence || 0.5,
       reasoning: result.reasoning || "Unable to classify intent",
     };
+
   } catch (error) {
-    console.error("Error classifying intent:", error);
+    console.error("❌ Intent classification error:", error);
+
+    // ✅ Safe fallback: Give benefit of doubt for early messages
+    const leadCount = conversationHistory.filter((m) => m.sender === "lead").length;
+
+    if (leadCount <= 2) {
+      return {
+        isRelevant: true,
+        intent: "construction",
+        confidence: 0.4,
+        reasoning: "Classification error - giving benefit of doubt",
+      };
+    }
+
     return {
       isRelevant: false,
       intent: "unrelated",
       confidence: 0.5,
-      reasoning: "Classification failed, defaulting to unrelated for safety",
+      reasoning: "Classification failed, defaulting to unrelated",
     };
   }
 }
