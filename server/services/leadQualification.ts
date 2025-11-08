@@ -109,9 +109,9 @@ function parseDateFromNaturalLanguage(
     `⏰ Parsed time: ${hours}:${String(minutes).padStart(2, "0")} (24h format)`
   );
 
-    const lowerDate = dateStr.toLowerCase().trim();
+  const lowerDate = dateStr.toLowerCase().trim();
 
-    const dayNames = [
+  const dayNames = [
     "sunday",
     "monday",
     "tuesday",
@@ -124,7 +124,7 @@ function parseDateFromNaturalLanguage(
   // ✅ NEW: Handle relative dates (today, tomorrow, next week)
   if (lowerDate === "today") {
     const targetDate = new Date(now);
-    
+
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
@@ -146,7 +146,7 @@ function parseDateFromNaturalLanguage(
   if (lowerDate === "tomorrow") {
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + 1);
-    
+
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
@@ -170,14 +170,14 @@ function parseDateFromNaturalLanguage(
     const daysToAdd = lowerDate.includes("next week") ? 7 : 0;
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysToAdd);
-    
+
     // Default to next Monday if "next week" without specific day
     if (!lowerDate.includes("monday") && !lowerDate.includes("tuesday")) {
       const currentDay = targetDate.getDay();
       const daysUntilMonday = currentDay === 0 ? 1 : 8 - currentDay;
       targetDate.setDate(targetDate.getDate() + daysUntilMonday);
     }
-    
+
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
@@ -191,23 +191,23 @@ function parseDateFromNaturalLanguage(
     return pacificDate;
   }
 
-  
   // ✅ NEW: Handle "next [DayName]" and "this [DayName]"
   // Examples: "next Monday", "this Friday", "next Tuesday"
-  const nextDayPattern = /^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+  const nextDayPattern =
+    /^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
   const nextDayMatch = lowerDate.match(nextDayPattern);
-  
+
   if (nextDayMatch) {
-     console.log(`🔍 Parsing "${lowerDate}" with pattern "next/this [Day]"`);
+    console.log(`🔍 Parsing "${lowerDate}" with pattern "next/this [Day]"`);
     const modifier = nextDayMatch[1].toLowerCase(); // "next" or "this"
-    const dayName = nextDayMatch[2].toLowerCase();  // "monday", "friday", etc.
+    const dayName = nextDayMatch[2].toLowerCase(); // "monday", "friday", etc.
     console.log(`   Modifier: "${modifier}", Day: "${dayName}"`);
-    
+
     const targetDayIndex = dayNames.indexOf(dayName);
     const currentDay = now.getDay();
-    
+
     let daysUntil = targetDayIndex - currentDay;
-    
+
     if (modifier === "next") {
       // "next Monday" means next week's Monday
       if (daysUntil <= 0) {
@@ -223,21 +223,25 @@ function parseDateFromNaturalLanguage(
       }
       // If today is the target day (daysUntil === 0), use today
     }
-    
+
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysUntil);
-    
+
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
     const hourStr = String(hours).padStart(2, "0");
     const minStr = String(minutes).padStart(2, "0");
-    
+
     const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
     const pacificDate = new Date(pacificDateString);
-    
+
     console.log(`✅ "${lowerDate}" parsed: ${pacificDate.toISOString()}`);
-    console.log(`   Pacific Time: ${pacificDate.toLocaleString("en-US", { timeZone: "America/Vancouver" })}`);
+    console.log(
+      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
+        timeZone: "America/Vancouver",
+      })}`
+    );
     console.log(`✅ "${lowerDate}" parsed successfully`);
     console.log(`   Days until target: ${daysUntil}`);
     console.log(`   Target date: ${pacificDate.toISOString()}`);
@@ -245,7 +249,7 @@ function parseDateFromNaturalLanguage(
     return pacificDate;
   }
 
-    // Handle day names (Monday, Tuesday, etc)
+  // Handle day names (Monday, Tuesday, etc)
   if (dayNames.includes(lowerDate)) {
     const targetDay = dayNames.indexOf(lowerDate);
     const currentDay = now.getDay();
@@ -1015,7 +1019,7 @@ export class LeadQualificationService {
         let temperature: "hot" | "warm" | "cold";
         if (qualification.score >= 0.7) {
           temperature = "hot";
-        } else if (qualification.score >= 0.4) {
+        } else if (qualification.score >= 0.25) {
           temperature = "warm";
         } else {
           temperature = "cold";
@@ -1044,19 +1048,48 @@ export class LeadQualificationService {
         // ============================================
         // HOT LEAD: Immediate human handoff (score-based)
         // ============================================
-         // ✅ Don't handoff immediately on first message with "ASAP"
-        const leadMessageCount = messages.filter((m: any) => m.sender === "lead").length;
-        const hasMultipleSignals = (
-          (qualification.urgency === "high" || qualification.urgency === "urgent") &&
-          (qualification.budget !== "unknown" && qualification.budget !== "unqualified") &&
-          leadMessageCount >= 2
+        // ✅ Don't handoff immediately on first message with "ASAP"
+        const leadMessageCount = messages.filter(
+          (m: any) => m.sender === "lead"
+        ).length;
+
+        // ✅ Check for MULTIPLE hot signals (not just score)
+        const hasUrgency = /asap|urgent|immediately|this week|next week/i.test(
+          messages
+            .filter((m: any) => m.sender === "lead")
+            .map((m: any) => m.content)
+            .join(" ")
         );
-        
-        if (leadMessageCount === 1 && qualification.score >= 0.7 && !hasMultipleSignals) {
-          console.log("⚠️ First message scored hot, but gathering context first");
-          // Continue conversation to gather details
-        } else if (qualification.needsHumanAttention || qualification.score >= 0.7) {
-          console.log("🔥 HOT LEAD - Immediate human handoff");
+        const hasDecisionMaker =
+          /i'm the|i am the|ceo|owner|i decide|my company/i.test(
+            messages
+              .filter((m: any) => m.sender === "lead")
+              .map((m: any) => m.content)
+              .join(" ")
+          );
+        const hasMeetingRequest = messages.some(
+          (m: any) =>
+            m.sender === "lead" &&
+            /can we meet|let's meet|schedule|available/i.test(m.content)
+        );
+
+        // Count hot signals
+        const hotSignals = [
+          hasUrgency,
+          hasDecisionMaker,
+          hasMeetingRequest,
+        ].filter(Boolean).length;
+
+        // ✅ Require score >= 0.75 AND at least 2 hot signals for handoff
+        const shouldHandoff =
+          qualification.score >= 0.75 &&
+          hotSignals >= 2 &&
+          leadMessageCount >= 2;
+
+        if (shouldHandoff || qualification.needsHumanAttention) {
+          console.log(
+            `🔥 HOT LEAD HANDOFF - Score: ${qualification.score}, Signals: ${hotSignals}`
+          );
 
           await storage.updateConversation(conversation.id, {
             isAiHandled: false,

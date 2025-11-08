@@ -889,11 +889,9 @@ function isRepetitiveResponse(
 
   const proposedLower = proposedResponse.toLowerCase().trim();
 
-  // ✅ NEW: Remove emojis for cleaner comparison
-  // ✅ Simplified emoji removal (ES5 compatible)
   const cleanProposed = proposedLower.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
   
-  // ✅ IMPROVED: Check for EXACT or NEAR-EXACT repetition (>90% match)
+  // Check for EXACT or NEAR-EXACT repetition (>90% match)
   for (const prevMessage of recentAIMessages) {
     const cleanPrev = prevMessage.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim();
     
@@ -915,7 +913,7 @@ function isRepetitiveResponse(
     }
   }
 
-  // ✅ NEW: Check if core message is repeated (first 40 chars)
+  // Check if core message is repeated (first 40 chars)
   const proposedCore = cleanProposed.substring(0, 40);
   const recentCores = recentAIMessages.map(msg => 
     msg.replace(/[\u2600-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF]/g, '').replace(/\s+/g, ' ').trim().substring(0, 40)
@@ -969,7 +967,7 @@ function isRepetitiveResponse(
     }
   }
 
-  // ✅ IMPROVED: Pattern-based repetition detection (not just specific phrases)
+  // Pattern-based repetition detection (not just specific phrases)
   const repetitivePatterns = [
     // Opening phrases
     /^(yes|yep|yeah),?\s+(we|i)\s+(do|handle|provide|offer)\s+/i,
@@ -1012,7 +1010,7 @@ function isRepetitiveResponse(
     }
   }
 
-  // ✅ NEW: Check for repeated sentence starts (first 6 words)
+  // Check for repeated sentence starts (first 6 words)
   const getFirstWords = (text: string, count: number = 6) => {
     return text.split(/\s+/).slice(0, count).join(" ").toLowerCase();
   };
@@ -1028,7 +1026,7 @@ function isRepetitiveResponse(
   return { isRepetitive: false };
 }
 
-// ✅ Helper: Calculate text similarity (Levenshtein-based)
+// Calculate text similarity (Levenshtein-based)
 function calculateSimilarity(str1: string, str2: string): number {
   const longer = str1.length > str2.length ? str1 : str2;
   const shorter = str1.length > str2.length ? str2 : str1;
@@ -1039,7 +1037,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   return (longer.length - editDistance) / longer.length;
 }
 
-// ✅ Helper: Levenshtein distance
+// Levenshtein distance
 function levenshteinDistance(str1: string, str2: string): number {
   const matrix: number[][] = [];
 
@@ -1068,7 +1066,7 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[str2.length][str1.length];
 }
 
-// ✅ NEW: Extract lead's stated timeline from conversation
+// Extract lead's stated timeline from conversation
 function extractLeadTimeline(conversationHistory: any[]): {
   hasTimeline: boolean;
   timelineType:
@@ -1239,7 +1237,7 @@ export async function generateAIResponse(
         );
 
         const redirectResponses = [
-          // ✅ FIRST MESSAGE: Super welcoming (assume they meant to reach us)
+          // Super welcoming (assume they meant to reach us)
           leadMessages.length <= 1
             ? `Hi! Thanks for reaching out to ${
                 clientData?.name || "us"
@@ -1279,7 +1277,7 @@ export async function generateAIResponse(
       `   Lead timeline: ${timeline.timelineType} (${timeline.rawTimeline})`
     );
 
-    // ✅ NEW: Log time change detection
+    // Log time change detection
     if (timeChange.hasChange) {
       console.log(`   ⚠️ TIME CHANGE DETECTED!`);
       console.log(`      Original: ${timeChange.originalTime}`);
@@ -1289,7 +1287,7 @@ export async function generateAIResponse(
       );
     }
 
-    // ✅ NEW: Extract current proposed time from conversation
+    // Extract current proposed time from conversation
     let currentProposedTime: string | undefined;
     const bookingMessages = conversationHistory.filter(
       (msg) =>
@@ -1314,7 +1312,7 @@ export async function generateAIResponse(
       console.log(`   🕐 Current proposed time: ${currentProposedTime}`);
     }
 
-    // ✅ Generate timeline-appropriate messaging
+    // Generate timeline-appropriate messaging
     let timelineGuidance = "";
     if (timeline.hasTimeline) {
       switch (timeline.timelineType) {
@@ -1341,7 +1339,7 @@ export async function generateAIResponse(
       timelineGuidance += `\n\n🔄 TIME CHANGE: Lead originally said "${timeChange.originalTime}" but changed to "${timeChange.newTime}". Use the NEW time (${timeChange.newTime}), NOT the old one!`;
     }
 
-    // ✅ NEW: Add current time tracking
+    // Add current time tracking
     if (currentProposedTime) {
       timelineGuidance += `\n\n🕐 CURRENT PROPOSED TIME: ${currentProposedTime} - This is the LATEST time mentioned. Use this time, not any previous times!`;
     }
@@ -1374,15 +1372,22 @@ export async function generateAIResponse(
       pattern.test(lastLeadMessage.toLowerCase().trim())
     );
 
-    // ✅ If lead asked a question, use DEDICATED question-answering mode
-    if (leadAskedDirectQuestion && !hasPendingBooking) {
+    // If lead asked a question, use DEDICATED question-answering mode
+        if (leadAskedDirectQuestion && !hasPendingBooking) {
       console.log("🔍 QUESTION DETECTED - Using dedicated Q&A mode");
       console.log(`   Question: "${lastLeadMessage}"`);
+      console.log(`   Last lead message from context: "${conversationHistory[conversationHistory.length - 1]?.content}"`);
+      
+      const actualLastLeadMessage = conversationHistory
+        .filter((msg) => msg.sender === "lead")
+        .slice(-1)[0]?.content || lastLeadMessage;
+      
+      console.log(`   Using question for API: "${actualLastLeadMessage}"`);
       
       // ✅ Build simple, focused question-answering prompt
       const qaPrompt = `You are a construction expert. A customer asked you this question:
 
-"${lastLeadMessage}"
+"${actualLastLeadMessage}"
 
 **YOUR TASK:** Answer this question directly in 1-2 sentences, then ask ONE follow-up question.
 
@@ -1418,7 +1423,7 @@ Now answer the question naturally and concisely:`;
             },
             {
               role: "user",
-              content: qaPrompt
+              content: qaPrompt  // This now uses actualLastLeadMessage
             }
           ],
           temperature: 0.7,
@@ -1430,7 +1435,7 @@ Now answer the question naturally and concisely:`;
         console.log("✅ Direct answer generated:");
         console.log(`   "${directAnswer}"`);
         
-        // ✅ Verify answer isn't a deflection
+        // Verify answer isn't a deflection
         const isDeflection = /i'd love to learn more|could you share|tell me (more |about )/i.test(directAnswer.toLowerCase());
         
         if (isDeflection) {
