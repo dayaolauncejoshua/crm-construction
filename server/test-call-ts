@@ -1,0 +1,20 @@
+import { phoneService } from "./phone/phone.phone";
+
+async function testCall() {
+  const mockCallId = "test_call_" + Date.now();
+
+  try {
+    console.log("🧪 Starting test call...");
+
+    await phoneService.acceptIncomingCall(mockCallId, {
+      isTestMode: true,
+      instructions: "You are in TEST MODE. Respond briefly to any user input.",
+    });
+
+    console.log("✅ Test call initiated successfully");
+  } catch (error) {
+    console.error("❌ Test failed:", error);
+  }
+}
+
+testCall();
