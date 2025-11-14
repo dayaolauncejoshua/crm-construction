@@ -1,6 +1,6 @@
 // client/src/pages/leads.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,10 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { queryClient } from "@/lib/queryClient";
-import { useEffect } from "react";
 import TranscriptModal from "@/components/TranscriptModal";
-
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -42,7 +39,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
@@ -70,58 +66,66 @@ import {
   Flame,
   Snowflake,
   Wind,
-  Trash2, // ✅ Add Trash2 icon
+  Trash2,
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Leads() {
   usePageTitle("Leads");
-
   const { user } = useAuth();
   const { selectedClientId } = useClient();
   const [, setLocation] = useLocation();
-  const { toast } = useToast(); // ✅ Add toast
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
-
-  // ✅ 2. Add state for the confirmation dialog
   const [leadToDelete, setLeadToDelete] = useState<any | null>(null);
 
-  // WebSocket for real-time updates
+  // ✅ WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
 
-  // Listen for WebSocket updates
+  // ✅ IMPROVED: Listen for ALL lead-related WebSocket events
   useEffect(() => {
-    if (!wsData) return;
+    if (!wsData || !selectedClientId) return;
 
-    console.log("📡 Leads page WebSocket event:", wsData.type);
+    console.log("📡 [LEADS PAGE] WebSocket event received:", wsData.type);
 
-    // Refresh leads on relevant events
-    if (
-      wsData.type === "new_conversation" ||
-      wsData.type === "new_message" ||
-      wsData.type === "lead_updated" ||
-      wsData.type === "hot_lead_alert" ||
-      wsData.type === "conversation_updated"
-    ) {
-      console.log("🔄 Refreshing leads data...");
+    // ✅ Refresh leads on ANY of these events:
+    const shouldRefreshLeads = [
+      "new_conversation",       // New lead created (from WhatsApp/landing page)
+      "new_message",            // Lead messaged (might be new lead)
+      "lead_updated",           // Lead manually updated
+      "hot_lead_alert",         // Lead temperature changed
+      "conversation_updated",   // Conversation status changed
+      "lead_qualified",         // AI qualified a lead
+    ].includes(wsData.type);
 
-      // Invalidate leads query to refresh
+    if (shouldRefreshLeads) {
+      console.log("🔄 [LEADS PAGE] Refreshing leads data...");
+      
+      // ✅ Invalidate leads query
       queryClient.invalidateQueries({
-        queryKey: ["/api/dashboard", selectedClientId],
+        queryKey: ["/api/leads", selectedClientId],
       });
 
-      // Also invalidate dashboard for conversation data
+      // ✅ Also invalidate dashboard (for conversation counts)
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
+
+      // ✅ Show toast notification for new leads
+      if (wsData.type === "new_conversation" && wsData.lead) {
+        toast({
+          title: "🆕 New Lead",
+          description: `${wsData.lead.firstName} ${wsData.lead.lastName} just reached out!`,
+        });
+      }
     }
-  }, [wsData, selectedClientId]);
+  }, [wsData, selectedClientId, queryClient, toast]);
 
   // Fetch leads directly
   const { data: leads, isLoading } = useQuery({
@@ -131,9 +135,11 @@ export default function Leads() {
       return response.json();
     },
     enabled: !!selectedClientId,
+    // ✅ Add refetchInterval as backup (optional, but recommended)
+    refetchInterval: 30000, // Refetch every 30 seconds as fallback
   });
 
-  // ✅ 3. Add the deleteLead mutation hook
+  // Delete lead mutation
   const deleteLeadMutation = useMutation({
     mutationFn: async (leadId: string) => {
       const response = await fetch(`/api/leads/${leadId}`, {
@@ -151,11 +157,9 @@ export default function Leads() {
         title: "Lead Deleted",
         description: "The lead and all associated data have been deleted.",
       });
-      // Refresh the leads list automatically
       queryClient.invalidateQueries({
         queryKey: ["/api/leads", selectedClientId],
       });
-      // Also refresh the dashboard data
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
@@ -168,7 +172,7 @@ export default function Leads() {
       });
     },
     onSettled: () => {
-      setLeadToDelete(null); // Close the dialog
+      setLeadToDelete(null);
     },
   });
 
@@ -204,7 +208,7 @@ export default function Leads() {
   const openConversation = (leadId: string) => {
     const conversation = getConversationForLead(leadId);
     if (conversation) {
-      setLocation(`/conversations?id=${conversation.id}`); // CORRECT
+      setLocation(`/conversations?id=${conversation.id}`);
     }
   };
 
@@ -251,14 +255,12 @@ export default function Leads() {
     return parseFloat(lead.manualScore || lead.qualificationScore || "0");
   };
 
-  // Use debouncedSearch in filter instead of searchTerm:
   const filteredLeads = allLeads.filter((lead: any) => {
     const matchesSearch =
       lead.firstName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       lead.lastName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       lead.company?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       lead.email?.toLowerCase().includes(debouncedSearch.toLowerCase());
-
     const matchesStatus =
       statusFilter === "all" || lead.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -312,7 +314,7 @@ export default function Leads() {
 
         {/* Content Skeleton */}
         <main className="flex-1 overflow-auto p-4 sm:p-6">
-          <Skeleton className="h-10 w-full mb-6" /> {/* Tabs */}
+          <Skeleton className="h-10 w-full mb-6" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Card key={i}>
@@ -329,25 +331,20 @@ export default function Leads() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Badges */}
                   <div className="flex gap-2">
                     <Skeleton className="h-6 w-16" />
                     <Skeleton className="h-6 w-16" />
                     <Skeleton className="h-6 w-12" />
                   </div>
-                  {/* Contact Info */}
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-4 w-3/4" />
                   </div>
-                  {/* Lead Info */}
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-4 w-2/3" />
                   </div>
-                  {/* Button */}
                   <Skeleton className="h-10 w-full" />
-                  {/* Date */}
                   <Skeleton className="h-3 w-32 mx-auto" />
                 </CardContent>
               </Card>
@@ -440,6 +437,7 @@ export default function Leads() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -547,12 +545,11 @@ export default function Leads() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   className="text-red-600"
                                   onClick={(e) => {
-                                    e.stopPropagation(); // This stops the click from bubbling to the card
+                                    e.stopPropagation();
                                     setLeadToDelete(lead);
                                   }}
                                 >
@@ -563,7 +560,6 @@ export default function Leads() {
                             </DropdownMenu>
                           </div>
                         </CardHeader>
-
                         <CardContent className="space-y-4">
                           {/* Temperature & Status & Score */}
                           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -641,19 +637,6 @@ export default function Leads() {
                           <Separator />
 
                           {/* Actions */}
-                          {/* <Button
-                            variant="default"
-                            size="sm"
-                            className="w-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openConversation(lead.id);
-                            }}
-                          >
-                            <MessageCircle className="w-4 h-4 mr-2" />
-                            Open Conversation
-                          </Button> */}
-                          {/* Actions */}
                           <Button
                             variant="default"
                             size="sm"
@@ -667,7 +650,6 @@ export default function Leads() {
                             Open Conversation
                           </Button>
 
-                          {/* 🔽 New button right below */}
                           <Button
                             variant="secondary"
                             size="sm"
@@ -676,9 +658,12 @@ export default function Leads() {
                               e.stopPropagation();
                               if (lead.callId) setSelectedCallId(lead.callId);
                               else
-                                alert(
-                                  "No call transcript available for this lead."
-                                );
+                                toast({
+                                  title: "No Transcript",
+                                  description:
+                                    "No call transcript available for this lead.",
+                                  variant: "destructive",
+                                });
                             }}
                           >
                             <MessageCircle className="w-4 h-4 mr-2" />
@@ -690,7 +675,6 @@ export default function Leads() {
                             Created{" "}
                             {new Date(lead.createdAt).toLocaleDateString()}
                           </div>
-                          {/* 🆕 Transcript Modal goes here */}
                         </CardContent>
                       </Card>
                     ))}
@@ -701,6 +685,8 @@ export default function Leads() {
           )}
         </Tabs>
       </main>
+
+      {/* Delete Confirmation Dialog */}
       <AlertDialog
         open={!!leadToDelete}
         onOpenChange={() => setLeadToDelete(null)}
@@ -744,6 +730,8 @@ export default function Leads() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Transcript Modal */}
       <TranscriptModal
         callId={selectedCallId}
         onClose={() => setSelectedCallId(null)}
