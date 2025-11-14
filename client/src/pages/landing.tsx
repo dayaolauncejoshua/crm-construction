@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Play,
   Check,
   Users,
   TrendingUp,
@@ -23,6 +22,7 @@ import {
 
 export default function Landing() {
   usePageTitle("AI Lead System - Intelligent CRM for Construction", false);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <Header />
@@ -92,7 +92,7 @@ function Header() {
               onClick={() => (window.location.href = "/signup")}
               className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all px-8"
             >
-              Start Free Trial
+              Get Started
             </Button>
           </div>
         </div>
@@ -129,8 +129,8 @@ function HeroSection() {
             {/* Subheadline */}
             <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
               AI-powered lead qualification system that responds in under 2
-              minutes, qualifies prospects 24/7, and book meetings with one
-              click and close more deals.
+              minutes, qualifies prospects 24/7, and books meetings with one
+              click to help you close more deals.
             </p>
 
             {/* CTA Buttons */}
@@ -140,16 +140,8 @@ function HeroSection() {
                 onClick={() => (window.location.href = "/signup")}
                 className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
               >
-                Start 14-Day Free Trial
+                Get Started Now
                 <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-2 hover:bg-primary/5 text-lg px-8"
-              >
-                <Play className="mr-2 w-5 h-5" />
-                Watch Demo
               </Button>
             </div>
 
@@ -157,15 +149,15 @@ function HeroSection() {
             <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
                 <Check className="w-5 h-5 text-success" />
-                <span>No credit card required</span>
+                <span>Setup in 10 minutes</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Check className="w-5 h-5 text-success" />
+                <span>No contracts</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Check className="w-5 h-5 text-success" />
                 <span>Cancel anytime</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-success" />
-                <span>Setup in 10 minutes</span>
               </div>
             </div>
           </div>
@@ -224,7 +216,6 @@ function HeroSection() {
                       2m ago
                     </span>
                   </div>
-
                   <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
                     <div className="w-2 h-2 bg-primary rounded-full"></div>
                     <div className="flex-1 min-w-0">
@@ -239,7 +230,6 @@ function HeroSection() {
                       5m ago
                     </span>
                   </div>
-
                   <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
                     <div className="w-2 h-2 bg-construction rounded-full"></div>
                     <div className="flex-1 min-w-0">
@@ -366,7 +356,7 @@ function HowItWorksSection() {
             <div key={index} className="relative flex">
               <Card className="border-2 hover:border-primary/50 transition-all hover:shadow-lg h-full w-full">
                 <CardContent className="p-8 flex flex-col h-full">
-                  {/* ✅ Number and Icon - SIDE BY SIDE at top */}
+                  {/* Number and Icon - SIDE BY SIDE at top */}
                   <div className="flex items-center justify-center gap-3 mb-8">
                     {/* Number Badge */}
                     <div
@@ -374,7 +364,6 @@ function HowItWorksSection() {
                     >
                       {step.number}
                     </div>
-
                     {/* Icon */}
                     <div
                       className={`flex items-center justify-center w-14 h-14 rounded-xl ${step.bgClass}`}
@@ -511,7 +500,6 @@ function StatsSection() {
             Results That Speak for Themselves
           </h2>
         </div>
-
         <div className="grid md:grid-cols-4 gap-8">
           <div className="text-center">
             <div className="text-5xl font-bold mb-2">5-10x</div>
@@ -543,12 +531,10 @@ function LeadCaptureSection() {
   const [lastName, setLastName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-
   const [isResubmission, setIsResubmission] = useState(false);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-
     try {
       const response = await fetch("/api/leads", {
         method: "POST",
@@ -572,9 +558,8 @@ function LeadCaptureSection() {
       const data = await response.json();
 
       if (data.success) {
-        // ✅ Store re-submission status for custom message
         setSuccess(true);
-        setIsResubmission(data.isResubmission || false); // NEW
+        setIsResubmission(data.isResubmission || false);
       }
     } catch (error) {
       console.error("Error submitting lead:", error);
@@ -584,7 +569,6 @@ function LeadCaptureSection() {
     }
   };
 
-  // ✅ Update success screen
   if (success) {
     return (
       <section className="py-20 bg-gradient-construction">
@@ -693,8 +677,7 @@ function LeadCaptureSection() {
         </div>
 
         <p className="text-white/80 text-sm mt-4">
-          💯 No credit card required • 📱 Response via WhatsApp in under 2
-          minutes
+          💯 Setup in 10 minutes • 📱 Response via WhatsApp in under 2 minutes
         </p>
       </div>
     </section>
@@ -709,14 +692,14 @@ function CTASection() {
           Ready to Close More Deals?
         </h2>
         <p className="text-xl text-muted-foreground mb-8">
-          Start your 14-day free trial. No credit card required.
+          Join hundreds of construction businesses already using AI to convert more leads.
         </p>
         <Button
           size="lg"
           onClick={() => (window.location.href = "/signup")}
           className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
         >
-          Start Free Trial
+          Sign Up Now
           <ArrowRight className="ml-2 w-5 h-5" />
         </Button>
       </div>
@@ -754,11 +737,6 @@ function Footer() {
               <li>
                 <a href="#pricing" className="hover:text-foreground">
                   Pricing
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-foreground">
-                  Demo
                 </a>
               </li>
             </ul>
