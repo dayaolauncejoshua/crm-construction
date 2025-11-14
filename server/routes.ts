@@ -27,7 +27,7 @@ import {
 import bcrypt from "bcrypt";
 import { requireAuth, requireSuperAdmin } from "./middleware/auth";
 
-import { generateVSLScript, generateAudit } from "./services/openai";
+import { generateVSLScript, generateAudit } from "./services/claude";
 import { vslGenerator } from "./services/vsl-generator";
 import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";

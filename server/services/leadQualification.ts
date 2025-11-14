@@ -1,11 +1,11 @@
 // server/services/leadQualification.ts
 import { messageQueue } from "./messageQueue";
 import { storage } from "../storage";
-import { qualifyLead, generateAIResponse } from "./openai";
+import { qualifyLead, generateAIResponse } from "./claude";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
 import { spamPatternLearning } from "./spamPatternLearning";
-import { detectBookingIntent, extractLeadDetails } from "./openai";
+import { detectBookingIntent, extractLeadDetails } from "./claude";
 import type { InsertBooking } from "../../shared/schema";
 import { notificationService } from "./notification-sevice";
 import { time } from "console";

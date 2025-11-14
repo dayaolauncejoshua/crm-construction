@@ -1,5 +1,5 @@
 // server/controllers/vsl.controller.ts
-import { generateVSLScript } from "server/services/openai";
+import { generateVSLScript } from "server/services/claude";
 import { vslGenerator } from "server/services/vsl-generator";
 import { cloudinaryService } from "server/services/cloudinary.service"; //
 import { storage } from "server/storage";
