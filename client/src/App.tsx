@@ -41,8 +41,7 @@ import SubscriptionPage from "@/pages/SubscriptionPage";
 import Settings from "@/pages/settings";
 import ActivityLog from "./pages/activity";
 import { Activity } from "lucide-react";
-
-
+import BrowserTestCall from "@/pages/BrowserTestCall";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -151,6 +150,7 @@ function ProtectedRouter() {
       "/forgot-password",
       "/trial-unlock",
       "/payment-success",
+      "/test-call",
     ];
 
     const isPublicRoute = (path: string) => {
@@ -239,11 +239,11 @@ function ProtectedRouter() {
             <Route path="/trial-unlock" component={TrialUnlock} />
             <Route path="/subscription" component={SubscriptionPage} />
 
-            <Route path="/settings" component={ Settings }/>
-            <Route path="/settings/activity" component={ActivityLog}/>
+            <Route path="/settings" component={Settings} />
+            <Route path="/settings/activity" component={ActivityLog} />
 
             <Route path="/payment-success" component={PaymentSuccess} />
-            <Route path="/pricing" component={Pricing}/>
+            <Route path="/pricing" component={Pricing} />
             <Route path="/verify-email" component={VerifyEmail} />
             <Route path="/verify/:token" component={VerifyToken} />
             <Route path="/forgot-password" component={ForgotPassword} />
@@ -263,6 +263,7 @@ function ProtectedRouter() {
             <Route path="/follow-ups" component={FollowUps} />
             <Route path="/white-label" component={WhiteLabel} />
             <Route path="/sops" component={SOPs} />
+            <Route path="/test-call" component={BrowserTestCall} />
             <Route component={NotFound} />
           </Switch>
         </div>

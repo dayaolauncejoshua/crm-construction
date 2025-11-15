@@ -11,7 +11,7 @@ import stripeWebhookRouter from "./routes/stripe-webhook";
 import voice_AI_CallRouter from "./routes/twilio-call.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
-// 🛑 REMOVED: import pg from "pg";
+import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
@@ -19,20 +19,22 @@ import passport from "./config/passport";
 import { WebSocketServer } from "ws";
 import { leadQualificationService } from "./services/leadQualification";
 import browserTestRouter from "./routes/browser-test.route";
-// ⭐ 1. Import the pool from your db.ts file
-// (Assuming your db.ts file is at 'server/db.ts')
+const { Pool } = pg;
+
 import { pool } from "./db";
 
-// ⭐ 2. Re-export the pool so other files don't break
 export { pool };
-
-// 🛑 REMOVED: const { Pool } = pg;
 config();
 config({ override: false });
 
-// 🛑 3. REMOVED the duplicate pool creation block that was here
+// Create PostgreSQL pool
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
 
-// ✅ These listeners will now attach to the *imported* pool
 pool.on("error", (err) => {
   console.error("❌ Unexpected database error:", err);
   if (err.message?.includes("ENOTFOUND")) {
@@ -81,7 +83,7 @@ app.use("/api/twilioCall_webhook", voice_AI_CallRouter);
 app.use(
   session({
     store: new PgSession({
-      pool: pool, // ✅ 4. This now uses the one, correct, imported pool
+      pool: pool,
       tableName: "sessions",
       createTableIfMissing: true,
     }),
@@ -173,7 +175,7 @@ app.use((req, res, next) => {
   server.listen(PORT, "0.0.0.0", () => {
     log(`🚀 Server running on port ${PORT}`);
     log(`📱 Environment: ${app.get("env")}`);
-    log(`🔐 Session store: PostgreSQL (using shared db.ts pool)`); // Updated log
+    log(`🔐 Session store: PostgreSQL`);
     log(`🧠 AI Pattern Learning: Active`);
     log(`🔌 WebSocket server: Initialized`);
     log(

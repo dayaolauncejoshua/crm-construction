@@ -128,6 +128,7 @@
     "@types/express-session": "^1.18.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "20.16.11",
     "@types/nodemailer": "^7.0.2",
     "@types/passport": "^1.0.17",
