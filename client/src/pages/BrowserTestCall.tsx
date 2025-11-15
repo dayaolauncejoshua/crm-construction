@@ -1,7 +1,8 @@
 // client/src/pages/BrowserTestCall.tsx
 import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Loader2, Play } from "lucide-react";
+import { Mic, Square, Loader2, Play, AlertCircle } from "lucide-react";
+import { useClient } from "@/contexts/ClientContext"; // <-- 1. Import useClient
 
 type Status = "idle" | "recording" | "processing" | "playing";
 
@@ -12,7 +13,17 @@ export default function BrowserTestCall() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
+  const { selectedClientId } = useClient(); // <-- 2. Get selectedClientId
+
   const startRecording = async () => {
+    // <-- 3. Check for clientId before recording
+    if (!selectedClientId) {
+      alert(
+        "No client selected. Please select a client from the navigation bar first."
+      );
+      return;
+    }
+
     try {
       // Ask for microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -54,6 +65,15 @@ export default function BrowserTestCall() {
     const formData = new FormData();
     formData.append("audio", audioBlob, "recording.webm");
 
+    // <-- 4. Append clientId to the request
+    if (selectedClientId) {
+      formData.append("clientId", selectedClientId);
+    } else {
+      alert("Error: No client ID found.");
+      setStatus("idle");
+      return;
+    }
+
     try {
       // Send audio to the new backend route
       const response = await fetch("/api/browser-test", {
@@ -93,6 +113,20 @@ export default function BrowserTestCall() {
     };
   };
 
+  // <-- 5. Add a visual warning if no client is selected
+  if (!selectedClientId) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center">
+        <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+        <h1 className="mt-4 text-2xl font-bold">No Client Selected</h1>
+        <p className="mt-2 text-gray-600">
+          Please select a client from the main navigation (top left) before
+          using the browser test call.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 max-w-lg mx-auto">
       <h1 className="text-2xl font-bold mb-4">
@@ -100,8 +134,8 @@ export default function BrowserTestCall() {
       </h1>
       <p className="text-gray-600 mb-6">
         Press 'Record' to start talking. Press 'Stop' to send your audio to the
-        AI. The AI's response will play automatically. This tests your AI's
-        logic, not the real-time call.
+        AI. The AI's response will play automatically, and the conversation will
+        be saved to the selected client's leads.
       </p>
 
       <div className="flex flex-col items-center gap-4">
