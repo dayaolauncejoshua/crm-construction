@@ -1,14 +1,15 @@
 // server/services/leadQualification.ts
+// ✅ ALL QA FIXES INTEGRATED: Spam Termination, Booking Flow, Meeting Timing
+
 import { messageQueue } from "./messageQueue";
 import { storage } from "../storage";
-import { qualifyLead, generateAIResponse } from "./claude";
+import { qualifyLead, generateAIResponse, detectTimeChange } from "./claude";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
-import { spamPatternLearning } from "./spamPatternLearning";
 import { detectBookingIntent, extractLeadDetails } from "./claude";
 import type { InsertBooking } from "../../shared/schema";
 import { notificationService } from "./notification-sevice";
-import { time } from "console";
+
 // ✅ Constants
 const BOOKING_CONFIDENCE_THRESHOLD = 0.8;
 const BOOKING_INTEREST_THRESHOLD = 0.5;
@@ -23,7 +24,7 @@ interface BookingDetails {
   missingDetails: string[];
 }
 
-// ✅ IMPROVED: Better time normalization
+// ✅ IMPROVED: Better time normalization (from claude.ts)
 function normalizeTimeString(timeStr: string): string {
   if (!timeStr) {
     console.log("⚠️ No time provided, defaulting to 10:00 AM");
@@ -33,7 +34,6 @@ function normalizeTimeString(timeStr: string): string {
   const upperTime = timeStr.toUpperCase().trim();
   console.log(`🕐 Normalizing time: "${timeStr}" → "${upperTime}"`);
 
-  // Handle formats: "9AM", "9 AM", "2PM", "2:00PM", "2:00 PM", "14:00"
   const match = upperTime.match(/(\d{1,2})(?::(\d{2}))?\s*([AP]M)?/);
 
   if (!match) {
@@ -45,13 +45,12 @@ function normalizeTimeString(timeStr: string): string {
 
   let hours = parseInt(match[1]);
   const minutes = match[2] || "00";
-  let period = match[3]; // Will be "AM" or "PM" or undefined
+  let period = match[3];
 
   console.log(
     `🕐 Parsed components: hours=${hours}, minutes=${minutes}, period=${period}`
   );
 
-  // Handle 24-hour format (if no AM/PM specified)
   if (!period) {
     console.log(`🕐 No AM/PM found, treating as 24-hour format`);
     if (hours >= 12) {
@@ -64,7 +63,6 @@ function normalizeTimeString(timeStr: string): string {
     console.log(`🕐 Converted to 12-hour: ${hours} ${period}`);
   }
 
-  // Validate
   if (hours < 1 || hours > 12) {
     console.warn(
       `⚠️ Invalid hour "${hours}" after conversion, using default 10:00 AM`
@@ -74,6 +72,7 @@ function normalizeTimeString(timeStr: string): string {
 
   const normalized = `${hours}:${minutes} ${period}`;
   console.log(`✅ Normalized time result: "${normalized}"`);
+
   return normalized;
 }
 
@@ -85,12 +84,10 @@ function parseDateFromNaturalLanguage(
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // Normalize time with validation
   const normalizedTime = timeStr ? normalizeTimeString(timeStr) : "10:00 AM";
 
   console.log(`📅 Parsing date: "${dateStr}" with time: "${normalizedTime}"`);
 
-  // ✅ Parse time components FIRST
   const timeMatch = normalizedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!timeMatch) {
     console.error(`❌ Invalid time format: "${normalizedTime}"`);
@@ -101,7 +98,6 @@ function parseDateFromNaturalLanguage(
   const minutes = parseInt(timeMatch[2]);
   const period = timeMatch[3].toUpperCase();
 
-  // Convert to 24-hour format
   if (period === "PM" && hours !== 12) hours += 12;
   if (period === "AM" && hours === 12) hours = 0;
 
@@ -110,7 +106,6 @@ function parseDateFromNaturalLanguage(
   );
 
   const lowerDate = dateStr.toLowerCase().trim();
-
   const dayNames = [
     "sunday",
     "monday",
@@ -121,131 +116,71 @@ function parseDateFromNaturalLanguage(
     "saturday",
   ];
 
-  // ✅ NEW: Handle relative dates (today, tomorrow, next week)
+  // Handle relative dates
   if (lowerDate === "today") {
     const targetDate = new Date(now);
-
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
     const hourStr = String(hours).padStart(2, "0");
     const minStr = String(minutes).padStart(2, "0");
-
     const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
     const pacificDate = new Date(pacificDateString);
-
     console.log(`✅ "Today" parsed: ${pacificDate.toISOString()}`);
-    console.log(
-      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
-        timeZone: "America/Vancouver",
-      })}`
-    );
     return pacificDate;
   }
 
   if (lowerDate === "tomorrow") {
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + 1);
-
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
     const hourStr = String(hours).padStart(2, "0");
     const minStr = String(minutes).padStart(2, "0");
-
     const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
     const pacificDate = new Date(pacificDateString);
-
     console.log(`✅ "Tomorrow" parsed: ${pacificDate.toISOString()}`);
-    console.log(
-      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
-        timeZone: "America/Vancouver",
-      })}`
-    );
     return pacificDate;
   }
 
-  // Handle "next week", "this week"
-  if (lowerDate.includes("next week") || lowerDate.includes("this week")) {
-    const daysToAdd = lowerDate.includes("next week") ? 7 : 0;
-    const targetDate = new Date(now);
-    targetDate.setDate(now.getDate() + daysToAdd);
-
-    // Default to next Monday if "next week" without specific day
-    if (!lowerDate.includes("monday") && !lowerDate.includes("tuesday")) {
-      const currentDay = targetDate.getDay();
-      const daysUntilMonday = currentDay === 0 ? 1 : 8 - currentDay;
-      targetDate.setDate(targetDate.getDate() + daysUntilMonday);
-    }
-
-    const year = targetDate.getFullYear();
-    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
-    const day = String(targetDate.getDate()).padStart(2, "0");
-    const hourStr = String(hours).padStart(2, "0");
-    const minStr = String(minutes).padStart(2, "0");
-
-    const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
-    const pacificDate = new Date(pacificDateString);
-
-    console.log(`✅ "${lowerDate}" parsed: ${pacificDate.toISOString()}`);
-    return pacificDate;
-  }
-
-  // ✅ NEW: Handle "next [DayName]" and "this [DayName]"
-  // Examples: "next Monday", "this Friday", "next Tuesday"
+  // Handle "next [DayName]" and "this [DayName]"
   const nextDayPattern =
     /^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
   const nextDayMatch = lowerDate.match(nextDayPattern);
 
   if (nextDayMatch) {
     console.log(`🔍 Parsing "${lowerDate}" with pattern "next/this [Day]"`);
-    const modifier = nextDayMatch[1].toLowerCase(); // "next" or "this"
-    const dayName = nextDayMatch[2].toLowerCase(); // "monday", "friday", etc.
+    const modifier = nextDayMatch[1].toLowerCase();
+    const dayName = nextDayMatch[2].toLowerCase();
     console.log(`   Modifier: "${modifier}", Day: "${dayName}"`);
 
     const targetDayIndex = dayNames.indexOf(dayName);
     const currentDay = now.getDay();
-
     let daysUntil = targetDayIndex - currentDay;
 
     if (modifier === "next") {
-      // "next Monday" means next week's Monday
       if (daysUntil <= 0) {
-        daysUntil += 7; // Jump to next week
+        daysUntil += 7;
       } else {
-        // If target day is later this week, still go to next week
         daysUntil += 7;
       }
     } else {
-      // "this Monday" means this week's Monday
       if (daysUntil < 0) {
-        daysUntil += 7; // If day already passed, go to next week
+        daysUntil += 7;
       }
-      // If today is the target day (daysUntil === 0), use today
     }
 
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysUntil);
-
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
     const hourStr = String(hours).padStart(2, "0");
     const minStr = String(minutes).padStart(2, "0");
-
     const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
     const pacificDate = new Date(pacificDateString);
-
     console.log(`✅ "${lowerDate}" parsed: ${pacificDate.toISOString()}`);
-    console.log(
-      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
-        timeZone: "America/Vancouver",
-      })}`
-    );
-    console.log(`✅ "${lowerDate}" parsed successfully`);
-    console.log(`   Days until target: ${daysUntil}`);
-    console.log(`   Target date: ${pacificDate.toISOString()}`);
-    console.log(`   Current date: ${now.toISOString()}`);
     return pacificDate;
   }
 
@@ -254,33 +189,20 @@ function parseDateFromNaturalLanguage(
     const targetDay = dayNames.indexOf(lowerDate);
     const currentDay = now.getDay();
     let daysUntil = targetDay - currentDay;
-
     if (daysUntil <= 0) {
       daysUntil += 7;
     }
 
-    // ✅ FIX: Create date in Pacific timezone (UTC-8 in winter, UTC-7 in summer)
-    // Calculate the date
     const targetDate = new Date(now);
     targetDate.setDate(now.getDate() + daysUntil);
-
-    // Create ISO string for Pacific timezone
     const year = targetDate.getFullYear();
     const month = String(targetDate.getMonth() + 1).padStart(2, "0");
     const day = String(targetDate.getDate()).padStart(2, "0");
     const hourStr = String(hours).padStart(2, "0");
     const minStr = String(minutes).padStart(2, "0");
-
-    // Use -08:00 offset for Pacific Standard Time (adjust for DST if needed)
     const pacificDateString = `${year}-${month}-${day}T${hourStr}:${minStr}:00-08:00`;
     const pacificDate = new Date(pacificDateString);
-
     console.log(`✅ Day name parsed: ${pacificDate.toISOString()}`);
-    console.log(
-      `   Pacific Time: ${pacificDate.toLocaleString("en-US", {
-        timeZone: "America/Vancouver",
-      })}`
-    );
     return pacificDate;
   }
 
@@ -299,7 +221,6 @@ function parseDateFromNaturalLanguage(
     "november",
     "december",
   ];
-
   const monthAbbr = [
     "jan",
     "feb",
@@ -315,11 +236,9 @@ function parseDateFromNaturalLanguage(
     "dec",
   ];
 
-  // Try to extract month and day
   let month = -1;
   let day = -1;
 
-  // Pattern: "November 9" or "Nov 9" or "9 November"
   const datePattern = /(\w+)\s+(\d{1,2})|(\d{1,2})\s+(\w+)/i;
   const match = dateStr.match(datePattern);
 
@@ -327,15 +246,12 @@ function parseDateFromNaturalLanguage(
     const monthStr = (match[1] || match[4]).toLowerCase();
     day = parseInt(match[2] || match[3]);
 
-    // Find month index
     month = monthNames.indexOf(monthStr);
     if (month === -1) {
       month = monthAbbr.indexOf(monthStr);
     }
 
     if (month !== -1 && day > 0 && day <= 31) {
-      // ✅ CRITICAL FIX: Create date string for Pacific timezone, then parse
-      // This ensures the time is interpreted as Pacific Time, not server's local time
       const dateString = `${currentYear}-${String(month + 1).padStart(
         2,
         "0"
@@ -343,23 +259,10 @@ function parseDateFromNaturalLanguage(
         2,
         "0"
       )}:${String(minutes).padStart(2, "0")}:00-08:00`;
-
       console.log(`📅 Creating date string: ${dateString}`);
       const targetDate = new Date(dateString);
-
       console.log(`✅ Explicit date created: ${targetDate.toISOString()}`);
-      console.log(
-        `   Year: ${currentYear}, Month: ${
-          month + 1
-        }, Day: ${day}, Hours: ${hours}, Minutes: ${minutes}`
-      );
-      console.log(
-        `   Pacific Time: ${targetDate.toLocaleString("en-US", {
-          timeZone: "America/Vancouver",
-        })}`
-      );
 
-      // Validate it's not in the past
       if (targetDate < now) {
         console.warn(`⚠️ Date is in the past, trying next year...`);
         const nextYearDateString = `${currentYear + 1}-${String(
@@ -376,12 +279,12 @@ function parseDateFromNaturalLanguage(
 
   return null;
 }
+
 // ✅ Smart day suggestions
 function getSmartDaySuggestions(): string {
   const now = new Date();
-  const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
+  const currentDay = now.getDay();
   const currentHour = now.getHours();
-
   const dayNames = [
     "Sunday",
     "Monday",
@@ -392,20 +295,14 @@ function getSmartDaySuggestions(): string {
     "Saturday",
   ];
 
-  // If it's late in the day (after 3 PM), skip today
   const startDay = currentHour >= 15 ? currentDay + 1 : currentDay;
-
   const suggestions: string[] = [];
 
-  // Get next 2-3 business days
   for (let i = startDay; i < startDay + 7 && suggestions.length < 3; i++) {
     const dayIndex = i % 7;
-
-    // Skip weekends
     if (dayIndex === 0 || dayIndex === 6) continue;
 
     const daysAway = i - currentDay;
-
     if (daysAway === 0) {
       suggestions.push("today");
     } else if (daysAway === 1) {
@@ -417,7 +314,6 @@ function getSmartDaySuggestions(): string {
     }
   }
 
-  // Format: "today or tomorrow", "Thursday or Friday", etc.
   if (suggestions.length >= 2) {
     return `${suggestions[0]} or ${suggestions[1]}`;
   } else if (suggestions.length === 1) {
@@ -431,7 +327,6 @@ function getSmartDaySuggestions(): string {
 function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
   const missing: string[] = [];
 
-  // Check date and time
   const hasDate = !!bookingIntent.proposedDateTime?.date;
   const hasTime = !!bookingIntent.proposedDateTime?.time;
 
@@ -439,7 +334,6 @@ function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
     missing.push("specific date (e.g., November 15 or next Monday)");
   if (!hasTime) missing.push("time (e.g., 2 PM or 14:00)");
 
-  // ✅ IMPROVED: Better address validation
   const location = bookingIntent.location || "";
   const addressKeywords = [
     "st",
@@ -467,23 +361,18 @@ function validateBookingDetails(bookingIntent: any, lead: any): BookingDetails {
 
   const hasAddress =
     location.length > 15 &&
-    // Has street indicator
     (addressKeywords.some((keyword) =>
       location.toLowerCase().includes(keyword)
     ) ||
-      // Has comma (city separator)
       location.includes(",") ||
-      // Has postal code pattern (for Canada: A1A 1A1 or USA: 12345)
-      /[A-Z]\d[A-Z]\s?\d[A-Z]\d/i.test(location) || // Canadian postal
-      /\d{5}(-\d{4})?/.test(location) || // US ZIP
-      // Has "RR" (Rural Route) pattern
+      /[A-Z]\d[A-Z]\s?\d[A-Z]\d/i.test(location) ||
+      /\d{5}(-\d{4})?/.test(location) ||
       /RR\d+/i.test(location));
 
   if (!hasAddress) {
     missing.push("specific address (street, city) for the site visit");
   }
 
-  // Check lead details
   const hasName =
     lead.firstName &&
     lead.firstName !== lead.phone &&
@@ -530,20 +419,16 @@ export class LeadQualificationService {
     sender: "ai" | "human"
   ): Promise<void> {
     try {
-      // Get all messages in conversation
       const messages = await storage.getMessages(conversationId);
 
-      // Find first lead message (filter out nulls)
       const firstLeadMessage = messages
         .filter((m) => m.sender === "lead" && m.sentAt !== null)
         .sort((a, b) => {
-          // ✅ Safe: we already filtered out nulls above
           const timeA = new Date(a.sentAt!).getTime();
           const timeB = new Date(b.sentAt!).getTime();
           return timeA - timeB;
         })[0];
 
-      // Find first real response (exclude system messages)
       const firstResponse = messages
         .filter(
           (m) =>
@@ -557,7 +442,6 @@ export class LeadQualificationService {
           return timeA - timeB;
         })[0];
 
-      // If this is the FIRST real response to the lead
       if (firstLeadMessage && !firstResponse) {
         const sentAt = firstLeadMessage.sentAt;
         if (!sentAt) {
@@ -571,7 +455,6 @@ export class LeadQualificationService {
           (responseTime.getTime() - leadMessageTime.getTime()) / 1000
         );
 
-        // ✅ Validate response time (should be positive and reasonable)
         if (responseTimeSeconds < 0) {
           console.warn(
             `⚠️ Negative response time detected: ${responseTimeSeconds}s - skipping`
@@ -580,7 +463,6 @@ export class LeadQualificationService {
         }
 
         if (responseTimeSeconds > 86400) {
-          // More than 24 hours
           console.warn(
             `⚠️ Unusually long response time: ${responseTimeSeconds}s (${(
               responseTimeSeconds / 3600
@@ -594,7 +476,6 @@ export class LeadQualificationService {
           ).toFixed(1)} min)`
         );
 
-        // Save to lead
         await storage.updateLead(leadId, {
           responseTimeSeconds,
         });
@@ -614,7 +495,6 @@ export class LeadQualificationService {
       const client = await storage.getClient(lead.clientId);
       if (!client) throw new Error("Client not found");
 
-      // Create initial conversation
       const conversation = await storage.createConversation({
         leadId: lead.id,
         clientId: lead.clientId,
@@ -624,7 +504,6 @@ export class LeadQualificationService {
         qualificationScore: "0.0",
       });
 
-      // Send initial audit result message
       if (lead.phone && lead.auditResults) {
         const auditData = lead.auditResults as any;
         const success = await whatsappService.sendAuditResult(
@@ -635,7 +514,6 @@ export class LeadQualificationService {
           `https://app.example.com/audit/${lead.id}`
         );
 
-        // Record response time
         const createdAt = lead.createdAt
           ? new Date(lead.createdAt).getTime()
           : Date.now();
@@ -645,7 +523,6 @@ export class LeadQualificationService {
           responseTimeSeconds: responseTime,
         });
 
-        // Create message record
         await storage.createMessage({
           conversationId: conversation.id,
           content: `Audit result sent via WhatsApp`,
@@ -654,7 +531,6 @@ export class LeadQualificationService {
           sentAt: new Date(),
         });
 
-        // Broadcast to dashboard
         this.broadcastUpdate({
           type: "new_conversation",
           conversation: {
@@ -716,20 +592,16 @@ export class LeadQualificationService {
         const allUsers = await storage.getAllUsersForAdmin();
         let targetClient = null;
 
-        // Match by Phone Number ID
         if (phoneNumberId) {
           console.log(
             `🔍 Looking for client with Phone number ID: ${phoneNumberId}`
           );
-
           for (const user of allUsers) {
             if (user.role === "super_admin") continue;
             const userClients = await storage.getClients(user.id);
-
             const matchedClient = userClients.find(
               (c) => c.isActive && c.whatsappPhoneNumberId === phoneNumberId
             );
-
             if (matchedClient) {
               targetClient = matchedClient;
               console.log(
@@ -740,7 +612,6 @@ export class LeadQualificationService {
           }
         }
 
-        // Fallback: use first active client
         if (!targetClient) {
           console.log(
             "⚠️ No client matched WhatsApp number, using first active client"
@@ -751,7 +622,6 @@ export class LeadQualificationService {
             const firstWithWhatsApp = userClients.find(
               (c) => c.isActive && (c.whatsappPhoneNumberId || c.whatsappNumber)
             );
-
             if (firstWithWhatsApp) {
               targetClient = firstWithWhatsApp;
               console.log(
@@ -768,7 +638,6 @@ export class LeadQualificationService {
         }
 
         console.log(`Assigning to client: ${targetClient.name}`);
-
         lead = await storage.createLead({
           clientId: targetClient.id,
           firstName: from,
@@ -818,7 +687,6 @@ export class LeadQualificationService {
           "🔄 Reopening previously closed conversation:",
           conversation.id
         );
-
         await storage.updateConversation(conversation.id, {
           status: "active",
           isAiHandled: false,
@@ -838,7 +706,6 @@ export class LeadQualificationService {
         }
 
         console.log("✅ Conversation reopened - flagged for human review");
-
         this.broadcastUpdate({
           type: "conversation_reopened",
           conversationId: conversation.id,
@@ -873,19 +740,25 @@ export class LeadQualificationService {
       await storage.markPreviousMessagesAsRead(conversation.id);
       await storage.incrementUnreadCount(conversation.id);
 
-      // Broadcast new message to dashboard
+      // ✅ IMPORTANT: Broadcast lead message IMMEDIATELY before AI processing
       this.broadcastUpdate({
         type: "new_message",
         conversationId: conversation.id,
-        message: { content: message, sender: "lead" },
+        message: {
+          content: message,
+          sender: "lead",
+          sentAt: savedMessage.sentAt,
+          id: savedMessage.id,
+        },
       });
+
+      // ✅ Small delay to ensure UI receives lead message first
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Step 4: AI Processing
       if (conversation.isAiHandled) {
         console.log("🤖 AI is handling - processing message...");
 
-        // ✅ REMOVED: No more status message ("Let me check that for you...")
-        // Just show typing indicator to dashboard
         this.broadcastUpdate({
           type: "typing_indicator",
           conversationId: conversation.id,
@@ -893,15 +766,16 @@ export class LeadQualificationService {
           sender: "ai",
         });
 
-        // Get conversation history
         const messages = await storage.getMessages(conversation.id);
 
-        // Qualify lead
+        // ============================================
+        // ✅ STEP 1: QUALIFY LEAD & CHECK FOR SPAM
+        // ============================================
         const qualification = await qualifyLead(lead, messages);
         console.log("AI Qualification:", qualification);
 
         // ============================================
-        // CHECK: Non-construction inquiry?
+        // ✅ FIX #2: SPAM TERMINATION
         // ============================================
         if (
           qualification.nextAction === "mark_as_not_a_lead" ||
@@ -909,12 +783,15 @@ export class LeadQualificationService {
         ) {
           console.log("🚫 Non-construction inquiry detected");
 
-          const redirectCount = messages.filter(
+          const freshMessages = await storage.getMessages(conversation.id);
+
+          const redirectCount = freshMessages.filter(
             (msg) =>
               msg.sender === "ai" &&
-              (msg.content.includes("construction company") ||
-                msg.content.includes("building projects") ||
-                msg.content.includes("wrong business"))
+              (msg.content.toLowerCase().includes("construction company") ||
+                msg.content.toLowerCase().includes("building projects") ||
+                msg.content.toLowerCase().includes("wrong business") ||
+                msg.content.toLowerCase().includes("construction services"))
           ).length;
 
           console.log(`🔢 Redirect count: ${redirectCount}`);
@@ -926,22 +803,11 @@ export class LeadQualificationService {
             tags: ["not-construction", "irrelevant"],
           });
 
-          if (redirectCount >= 2) {
-            console.log("⛔ Max redirects reached - terminating");
-
-            const category =
-              message.toLowerCase().includes("food") ||
-              message.toLowerCase().includes("burger") ||
-              message.toLowerCase().includes("fries")
-                ? "food"
-                : message.toLowerCase().includes("shoe") ||
-                  message.toLowerCase().includes("clothing")
-                ? "retail"
-                : message.toLowerCase().includes("test")
-                ? "test"
-                : "other";
-
-            await spamPatternLearning.learnFromSpam(message, category);
+          // ✅ TERMINATE IMMEDIATELY after 2nd redirect
+          if (redirectCount >= 1) {
+            console.log(
+              "⛔ Max redirects reached (2 total) - terminating conversation"
+            );
 
             await storage.updateConversation(conversation.id, {
               qualificationScore: qualification.score.toString(),
@@ -959,14 +825,48 @@ export class LeadQualificationService {
                 "wrong-number",
               ],
             });
-          } else {
-            await storage.updateConversation(conversation.id, {
-              qualificationScore: qualification.score.toString(),
-              lastMessageAt: new Date(),
-              isAiHandled: true,
+
+            const updatedLead = await storage.getLead(lead.id);
+            this.broadcastUpdate({
+              type: "lead_updated",
+              lead: updatedLead,
+              conversationId: conversation.id,
             });
+
+            const client = await storage.getClient(lead.clientId);
+            const finalMessage = `Final notice: This is ${
+              client?.name || "a construction company"
+            }. We only handle construction and building projects. This conversation will not receive further responses.`;
+
+            this.broadcastUpdate({
+              type: "typing_indicator",
+              conversationId: conversation.id,
+              isTyping: false,
+              sender: "ai",
+            });
+
+            const terminateResult = await whatsappService.sendTextMessage(
+              from,
+              finalMessage
+            );
+
+            await storage.createMessage({
+              conversationId: conversation.id,
+              content: finalMessage,
+              sender: "ai",
+              channel: "whatsapp",
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+              metadata: terminateResult.messageId
+                ? { whatsappMessageId: terminateResult.messageId }
+                : undefined,
+            });
+
+            console.log("✅ Conversation terminated, no further AI responses");
+            return; // ✅ STOP PROCESSING
           }
 
+          // First redirect - send warning
           const updatedLead = await storage.getLead(lead.id);
           this.broadcastUpdate({
             type: "lead_updated",
@@ -974,7 +874,6 @@ export class LeadQualificationService {
             conversationId: conversation.id,
           });
 
-          // Generate redirect response
           const client = await storage.getClient(lead.clientId);
           const aiResponse = await generateAIResponse(messages, lead, client);
 
@@ -1012,10 +911,8 @@ export class LeadQualificationService {
         }
 
         // ============================================
-        // NORMAL FLOW: Construction-related inquiry
+        // ✅ STEP 2: UPDATE TEMPERATURE & LEAD STATUS
         // ============================================
-
-        // Update temperature
         let temperature: "hot" | "warm" | "cold";
         if (qualification.score >= 0.7) {
           temperature = "hot";
@@ -1046,55 +943,141 @@ export class LeadQualificationService {
         });
 
         // ============================================
-        // HOT LEAD: Immediate human handoff (score-based)
+        // 🆕 STEP 3: CHECK FOR ULTRA-HOT LEAD FIRST (PRIORITY!)
         // ============================================
-        // ✅ Don't handoff immediately on first message with "ASAP"
-        const leadMessageCount = messages.filter(
-          (m: any) => m.sender === "lead"
-        ).length;
-
-        // ✅ Check for MULTIPLE hot signals (not just score)
-        const hasUrgency = /asap|urgent|immediately|this week|next week/i.test(
-          messages
-            .filter((m: any) => m.sender === "lead")
-            .map((m: any) => m.content)
-            .join(" ")
+        console.log(
+          "🔍 Step 3: Checking for ultra-hot lead (PRIORITY CHECK)..."
         );
-        const hasDecisionMaker =
-          /i'm the|i am the|ceo|owner|i decide|my company/i.test(
-            messages
-              .filter((m: any) => m.sender === "lead")
-              .map((m: any) => m.content)
-              .join(" ")
+
+        const leadMessages = messages.filter((m: any) => m.sender === "lead");
+        const leadMessageCount = leadMessages.length;
+
+        // Detect hot signals
+        const hasUrgency =
+          /\b(asap|urgent|immediately|right away|as soon as possible|emergency|critical|right now)\b/i.test(
+            leadMessages.map((m: any) => m.content).join(" ")
+          ) ||
+          /\b(today|tomorrow|this week|next week)\b/i.test(
+            leadMessages.map((m: any) => m.content).join(" ")
           );
-        const hasMeetingRequest = messages.some(
-          (m: any) =>
-            m.sender === "lead" &&
-            /can we meet|let's meet|schedule|available/i.test(m.content)
+
+        const hasDecisionMaker =
+          /\b(i'm the|i am the|ceo|owner|president|director|founder|i decide|my company|my business|i run)\b/i.test(
+            leadMessages.map((m: any) => m.content).join(" ")
+          );
+
+        // 🆕 EXPANDED: Include "Can we discuss" as meeting request
+        const hasMeetingRequest = leadMessages.some((m: any) =>
+          /\b(can we (meet|discuss|talk)|let's meet|need to meet|want to meet|should we meet|schedule|book|appointment|site visit)\b/i.test(
+            m.content
+          )
         );
 
-        // Count hot signals
         const hotSignals = [
           hasUrgency,
           hasDecisionMaker,
           hasMeetingRequest,
         ].filter(Boolean).length;
 
-        // ✅ Require score >= 0.75 AND at least 2 hot signals for handoff
-        const shouldHandoff =
-          qualification.score >= 0.75 &&
-          hotSignals >= 2 &&
-          leadMessageCount >= 2;
+        console.log(`🔥 Ultra-Hot Lead Analysis:`);
+        console.log(`   Score: ${qualification.score.toFixed(2)}`);
+        console.log(`   Signals: ${hotSignals}/3`);
+        console.log(`   - Urgency: ${hasUrgency}`);
+        console.log(`   - Decision Maker: ${hasDecisionMaker}`);
+        console.log(`   - Meeting Request: ${hasMeetingRequest}`);
+        console.log(`   - Message Count: ${leadMessageCount}`);
 
-        if (shouldHandoff || qualification.needsHumanAttention) {
+        // ✅ ULTRA-HOT: Score 0.8+ AND 2+ signals AND 3+ messages → IMMEDIATE HANDOFF
+        const isUltraHot =
+          qualification.score >= 0.8 &&
+          hotSignals >= 2 &&
+          leadMessageCount >= 3;
+
+        if (isUltraHot) {
           console.log(
-            `🔥 HOT LEAD HANDOFF - Score: ${qualification.score}, Signals: ${hotSignals}`
+            `🔥🔥 ULTRA-HOT LEAD CONFIRMED - Triggering immediate handoff`
           );
+          console.log(`   Bypassing booking flow for human attention`);
 
           await storage.updateConversation(conversation.id, {
             isAiHandled: false,
             humanTakeoverAt: new Date(),
           });
+
+          // 🆕 DEBUG: Verify update was saved
+  const freshConversation = await storage.getConversation(conversation.id);
+  console.log(`✅ DB Update Confirmed:`, {
+    conversationId: conversation.id,
+    isAiHandled: freshConversation?.isAiHandled,
+    humanTakeoverAt: freshConversation?.humanTakeoverAt,
+  });
+
+          // Event 1: Hot lead alert
+  this.broadcastUpdate({
+    type: "hot_lead_alert",
+    conversationId: conversation.id,
+    conversation: {
+      id: conversation.id,
+      isAiHandled: false, // ✅ Explicit
+      humanTakeoverAt: new Date(),
+      leadId: lead.id,
+      clientId: lead.clientId,
+      lead: updatedLead,
+      qualificationScore: qualification.score.toString(),
+    },
+    qualification,
+  });
+
+  console.log(`📡 Broadcasted hot_lead_alert for conversation ${conversation.id}`);
+
+          // Event 2: Explicit conversation update
+  this.broadcastUpdate({
+    type: "conversation_updated",
+    conversationId: conversation.id,
+    updates: {
+      isAiHandled: false,
+      humanTakeoverAt: new Date(),
+    },
+  });
+
+  console.log(`📡 Broadcasted conversation_updated for conversation ${conversation.id}`);
+
+  // Event 3: Lead updated (for sidebar sync)
+  this.broadcastUpdate({
+    type: "lead_updated",
+    conversationId: conversation.id,
+    lead: updatedLead,
+  });
+  
+  console.log(`📡 Broadcasted lead_updated for conversation ${conversation.id}`);
+
+          const client = await storage.getClient(lead.clientId);
+          if (client && client.userId) {
+            await notificationService.sendHotLeadAlert({
+              userId: client.userId,
+              lead: {
+                id: updatedLead?.id || "",
+                firstName: updatedLead?.firstName || "",
+                lastName: updatedLead?.lastName || "",
+                email: updatedLead?.email || "",
+                phone: updatedLead?.phone || "",
+                company: updatedLead?.company || "",
+                qualificationScore: updatedLead?.qualificationScore || "0.8",
+                temperature: updatedLead?.temperature || "hot",
+              },
+              conversation: {
+                id: conversation.id,
+                qualificationScore: qualification.score.toString(),
+              },
+              qualification: {
+                score: qualification.score,
+                reasoning: qualification.reasoning,
+              },
+            });
+          }
+
+          const handoffMessage =
+            "Thanks for sharing those details! You've been identified as a priority lead. One of our senior team members will reach out to you within 5 minutes to discuss your project in detail. 🏗️";
 
           this.broadcastUpdate({
             type: "typing_indicator",
@@ -1103,61 +1086,14 @@ export class LeadQualificationService {
             sender: "ai",
           });
 
-          this.broadcastUpdate({
-            type: "lead_updated",
-            lead: updatedLead,
-            conversationId: conversation.id,
-          });
-
-          this.broadcastUpdate({
-            type: "hot_lead_alert",
-            conversation: {
-              ...conversation,
-              lead: updatedLead,
-              qualificationScore: qualification.score.toString(),
-            },
-            qualification,
-          });
-
-          const client = await storage.getClient(lead.clientId);
-          if (client && client.userId) {
-            // ✅ Check userId exists
-            await notificationService.sendHotLeadAlert({
-              userId: client.userId,
-              lead: {
-                id: updatedLead?.id || "", // ✅ Fallback to original lead.id
-                firstName: updatedLead?.firstName || "",
-                lastName: updatedLead?.lastName || "",
-                email: updatedLead?.email || "",
-                phone: updatedLead?.phone || "",
-                company: updatedLead?.company || "",
-                qualificationScore: updatedLead?.qualificationScore || "0.7",
-                temperature: updatedLead?.temperature || "hot",
-              },
-              conversation: {
-                id: conversation.id, // ✅ Already a number
-                qualificationScore: qualification.score.toString(),
-              },
-              qualification: {
-                score: qualification.score,
-                reasoning: qualification.reasoning,
-              },
-            });
-          } else {
-            console.log(
-              "⚠️ Cannot send notification: client or userId missing"
-            );
-          }
-
-          const handoffMessage =
-            "Thanks for your message! You've been identified as a priority lead. A team member will respond within 5 minutes.";
+          await new Promise((resolve) => setTimeout(resolve, 200));
 
           const handoffResult = await whatsappService.sendTextMessage(
             from,
             handoffMessage
           );
 
-          await storage.createMessage({
+          const handoffMsg = await storage.createMessage({
             conversationId: conversation.id,
             content: handoffMessage,
             sender: "ai",
@@ -1169,37 +1105,29 @@ export class LeadQualificationService {
               : undefined,
           });
 
-          return; // Stop AI processing
+          this.broadcastUpdate({
+            type: "new_message",
+            conversationId: conversation.id,
+            message: {
+              content: handoffMessage,
+              sender: "ai",
+              sentAt: handoffMsg.sentAt,
+              id: handoffMsg.id,
+            },
+          });
+
+          console.log(
+            "✅ Ultra-hot lead handed off to human - STOPPING ALL AI PROCESSING"
+          );
+          return; // ✅ CRITICAL: Stop all further processing
         }
 
         // ============================================
-        // STEP 1: CHECK BOOKING INTENT FIRST (CRITICAL FIX)
+        // ✅ STEP 4: CHECK BOOKING INTENT FIRST (Only if NOT ultra-hot)
         // ============================================
-        console.log("🔍 Step 1: Checking booking intent...");
+        console.log("🔍 Step 4: Checking booking intent (PRIORITY)...");
         console.log("=".repeat(60));
-
-        // ✅ ALWAYS get FRESH messages from database (no cache)
         const freshMessages = await storage.getMessages(conversation.id);
-        console.log(
-          `📨 Total messages in conversation: ${freshMessages.length}`
-        );
-
-        // ✅ Log recent lead messages for debugging
-        const recentLeadMessages = freshMessages
-          .filter((m) => m.sender === "lead")
-          .slice(-5)
-          .map((m) => ({
-            content: m.content,
-            timestamp: m.sentAt,
-          }));
-
-        console.log("📋 Last 5 lead messages:");
-        recentLeadMessages.forEach((msg, i) => {
-          console.log(`   ${i + 1}. "${msg.content}"`);
-        });
-
-        // ✅ CRITICAL: Detect booking intent with FRESH messages
-        console.log("🔍 Calling detectBookingIntent()...");
         const bookingIntent = await detectBookingIntent(freshMessages, lead);
 
         console.log("=".repeat(60));
@@ -1217,66 +1145,46 @@ export class LeadQualificationService {
           bookingIntent.proposedDateTime?.time || "NOT SET"
         );
         console.log("✓ Location:", bookingIntent.location || "NOT SET");
-        console.log("✓ Meeting type:", bookingIntent.meetingType || "NOT SET");
-        console.log("✓ Reasoning:", bookingIntent.reasoning);
         console.log("=".repeat(60));
 
-        // ✅ CRITICAL: Verify the time is what we expect
-        if (bookingIntent.proposedDateTime?.time) {
-          console.log(
-            `⏰ TIME EXTRACTED: "${bookingIntent.proposedDateTime.time}"`
-          );
+        // ✅ Check if lead is actively in booking workflow
+        const isActivelyBooking =
+          bookingIntent.wantsToBook &&
+          (bookingIntent.proposedDateTime?.date ||
+            bookingIntent.proposedDateTime?.time ||
+            bookingIntent.confidence > 0.5);
 
-          // Check if this time appears in the recent messages
-          const lastLeadMsg =
-            recentLeadMessages[recentLeadMessages.length - 1]?.content || "";
-          const timeInLastMessage = lastLeadMsg.match(/\d{1,2}\s*[AP]M/i);
+        // ✅ Check if AI recently asked booking-related questions
+        const recentMessages = messages.slice(-3);
+        const inBookingFlow = recentMessages.some(
+          (m: any) =>
+            m.sender === "ai" &&
+            /\b(schedule|site visit|meet|available|what time|which day|when would|book|appointment|calendar)\b/i.test(
+              m.content
+            )
+        );
 
-          if (timeInLastMessage) {
-            console.log(`⏰ TIME IN LAST MESSAGE: "${timeInLastMessage[0]}"`);
+        console.log(`📋 Actively booking: ${isActivelyBooking}`);
+        console.log(`📋 In booking flow: ${inBookingFlow}`);
 
-            if (
-              timeInLastMessage[0].toUpperCase() !==
-              bookingIntent.proposedDateTime.time.toUpperCase()
-            ) {
-              console.warn("⚠️⚠️⚠️ WARNING: TIME MISMATCH! ⚠️⚠️⚠️");
-              console.warn(`   Lead said: "${timeInLastMessage[0]}"`);
-              console.warn(
-                `   AI extracted: "${bookingIntent.proposedDateTime.time}"`
-              );
-              console.warn(
-                "   This indicates the AI is not extracting the most recent time!"
-              );
-            } else {
-              console.log("✅ Time extraction verified - matches last message");
-            }
-          }
-        } else {
-          console.log("⚠️ No time extracted from conversation");
-        }
-
+        // ============================================
+        // ✅ IF BOOKING CONFIRMED, CREATE IT IMMEDIATELY
+        // ============================================
         if (
           bookingIntent.wantsToBook &&
           bookingIntent.isConfirmed &&
           bookingIntent.confidence > BOOKING_CONFIDENCE_THRESHOLD
         ) {
-          console.log("✅ Confirmed booking intent detected!");
-
-          // ============================================
-          // ✅ NEW: STEP 1.5 - EXTRACT LEAD DETAILS FROM CONVERSATION
-          // ============================================
           console.log(
-            "🔍 Step 1.5: Extracting lead details from conversation..."
+            "✅ Confirmed booking intent - prioritizing booking creation"
           );
 
+          // Extract lead details from conversation
           const extractedDetails = await extractLeadDetails(messages);
           console.log("📋 Extracted details:", extractedDetails);
 
-          // Update lead with extracted information if confidence is high
           if (extractedDetails.confidence > 0.7) {
             const updates: any = {};
-
-            // Extract name if found and current name is phone number
             if (
               extractedDetails.name &&
               (lead.firstName === lead.phone ||
@@ -1290,26 +1198,22 @@ export class LeadQualificationService {
               console.log(`✅ Extracted name: ${extractedDetails.name}`);
             }
 
-            // Extract email if found and current email is temporary
             if (
               extractedDetails.email &&
-              (lead.email.includes("whatsapp_") ||
-                lead.email.includes("@temp.com"))
+              (lead.email!.includes("whatsapp_") ||
+                lead.email!.includes("@temp.com"))
             ) {
               updates.email = extractedDetails.email;
               console.log(`✅ Extracted email: ${extractedDetails.email}`);
             }
 
-            // Update lead if we found anything
             if (Object.keys(updates).length > 0) {
               await storage.updateLead(lead.id, updates);
-              // Refresh lead data with updated info
               lead = (await storage.getLead(lead.id))!;
               console.log(`✅ Updated lead with extracted details`);
             }
           }
 
-          // ✅ Override location if extracted address is more specific
           if (
             extractedDetails.address &&
             extractedDetails.confidence > 0.7 &&
@@ -1325,20 +1229,14 @@ export class LeadQualificationService {
             );
           }
 
-          // ============================================
-          // STEP 2: VALIDATE DETAILS
-          // ============================================
-          console.log("📋 Step 2: Validating booking details...");
+          // Validate booking details
           const detailsCheck = validateBookingDetails(bookingIntent, lead);
-
           if (detailsCheck.missingDetails.length > 0) {
-            // ✅ NEW: Check if lead just provided details that failed validation
             const lastLeadMessage =
               messages
                 .filter((m) => m.sender === "lead")
                 .slice(-1)[0]
                 ?.content.toLowerCase() || "";
-
             const justProvidedDetails =
               (detailsCheck.missingDetails.includes("specific address") &&
                 (lastLeadMessage.includes("address") ||
@@ -1354,34 +1252,14 @@ export class LeadQualificationService {
               console.log(
                 "⚠️ Lead just provided details but validation failed"
               );
-              console.log("Last message:", lastLeadMessage);
-              console.log("Booking location:", bookingIntent.location);
-              console.log("Lead data:", {
-                name: `${lead.firstName} ${lead.lastName}`,
-                email: lead.email,
-              });
-
-              // Don't ask again - escalate to human
-              this.broadcastUpdate({
-                type: "validation_error",
-                conversationId: conversation.id,
-                message:
-                  "Lead provided details but validation failed - needs human review",
-                missingDetails: detailsCheck.missingDetails,
-                leadMessage: lastLeadMessage,
+              await storage.updateConversation(conversation.id, {
+                isAiHandled: false,
+                humanTakeoverAt: new Date(),
               });
 
               const acknowledgment = `Thank you for providing those details! Let me review this information and our team will reach out shortly to confirm your booking. 📋`;
 
-              this.broadcastUpdate({
-                type: "typing_indicator",
-                conversationId: conversation.id,
-                isTyping: false,
-                sender: "ai",
-              });
-
               await whatsappService.sendTextMessage(from, acknowledgment);
-
               await storage.createMessage({
                 conversationId: conversation.id,
                 content: acknowledgment,
@@ -1391,48 +1269,23 @@ export class LeadQualificationService {
                 deliveredAt: new Date(),
               });
 
-              // Escalate to human
-              await storage.updateConversation(conversation.id, {
-                isAiHandled: false,
-                humanTakeoverAt: new Date(),
-              });
-
-              console.log("✅ Escalated to human due to validation loop");
               return;
             }
 
-            // ✅ IMPROVED: Use current time, acknowledge changes
+            // Detect time change
+            const timeChange = detectTimeChange(freshMessages);
+            let timeAcknowledgment = "";
+            if (timeChange.hasChange && timeChange.newTime) {
+              timeAcknowledgment = `No problem! I've updated it to ${timeChange.newTime}. `;
+              console.log(
+                `✅ Acknowledging time change: ${timeChange.originalTime} → ${timeChange.newTime}`
+              );
+            }
+
             const currentTime =
               bookingIntent.proposedDateTime?.time || "the specified time";
             const currentDate =
               bookingIntent.proposedDateTime?.date || "the meeting";
-
-            // ✅ NEW: Check if time was recently changed
-            const previousAIMessages = messages
-              .filter((m) => m.sender === "ai")
-              .slice(-2);
-
-            const previouslyMentionedTime = previousAIMessages
-              .map((m) => m.content.match(/\d{1,2}\s*[AP]M/i))
-              .filter((m) => m !== null)
-              .map((m) => m![0])
-              .slice(-1)[0];
-
-            let timeAcknowledgment = "";
-            if (
-              previouslyMentionedTime &&
-              previouslyMentionedTime !== currentTime &&
-              currentTime !== "the specified time"
-            ) {
-              timeAcknowledgment = `I've updated the time to ${currentTime}. `;
-            }
-
-            this.broadcastUpdate({
-              type: "typing_indicator",
-              conversationId: conversation.id,
-              isTyping: false,
-              sender: "ai",
-            });
 
             const missingList = detailsCheck.missingDetails
               .map(
@@ -1447,7 +1300,6 @@ ${missingList}
 Please provide all in one message (e.g., "My name is John Smith, email john@email.com, address is 123 Main St, Vancouver"). 📋`;
 
             await whatsappService.sendTextMessage(from, detailsRequest);
-
             await storage.createMessage({
               conversationId: conversation.id,
               content: detailsRequest,
@@ -1463,72 +1315,31 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               message: { content: detailsRequest, sender: "ai" },
             });
 
-            console.log(
-              "✅ Requested missing details with CURRENT time:",
-              currentTime
-            );
-            return; // Stop processing, wait for details
+            return; // Wait for details
           }
 
           // ============================================
-          // STEP 3B: ALL DETAILS PRESENT - CREATE BOOKING
+          // ALL DETAILS PRESENT - CREATE BOOKING
           // ============================================
           console.log("✅ All details present, creating booking...");
 
-          // Parse date
           let scheduledFor: Date | null = null;
-
           if (bookingIntent.proposedDateTime?.date) {
-            // ✅ FIX: Provide defaults for undefined values
             const dateStr = bookingIntent.proposedDateTime.date;
             const timeStr = bookingIntent.proposedDateTime.time || "10:00 AM";
-
-            console.log("📅 ============================================");
-            console.log("📅 BOOKING DATE/TIME PARSING DEBUG:");
-            console.log("📅 ============================================");
-            console.log("📅 Extracted from AI:");
-            console.log("  - Date:", dateStr);
-            console.log("  - Time:", timeStr);
-            console.log("  - Time type:", typeof timeStr);
-            console.log(
-              "📅 Full booking intent:",
-              JSON.stringify(bookingIntent, null, 2)
-            );
-            console.log("📅 ============================================");
-
             scheduledFor = parseDateFromNaturalLanguage(dateStr, timeStr);
 
-            if (!scheduledFor) {
-              console.error("❌ Failed to parse date");
-              console.error("   Input dateStr:", dateStr);
-              console.error("   Input timeStr:", timeStr);
+            if (!scheduledFor || scheduledFor < new Date()) {
+              console.error("❌ Failed to parse date or date is in the past");
               return;
             }
 
-            if (scheduledFor < new Date()) {
-              console.error("❌ Date is in the past");
-              console.error("   Parsed date:", scheduledFor.toISOString());
-              console.error("   Current time:", new Date().toISOString());
-              return;
-            }
-
-            console.log(`✅ Parsed date: ${scheduledFor.toISOString()}`);
             console.log(`✅ Final parsed date: ${scheduledFor.toISOString()}`);
-            console.log(
-              `✅ Local time: ${scheduledFor.toLocaleString("en-US", {
-                timeZone: "America/Vancouver",
-              })}`
-            );
-            console.log(
-              `✅ Hour (24h): ${scheduledFor.getHours()}, Minute: ${scheduledFor.getMinutes()}`
-            );
-            console.log("📅 ============================================");
           } else {
             console.error("❌ Date missing after validation");
             return;
           }
 
-          // Create booking
           try {
             const existingPendingBooking =
               await storage.findPendingBookingByLeadId(lead.id);
@@ -1552,7 +1363,7 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               location: bookingIntent.location || "TBD",
               notes: `AI-proposed booking. Confidence: ${(
                 bookingIntent.confidence * 100
-              ).toFixed(0)}%. Reasoning: ${bookingIntent.reasoning}.`,
+              ).toFixed(0)}%. Lead score: ${qualification.score.toFixed(2)}.`,
               proposedBy: "ai",
               aiConfidence: bookingIntent.confidence.toString(),
             };
@@ -1561,9 +1372,6 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
             let eventType = "booking_approval_needed";
 
             if (existingPendingBooking) {
-              console.log(
-                `🔄 Updating existing booking: ${existingPendingBooking.id}`
-              );
               const { status, ...updateDetails } = bookingDetails;
               savedBooking = await storage.updateBooking(
                 existingPendingBooking.id,
@@ -1571,18 +1379,12 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               );
               eventType = "booking_updated";
             } else {
-              console.log("✅ Creating new booking...");
               savedBooking = await storage.createBooking(bookingDetails);
             }
 
             console.log("✅ Booking saved:", savedBooking.id);
 
-            // ============================================
-            // ✅ STEP 1: SEND BOOKING NOTIFICATION
-            // ============================================
-            console.log("📅 Sending booking notification...");
-
-            // Broadcast to agents
+            // Send booking notification
             this.broadcastUpdate({
               type: eventType,
               booking: {
@@ -1596,7 +1398,6 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
-            // Send booking notification
             const client = await storage.getClient(lead.clientId);
             if (client && client.userId) {
               await notificationService.sendBookingAlert({
@@ -1619,7 +1420,6 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
                   phone: lead.phone || "",
                 },
               });
-              console.log("✅ Booking notification sent");
             }
 
             // Send confirmation to lead
@@ -1640,15 +1440,7 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
               lead.company !== "Unknown" ? lead.company + " " : ""
             }project! 🏗️`;
 
-            this.broadcastUpdate({
-              type: "typing_indicator",
-              conversationId: conversation.id,
-              isTyping: false,
-              sender: "ai",
-            });
-
             await whatsappService.sendTextMessage(from, confirmationMessage);
-
             await storage.createMessage({
               conversationId: conversation.id,
               content: confirmationMessage,
@@ -1659,109 +1451,35 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
               metadata: { bookingId: savedBooking.id },
             });
 
-            console.log("✅ Confirmation sent to lead");
-
-            // ============================================
-            // ✅ STEP 2: UPDATE LEAD TO HOT & SEND HOT LEAD ALERT
-            // ============================================
-            console.log("🔥 Marking lead as HOT and sending hot lead alert...");
-
-            // Update lead to hot status
-            await storage.updateLead(lead.id, {
-              qualificationScore: "0.85",
-              temperature: "hot",
-              status: "qualified",
-            });
-
-            // Update conversation
-            await storage.updateConversation(conversation.id, {
-              qualificationScore: "0.85",
-              isAiHandled: false, // ✅ Stop AI
-              humanTakeoverAt: new Date(),
-            });
-
-            // Refresh lead data with hot status
-            const hotLead = await storage.getLead(lead.id);
-
-            // ✅ SEND HOT LEAD ALERT (in addition to booking alert)
-            if (client && client.userId && hotLead) {
-              console.log("🔥 Sending hot lead alert...");
-
-              await notificationService.sendHotLeadAlert({
-                userId: client.userId,
-                lead: {
-                  id: hotLead.id || "",
-                  firstName: hotLead.firstName || "",
-                  lastName: hotLead.lastName || "",
-                  email: hotLead.email || "",
-                  phone: hotLead.phone || "",
-                  company: hotLead.company || "",
-                  qualificationScore: "0.85",
-                  temperature: "hot",
-                },
-                conversation: {
-                  id: conversation.id,
-                  qualificationScore: "0.85",
-                },
-                qualification: {
-                  score: 0.85,
-                  reasoning:
-                    "Booking confirmed - high-value lead requires immediate attention. AI proposed meeting successfully.",
-                },
-              });
-
-              console.log("✅ Hot lead alert sent");
-            }
-
-            // Broadcast updates to dashboard
-            this.broadcastUpdate({
-              type: "hot_lead_alert",
-              conversation: {
-                ...conversation,
-                lead: hotLead,
-                qualificationScore: "0.85",
-              },
-              qualification: {
-                score: 0.85,
-                needsHumanAttention: true,
-                reasoning:
-                  "Booking confirmed - immediate human attention required",
-                nextAction: "finalize_booking_details",
-              },
-            });
-
-            this.broadcastUpdate({
-              type: "lead_updated",
-              lead: hotLead,
-              conversationId: conversation.id,
-            });
-
             this.broadcastUpdate({
               type: "new_message",
               conversationId: conversation.id,
-              message: { content: confirmationMessage, sender: "ai" },
+              message: {
+                content: confirmationMessage,
+                sender: "ai",
+                sentAt: new Date(),
+              },
             });
 
-            console.log(
-              "✅ Booking complete, lead marked hot, BOTH notifications sent, AI stopped"
-            );
-            return; // ✅ Stop processing immediately
+            console.log("✅ Booking created successfully");
+            return; // ✅ STOP - Booking created
           } catch (error) {
             console.error("❌ Error creating booking:", error);
           }
         }
 
         // ============================================
-        // STEP 5: NORMAL CONVERSATION (No booking intent)
+        // STEP 5: NORMAL CONVERSATION (Continue AI handling)
         // ============================================
-        console.log("💬 No booking intent - normal conversation flow");
+        console.log(
+          "💬 No booking intent and not extreme hot lead - continuing normal conversation"
+        );
 
         const existingPendingBooking = await storage.findPendingBookingByLeadId(
           lead.id
         );
         const daySuggestions = getSmartDaySuggestions();
         const client = await storage.getClient(lead.clientId);
-
         const aiResponse = await generateAIResponse(
           messages,
           lead,
@@ -1811,13 +1529,11 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
           const allMessages = await storage.getMessages(conversation.id);
           const aiMessages = allMessages.filter((m) => m.sender === "ai");
 
-          // If this is the first AI message, schedule follow-ups
           if (aiMessages.length === 1) {
             console.log(
-              "📅 First AI response - scheduling follow-ups for lead: ${lead.id}"
+              `📅 First AI response - scheduling follow-ups for lead: ${lead.id}`
             );
 
-            // Find default sequence for this client
             const sequences = await storage.getFollowUpSequences(lead.clientId);
             const defaultSequence = sequences.find(
               (s) => s.isDefault && s.status === "active"
@@ -1863,15 +1579,58 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
   }
 
   private broadcastUpdate(data: any): void {
-    if (!this.wss) return;
-
-    const message = JSON.stringify(data);
-    this.wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        client.send(message);
-      }
-    });
+  if (!this.wss) {
+    console.error(`❌ CRITICAL: WebSocket server (wss) is NULL! Cannot broadcast.`);
+    return;
   }
+
+  const message = JSON.stringify(data);
+  const allClients = Array.from(this.wss.clients);
+  const clientCount = allClients.length;
+  
+  console.log(`📡 ========== WEBSOCKET BROADCAST ==========`);
+  console.log(`   Event Type: ${data.type}`);
+  console.log(`   Conversation ID: ${data.conversationId}`);
+  console.log(`   Total Clients: ${clientCount}`);
+  console.log(`   Payload:`, JSON.stringify(data, null, 2));
+  
+  if (clientCount === 0) {
+    console.warn(`⚠️ WARNING: No WebSocket clients connected! Message will not be received.`);
+    return;
+  }
+
+  let sentCount = 0;
+  let openCount = 0;
+  let closedCount = 0;
+  
+  allClients.forEach((client, index) => {
+    console.log(`   Client ${index + 1} readyState: ${client.readyState} (1=OPEN, 0=CONNECTING, 2=CLOSING, 3=CLOSED)`);
+    
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try {
+        client.send(message);
+        sentCount++;
+        openCount++;
+        console.log(`   ✅ Sent to client ${index + 1}`);
+      } catch (error) {
+        console.error(`   ❌ Failed to send to client ${index + 1}:`, error);
+      }
+    } else {
+      closedCount++;
+      console.warn(`   ⚠️ Client ${index + 1} not ready (state: ${client.readyState})`);
+    }
+  });
+  
+  console.log(`📊 Broadcast Summary:`);
+  console.log(`   ✅ Sent: ${sentCount}`);
+  console.log(`   🟢 Open: ${openCount}`);
+  console.log(`   🔴 Closed/Not Ready: ${closedCount}`);
+  console.log(`=========================================`);
+  
+  if (sentCount === 0) {
+    console.error(`❌ CRITICAL: Message NOT DELIVERED to any clients!`);
+  }
+}
 }
 
 export const leadQualificationService = new LeadQualificationService();
