@@ -313,6 +313,10 @@ export default function Conversations() {
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+const lastMarkedConversationRef = useRef<{ id: string; timestamp: number } | null>(null);
+const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { toast } = useToast();
   const leadIdFromCalendar = new URLSearchParams(window.location.search).get(
     "leadId"
@@ -841,6 +845,7 @@ useEffect(() => {
 
   console.log(`📨 ========== WEBSOCKET EVENT RECEIVED ==========`);
   console.log(`   Type: ${wsData.type}`);
+  console.log(`   Conversation ID: ${wsData.conversationId}`);
   console.log(`   Full Payload:`, wsData);
   console.log(`================================================`);
 
@@ -854,6 +859,7 @@ useEffect(() => {
           leadName: wsData.leadName,
         },
       }));
+
       if (wsData.isTyping) {
         setTimeout(() => {
           setTypingIndicators((prev) => {
@@ -878,6 +884,22 @@ useEffect(() => {
       console.log(`   Conversation ID: ${wsData.conversationId}`);
       console.log(`   Updates:`, wsData.updates);
 
+      // ✅ IMMEDIATE local state update (no waiting)
+      setSelectedConversation((prev: any) => {
+        if (!prev || prev.id !== wsData.conversationId) return prev;
+        
+        console.log(`   Updating SELECTED conversation state...`);
+        console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
+        
+        const updated = {
+          ...prev,
+          ...wsData.updates,
+        };
+        
+        console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
+        return updated;
+      });
+
       // Update dashboard cache
       queryClient.setQueryData(
         [`/api/dashboard/${selectedClientId}`],
@@ -888,126 +910,91 @@ useEffect(() => {
           }
 
           console.log(`   Updating dashboard cache...`);
-          const updated = {
+          return {
             ...oldData,
             conversations: oldData.conversations.map((conv: any) => {
               if (conv.id === wsData.conversationId) {
                 console.log(`   ✅ Found conversation in cache`);
                 console.log(`      BEFORE: isAiHandled = ${conv.isAiHandled}`);
+                
                 const updatedConv = {
                   ...conv,
                   ...wsData.updates,
                 };
+                
                 console.log(`      AFTER: isAiHandled = ${updatedConv.isAiHandled}`);
                 return updatedConv;
               }
               return conv;
             }),
           };
-          return updated;
         }
       );
-
-      // Update selected conversation
-      if (selectedConversation?.id === wsData.conversationId) {
-        console.log(`   Updating SELECTED conversation state...`);
-        setSelectedConversation((prev: any) => {
-          if (!prev) return prev;
-          console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
-          const updated = {
-            ...prev,
-            ...wsData.updates,
-          };
-          console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
-          return updated;
-        });
-      }
-
-      // Refetch in background
-      queryClient.invalidateQueries({
-        queryKey: [`/api/dashboard/${selectedClientId}`],
-      });
 
       console.log(`✅ conversation_updated processing complete`);
       break;
 
     case "hot_lead_alert":
       console.log(`🔥 HOT_LEAD_ALERT Event Processing...`);
-      console.log(`   Conversation ID: ${wsData.conversationId || wsData.conversation?.id}`);
-      console.log(`   Conversation Object:`, wsData.conversation);
+      
+      const targetConvId = wsData.conversationId || wsData.conversation?.id;
+      console.log(`   Target Conversation ID: ${targetConvId}`);
       console.log(`   isAiHandled in payload: ${wsData.conversation?.isAiHandled}`);
 
-      const targetConvId = wsData.conversationId || wsData.conversation?.id;
+      // ✅ TRIPLE UPDATE: Selected state + Dashboard cache + Force UI refresh
+      
+      // 1. Update selected conversation IMMEDIATELY
+      setSelectedConversation((prev: any) => {
+        if (!prev || prev.id !== targetConvId) return prev;
 
-      // TRIPLE UPDATE STRATEGY
+        console.log(`   Updating SELECTED conversation for hot lead...`);
+        console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
 
-      // Update 1: Dashboard cache
+        const updated = {
+          ...prev,
+          isAiHandled: false, // ✅ FORCE handoff
+          humanTakeoverAt: new Date(),
+          lead: wsData.conversation?.lead || prev.lead,
+          qualificationScore: wsData.conversation?.qualificationScore || prev.qualificationScore,
+        };
+
+        console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
+        return updated;
+      });
+
+      // 2. Update dashboard cache
       queryClient.setQueryData(
         [`/api/dashboard/${selectedClientId}`],
         (oldData: any) => {
-          if (!oldData) {
-            console.warn(`⚠️ No dashboard data in cache for hot_lead_alert`);
-            return oldData;
-          }
+          if (!oldData) return oldData;
 
           console.log(`   Updating dashboard cache for hot lead...`);
-          console.log(`   Looking for conversation: ${targetConvId}`);
-          
-          const updated = {
+
+          return {
             ...oldData,
             conversations: oldData.conversations.map((conv: any) => {
               if (conv.id === targetConvId) {
                 console.log(`   ✅ FOUND conversation in cache!`);
                 console.log(`      BEFORE: isAiHandled = ${conv.isAiHandled}`);
-                
+
                 const updatedConv = {
                   ...conv,
-                  isAiHandled: false, // FORCE
+                  isAiHandled: false, // ✅ FORCE
                   humanTakeoverAt: new Date(),
                   lead: wsData.conversation?.lead || conv.lead,
                   qualificationScore: wsData.conversation?.qualificationScore || conv.qualificationScore,
                 };
-                
+
                 console.log(`      AFTER: isAiHandled = ${updatedConv.isAiHandled}`);
                 return updatedConv;
               }
               return conv;
             }),
           };
-
-          return updated;
         }
       );
 
-      // Update 2: Selected conversation state
-      if (selectedConversation?.id === targetConvId) {
-        console.log(`   Updating SELECTED conversation for hot lead...`);
-        setSelectedConversation((prev: any) => {
-          if (!prev) return prev;
-          
-          console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
-          
-          const updated = {
-            ...prev,
-            isAiHandled: false, // FORCE
-            humanTakeoverAt: new Date(),
-            lead: wsData.conversation?.lead || prev.lead,
-            qualificationScore: wsData.conversation?.qualificationScore || prev.qualificationScore,
-          };
-          
-          console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
-          return updated;
-        });
-      } else {
-        console.log(`   Selected conversation (${selectedConversation?.id}) does not match target (${targetConvId})`);
-      }
-
-      // Update 3: Force refetch
-      queryClient.invalidateQueries({
-        queryKey: [`/api/dashboard/${selectedClientId}`],
-      });
-
-      // Show toast
+      // 3. Show toast notification
       toast({
         title: "🔥 Hot Lead Alert!",
         description: `${wsData.conversation?.lead?.firstName || "Lead"} needs immediate attention - handed over to you`,
@@ -1020,15 +1007,52 @@ useEffect(() => {
 
     case "new_message":
       console.log(`💬 New Message Event: ${wsData.conversationId}`);
-      queryClient.invalidateQueries({
-        queryKey: ["/api/conversations", wsData.conversationId, "messages"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [`/api/dashboard/${selectedClientId}`],
-      });
+      console.log(`   Message:`, wsData.message);
+
+      // ✅ INSTANT MESSAGE UPDATE (critical for real-time feel)
+      if (selectedConversation?.id === wsData.conversationId) {
+        // Invalidate messages query to trigger immediate refetch
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
+        });
+
+        // ✅ Also update conversation's lastMessage in sidebar
+        queryClient.setQueryData(
+          [`/api/dashboard/${selectedClientId}`],
+          (oldData: any) => {
+            if (!oldData) return oldData;
+
+            return {
+              ...oldData,
+              conversations: oldData.conversations.map((conv: any) => {
+                if (conv.id === wsData.conversationId) {
+                  return {
+                    ...conv,
+                    lastMessageAt: wsData.message?.sentAt || new Date(),
+                    lastMessage: wsData.message?.content?.substring(0, 50) || conv.lastMessage,
+                  };
+                }
+                return conv;
+              }),
+            };
+          }
+        );
+
+        // Auto-scroll to new message
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      } else {
+        // Update conversation list for unselected conversations
+        queryClient.invalidateQueries({
+          queryKey: [`/api/dashboard/${selectedClientId}`],
+        });
+      }
       break;
 
     case "message_read":
+      console.log(`✅ Message Read Event: ${wsData.conversationId}`);
+      
       if (wsData.conversationId === selectedConversation?.id) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", wsData.conversationId, "messages"],
@@ -1037,25 +1061,35 @@ useEffect(() => {
       break;
 
     case "new_conversation":
+      console.log(`🆕 New Conversation Created`);
+      
       queryClient.invalidateQueries({
         queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+      
+      toast({
+        title: "New Conversation",
+        description: "A new lead has started a conversation",
       });
       break;
 
     case "lead_updated":
       console.log(`👤 Lead Updated Event: ${wsData.conversationId}`);
-      
+
+      // Update dashboard cache
       queryClient.setQueryData(
         [`/api/dashboard/${selectedClientId}`],
         (oldData: any) => {
           if (!oldData) return oldData;
+
           return {
             ...oldData,
             conversations: oldData.conversations.map((conv: any) => {
-              if (conv.id === wsData.conversationId) {
+              if (conv.id === wsData.conversationId || conv.leadId === wsData.lead?.id) {
                 return {
                   ...conv,
                   lead: wsData.lead,
+                  qualificationScore: wsData.lead?.qualificationScore || conv.qualificationScore,
                 };
               }
               return conv;
@@ -1064,52 +1098,91 @@ useEffect(() => {
         }
       );
 
-      if (selectedConversation?.id === wsData.conversationId) {
+      // Update selected conversation
+      if (selectedConversation?.id === wsData.conversationId || 
+          selectedConversation?.leadId === wsData.lead?.id) {
         setSelectedConversation((prev: any) => {
           if (!prev) return prev;
           return {
             ...prev,
             lead: wsData.lead,
+            qualificationScore: wsData.lead?.qualificationScore || prev.qualificationScore,
           };
         });
       }
 
-      if (wsData.lead.temperature === "hot") {
+      // Show hot lead notification
+      if (wsData.lead?.temperature === "hot") {
         toast({
           title: "🔥 Lead is now HOT!",
           description: `${wsData.lead.firstName || "Lead"} is now a hot lead (${(
             parseFloat(wsData.lead.qualificationScore || "0") * 100
           ).toFixed(0)}%)`,
-          variant: "default",
         });
       }
       break;
 
     case "conversation_reopened":
-    case "message_reacted":
+      console.log(`🔄 Conversation Reopened: ${wsData.conversationId}`);
+
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+
       if (wsData.conversationId === selectedConversation?.id) {
         queryClient.invalidateQueries({
           queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
       }
-      queryClient.invalidateQueries({
-        queryKey: [`/api/dashboard/${selectedClientId}`],
+
+      toast({
+        title: "⚠️ Conversation Reopened",
+        description: `${wsData.lead?.firstName || "Lead"} messaged again after termination. Please review.`,
+        variant: "default",
+        duration: 10000,
       });
-      if (wsData.type === "conversation_reopened") {
-        toast({
-          title: "⚠️ Conversation Reopened",
-          description: `${wsData.lead?.firstName || "Lead"} messaged again after termination. Please review.`,
-          variant: "default",
-          duration: 10000,
+      break;
+
+    case "message_reacted":
+      console.log(`❤️ Message Reacted: ${wsData.conversationId}`);
+
+      if (wsData.conversationId === selectedConversation?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
       }
       break;
 
+    case "booking_approval_needed":
+    case "booking_updated":
+      console.log(`📅 Booking Event: ${wsData.type}`);
+
+      // Refresh bookings
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId, "pending"],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+
+      // Show toast
+      toast({
+        title: "📅 New Booking Proposed",
+        description: `AI proposed a meeting with ${wsData.booking?.lead?.firstName || "a lead"}`,
+        duration: 8000,
+      });
+      break;
+
     default:
       console.log(`📡 Unhandled WebSocket event: ${wsData.type}`);
-      refetch();
+      
+      // Fallback: Refetch dashboard
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
   }
-}, [wsData, selectedClientId, queryClient, toast, refetch, selectedConversation]);
+}, [wsData, selectedClientId, queryClient, toast, selectedConversation]);
 
   useEffect(() => {
     if (messages && messages.length > 0) {
@@ -1127,23 +1200,83 @@ useEffect(() => {
     }
   }, [selectedConversation?.id]);
 
-  useEffect(() => {
-    if (selectedConversation && messages && messages.length > 0) {
-      const unreadMessages = messages.filter(
-        (m: any) => m.sender === "lead" && !m.readAt
-      );
-      if (unreadMessages.length > 0) {
-        fetch(`/api/conversations/${selectedConversation.id}/messages/read`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            messageIds: unreadMessages.map((m: any) => m.id),
-          }),
-        }).catch((err) => console.error("Failed to mark as read:", err));
-      }
+ // ✅ Debounced mark-as-read (prevents infinite loop)
+useEffect(() => {
+  if (!selectedConversation || !messages || messages.length === 0) {
+    return;
+  }
+
+  const conversationId = selectedConversation.id;
+  const now = Date.now();
+
+  // ✅ SAFER: pull current into a local variable
+  const lastMarked = lastMarkedConversationRef.current;
+
+  if (
+    lastMarked &&
+    lastMarked.id === conversationId &&
+    now - lastMarked.timestamp < 3000
+  ) {
+    console.log(
+      "⏭️ Skipping mark-as-read - already marked %s recently",
+      conversationId
+    );
+    return;
+  }
+
+  const unreadMessages = messages.filter(
+    (m: any) => m.sender === "lead" && !m.readAt
+  );
+  if (unreadMessages.length === 0) {
+    console.log("✅ No unread messages in conversation %s", conversationId);
+    return;
+  }
+
+  if (markAsReadTimeoutRef.current) {
+    clearTimeout(markAsReadTimeoutRef.current);
+  }
+
+  markAsReadTimeoutRef.current = setTimeout(() => {
+    console.log(
+      "📖 Marking %d messages as read in conversation %s",
+      unreadMessages.length,
+      conversationId
+    );
+
+    lastMarkedConversationRef.current = {
+      id: conversationId,
+      timestamp: Date.now(),
+    };
+
+    fetch(`/api/conversations/${conversationId}/messages/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        messageIds: unreadMessages.map((m: any) => m.id),
+      }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          console.log("✅ Successfully marked messages as read");
+        } else {
+          console.error(
+            "❌ Failed to mark messages as read:",
+            res.statusText
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("❌ Error marking messages as read:", err);
+      });
+  }, 500);
+
+  return () => {
+    if (markAsReadTimeoutRef.current) {
+      clearTimeout(markAsReadTimeoutRef.current);
     }
-  }, [selectedConversation, messages]);
+  };
+}, [selectedConversation?.id, messages]);
 
   useEffect(() => {
     if (

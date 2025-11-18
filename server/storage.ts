@@ -771,15 +771,19 @@ async getLeadByPhone(phone: string): Promise<Lead | undefined> {
       .orderBy(desc(conversations.qualificationScore));
   }
 
-  async markConversationAsRead(conversationId: string): Promise<void> {
-    await db
-      .update(conversations)
-      .set({
-        unreadCount: 0,
-        lastReadAt: new Date(),
-      })
-      .where(eq(conversations.id, conversationId));
-  }
+async markConversationAsRead(conversationId: string): Promise<void> {
+  console.log(`📖 [DB] Marking conversation ${conversationId} as read`);
+
+  await db
+    .update(conversations)
+    .set({
+      unreadCount: 0,
+      lastReadAt: new Date(),
+    })
+    .where(eq(conversations.id, conversationId));
+
+  console.log(`✅ [DB] Conversation ${conversationId} marked as read`);
+}
 
   async incrementUnreadCount(conversationId: string): Promise<void> {
     const [conversation] = await db
@@ -813,42 +817,52 @@ async getLeadByPhone(phone: string): Promise<Lead | undefined> {
   }
 
   // Mark messages as read
-  async markMessagesAsRead(messageIds: string[]): Promise<void> {
-    if (messageIds.length === 0) return;
+async markMessagesAsRead(messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
 
-    await db
-      .update(messages)
-      .set({
-        readAt: new Date(),
-      })
-      .where(
-        sql`${messages.id} = ANY(ARRAY[${sql.join(
-          messageIds.map((id) => sql`${id}`),
-          sql`, `
-        )}])`
-      );
-  }
+  console.log(`💾 [DB] Marking ${messageIds.length} messages as read in database`);
+
+  // ✅ Use a single query with proper SQL
+  await db
+    .update(messages)
+    .set({
+      readAt: new Date(),
+    })
+    .where(
+      sql`${messages.id} = ANY(ARRAY[${sql.join(
+        messageIds.map((id) => sql`${id}`),
+        sql`, `
+      )}]::text[])`
+    );
+
+  console.log(`✅ [DB] Successfully marked ${messageIds.length} messages as read`);
+}
 
   // Mark previous outgoing messages as read when lead responds
   async markPreviousMessagesAsRead(conversationId: string): Promise<void> {
-    // Get all messages from this conversation that aren't from the lead
-    // and don't have readAt set yet
-    const unreadOutgoingMessages = await db
-      .select()
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, conversationId),
-          sql`${messages.sender} != 'lead'`,
-          sql`${messages.readAt} IS NULL`
-        )
-      );
+  console.log(`📖 [DB] Marking previous outgoing messages as read for conversation ${conversationId}`);
 
-    if (unreadOutgoingMessages.length > 0) {
-      const messageIds = unreadOutgoingMessages.map((m) => m.id);
-      await this.markMessagesAsRead(messageIds);
-    }
+  // Get all messages from this conversation that aren't from the lead
+  // and don't have readAt set yet
+  const unreadOutgoingMessages = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        sql`${messages.sender} != 'lead'`,
+        sql`${messages.readAt} IS NULL`
+      )
+    );
+
+  if (unreadOutgoingMessages.length > 0) {
+    console.log(`   Found ${unreadOutgoingMessages.length} unread outgoing messages`);
+    const messageIds = unreadOutgoingMessages.map((m) => m.id);
+    await this.markMessagesAsRead(messageIds);
+  } else {
+    console.log(`   No unread outgoing messages found`);
   }
+}
 
   // ==================== MESSAGE REACTION METHODS ====================
 

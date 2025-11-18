@@ -32,6 +32,7 @@ import { vslGenerator } from "./services/vsl-generator";
 import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { normalizePhone, normalizeEmail } from "./utils/normalize";
+import { notificationService } from "./services/notification-sevice";
 
 // import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
@@ -202,6 +203,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   console.log("✅ WebSocket server initialized on path: /ws");
+
+
+  // 🆕 TEST: Manually trigger hot lead notification
+app.post("/api/test/hot-lead-notification", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const user = await storage.getUserById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log(`🧪 [TEST] Triggering hot lead notification for user: ${user.email}`);
+
+    await notificationService.sendHotLeadAlert({
+      userId: user.id,
+      lead: {
+        id: "test-lead-id",
+        firstName: "John",
+        lastName: "Doe",
+        email: "john.doe@example.com",
+        phone: "+1234567890",
+        company: "Test Construction Co",
+        qualificationScore: "0.85",
+        temperature: "hot",
+      },
+      conversation: {
+        id: "test-conversation-id",
+        qualificationScore: "0.85",
+      },
+      qualification: {
+        score: 0.85,
+        reasoning: "Test hot lead: Has budget, timeline, and decision maker confirmed",
+      },
+    });
+
+    res.json({ 
+      success: true, 
+      message: "Hot lead notification sent (check terminal and email/WhatsApp)" 
+    });
+  } catch (error: any) {
+    console.error("❌ Test notification failed:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
   // ========================= LEADS ROUTE ======================================
 
@@ -1583,35 +1629,98 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
     }
   });
 
-  // Mark messages as read
-  app.post(
-    "/api/conversations/:conversationId/messages/read",
-    async (req, res) => {
-      try {
-        const { conversationId } = req.params;
-        const { messageIds } = req.body;
+  // ✅ Rate limiting cache
+const markAsReadCache = new Map<string, number>(); // conversationId -> lastMarkedTimestamp
 
-        if (!messageIds || !Array.isArray(messageIds)) {
-          return res.status(400).json({ error: "messageIds array required" });
-        }
-
-        console.log(
-          `Marking ${messageIds.length} messages as read in conversation ${conversationId}`
-        );
-
-        // Mark messages as read
-        await storage.markMessagesAsRead(messageIds);
-
-        // Also mark conversation as read
-        await storage.markConversationAsRead(conversationId);
-
-        res.json({ success: true });
-      } catch (error: any) {
-        console.error("Error marking messages as read:", error);
-        res.status(500).json({ error: error.message });
-      }
+// Cleanup old cache entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  markAsReadCache.forEach((timestamp, key) => {
+    if (now - timestamp > 300000) {
+      markAsReadCache.delete(key);
     }
-  );
+  });
+}, 300000);
+
+ // Mark messages as read
+app.post(
+  "/api/conversations/:conversationId/messages/read",
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const { messageIds } = req.body;
+      const now = Date.now();
+
+      // ✅ Rate limit: Don't allow marking same conversation within 2 seconds
+      const lastMarked = markAsReadCache.get(conversationId);
+      if (lastMarked && now - lastMarked < 2000) {
+        console.log(`⏭️ [RATE LIMIT] Skipping mark-as-read for ${conversationId} (last marked ${now - lastMarked}ms ago)`);
+        return res.json({ 
+          success: true, 
+          message: "Already marked recently",
+          skipped: true 
+        });
+      }
+
+      if (!messageIds || !Array.isArray(messageIds)) {
+        return res.status(400).json({ error: "messageIds array required" });
+      }
+
+      console.log(`📖 Marking ${messageIds.length} messages as read in conversation ${conversationId}`);
+
+      // Update cache BEFORE processing (prevent race conditions)
+      markAsReadCache.set(conversationId, now);
+
+      // Mark messages as read in database
+      await storage.markMessagesAsRead(messageIds);
+
+      // ✅ Mark on WhatsApp (with deduplication)
+      const markedWhatsAppIds = new Set<string>();
+
+      for (const messageId of messageIds) {
+        const message = await storage.getMessage(messageId);
+        
+        if (message && message.sender === "lead") {
+          const metadata = message.metadata as {
+            whatsappMessageId?: string;
+          } | null;
+
+          if (metadata?.whatsappMessageId) {
+            // ✅ Deduplicate: Don't mark same WhatsApp ID multiple times
+            if (markedWhatsAppIds.has(metadata.whatsappMessageId)) {
+              console.log(`⏭️ WhatsApp message already marked: ${metadata.whatsappMessageId}`);
+              continue;
+            }
+
+            console.log(`📬 Marking WhatsApp message as read: ${metadata.whatsappMessageId}`);
+            
+            try {
+              await whatsappService.markMessageAsRead(metadata.whatsappMessageId);
+              markedWhatsAppIds.add(metadata.whatsappMessageId);
+            } catch (whatsappError) {
+              console.error(`❌ Failed to mark WhatsApp message as read:`, whatsappError);
+              // Don't fail the whole request if WhatsApp marking fails
+            }
+          }
+        }
+      }
+
+      // Mark conversation as read
+      await storage.markConversationAsRead(conversationId);
+
+      console.log(`✅ Marked ${messageIds.length} messages as read (${markedWhatsAppIds.size} WhatsApp)`);
+
+      res.json({ 
+        success: true, 
+        markedCount: messageIds.length,
+        whatsappMarkedCount: markedWhatsAppIds.size 
+      });
+    } catch (error: any) {
+      console.error("❌ Error marking messages as read:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 
   // Typing indicator endpoint - Internal only (WebSocket broadcast)
   app.post("/api/conversations/:conversationId/typing", async (req, res) => {
@@ -4578,6 +4687,8 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
+  
+
   // ==================== SENDGRID TEST (TEMPORARY - Remove after testing) ====================
   app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
     try {
@@ -4642,6 +4753,8 @@ Could you suggest some alternative times that work for you? We'd love to find a 
       });
     }
   });
+
+  
 
   // ========================= START FOLLOW-UP CRON  =============================
 

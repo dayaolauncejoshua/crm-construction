@@ -47,30 +47,31 @@ interface BookingNotification {
   };
 }
 
+
 class NotificationService {
   /**
    * Send hot lead alert notifications
    */
   async sendHotLeadAlert(data: HotLeadNotification): Promise<void> {
     try {
-      console.log(`🔥 [NOTIFICATION] Hot lead alert for user: ${data.userId}`);
-      console.log(`📊 Lead data:`, JSON.stringify(data, null, 2));
+      console.log(`\n🔥 ========== HOT LEAD ALERT ==========`);
+      console.log(`   User ID: ${data.userId}`);
+      console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
+      console.log(`   Score: ${data.qualification.score}`);
+      console.log(`   Temperature: ${data.lead.temperature}`);
 
       // Get user and preferences
       const user = await storage.getUserById(data.userId);
+      
       if (!user) {
-        console.error(`❌ User ${data.userId} not found`);
+        console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
         return;
       }
 
-      console.log(`👤 User found::`, {
-        id: user.id,
-        email: user.email,
-        phone: user.phone,
-        emailNotifications: user.emailNotifications,
-        whatsappNotifications: user.whatsappNotifications,
-        leadNotifications: user.leadNotifications,
-      });
+      console.log(`✅ User found: ${user.email}`);
+      console.log(`   Email notifications: ${user.emailNotifications}`);
+      console.log(`   WhatsApp notifications: ${user.whatsappNotifications}`);
+      console.log(`   Lead notifications: ${user.leadNotifications}`);
 
       // Check if lead notifications are enabled
       if (user.leadNotifications === false) {
@@ -87,19 +88,11 @@ class NotificationService {
       // ============================================
       if (user.emailNotifications && user.email) {
         try {
+          console.log(`📧 Attempting to send email to: ${user.email}`);
+          
           const emailSubject = `🔥 Hot Lead Alert: ${lead.firstName} ${lead.lastName}`;
-
-          const emailBody = this.generateHotLeadEmailHTML(
-            user,
-            lead,
-            qualification
-          );
-
-          const textBody = this.generateHotLeadEmailText(
-            user,
-            lead,
-            qualification
-          );
+          const emailBody = this.generateHotLeadEmailHTML(user, lead, qualification);
+          const textBody = this.generateHotLeadEmailText(user, lead, qualification);
 
           await emailService.sendEmail({
             to: user.email,
@@ -109,14 +102,13 @@ class NotificationService {
             textBody: textBody,
           });
 
-          console.log(`✅ Hot lead email sent to: ${user.email}`);
-        } catch (emailError) {
-          console.error(`❌ Failed to send hot lead email:`, emailError);
+          console.log(`✅ Hot lead email SENT to: ${user.email}`);
+        } catch (emailError: any) {
+          console.error(`❌ Failed to send hot lead email:`, emailError.message);
+          console.error(`   Full error:`, emailError);
         }
       } else {
-        console.log(
-          `⏭️ Email notifications disabled or no email for user ${data.userId}`
-        );
+        console.log(`⏭️ Email notifications disabled or no email (emailNotifications: ${user.emailNotifications}, email: ${user.email})`);
       }
 
       // ============================================
@@ -124,34 +116,31 @@ class NotificationService {
       // ============================================
       if ((user.whatsappNotifications ?? true) && user.phone) {
         try {
-          const whatsappMessage = this.generateHotLeadWhatsAppMessage(
-            user,
-            lead,
-            qualification
-          );
+          console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
+          
+          const whatsappMessage = this.generateHotLeadWhatsAppMessage(user, lead, qualification);
 
-          const result = await whatsappService.sendTextMessage(
-            user.phone,
-            whatsappMessage
-          );
+          const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
 
           if (result.success) {
-            console.log(`✅ Hot lead WhatsApp sent to: ${user.phone}`);
+            console.log(`✅ Hot lead WhatsApp SENT to: ${user.phone}`);
           } else {
-            console.error(`❌ Hot lead WhatsApp failed for: ${user.phone}`);
+            console.error(`❌ Hot lead WhatsApp FAILED for: ${user.phone}`);
+            console.error(`   Reason:`, result.error);
           }
-        } catch (whatsappError) {
-          console.error(`❌ Failed to send hot lead WhatsApp:`, whatsappError);
+        } catch (whatsappError: any) {
+          console.error(`❌ Failed to send hot lead WhatsApp:`, whatsappError.message);
+          console.error(`   Full error:`, whatsappError);
         }
       } else {
-        console.log(
-          `⏭️ WhatsApp notifications disabled or no phone for user ${data.userId}`
-        );
+        console.log(`⏭️ WhatsApp notifications disabled or no phone (whatsappNotifications: ${user.whatsappNotifications}, phone: ${user.phone})`);
       }
 
       console.log(`✅ Hot lead notifications complete for user ${data.userId}`);
-    } catch (error) {
-      console.error(`❌ Error in sendHotLeadAlert:`, error);
+      console.log(`==========================================\n`);
+    } catch (error: any) {
+      console.error(`❌ CRITICAL ERROR in sendHotLeadAlert:`, error.message);
+      console.error(`   Stack:`, error.stack);
     }
   }
 
@@ -160,34 +149,27 @@ class NotificationService {
    */
   async sendBookingAlert(data: BookingNotification): Promise<void> {
     try {
-      console.log(`📅 [NOTIFICATION] Booking alert for user: ${data.userId}`);
-      console.log(`📊 Booking data:`, JSON.stringify(data, null, 2));
+      console.log(`\n📅 ========== BOOKING ALERT ==========`);
+      console.log(`   User ID: ${data.userId}`);
+      console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
+      console.log(`   Meeting Type: ${data.booking.meetingType}`);
 
       // Get user and preferences
       const user = await storage.getUserById(data.userId);
+      
       if (!user) {
-        console.error(`❌ User ${data.userId} not found`);
+        console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
         return;
       }
 
-      console.log(`👤 User found:`, {
-        id: user.id,
-        email: user.email,
-        phone: user.phone,
-        emailNotifications: user.emailNotifications,
-        whatsappNotifications: user.whatsappNotifications,
-        bookingNotifications: user.bookingNotifications,
-      });
+      console.log(`✅ User found: ${user.email}`);
+      console.log(`   Booking notifications: ${user.bookingNotifications}`);
 
       // Check if booking notifications are enabled
       if (user.bookingNotifications === false) {
-        console.log(
-          `⏭️ Booking notifications disabled for user ${data.userId}`
-        );
+        console.log(`⏭️ Booking notifications DISABLED for user ${data.userId}`);
         return;
       }
-
-      console.log(`✅ Booking notifications enabled for user ${data.userId}`);
 
       const { booking, lead } = data;
 
@@ -196,10 +178,10 @@ class NotificationService {
       // ============================================
       if (user.emailNotifications && user.email) {
         try {
+          console.log(`📧 Attempting to send email to: ${user.email}`);
+          
           const emailSubject = `📅 New Booking Proposed: ${lead.firstName} ${lead.lastName}`;
-
           const emailBody = this.generateBookingEmailHTML(user, booking, lead);
-
           const textBody = this.generateBookingEmailText(user, booking, lead);
 
           await emailService.sendEmail({
@@ -210,14 +192,13 @@ class NotificationService {
             textBody: textBody,
           });
 
-          console.log(`✅ Booking email sent to: ${user.email}`);
-        } catch (emailError) {
-          console.error(`❌ Failed to send booking email:`, emailError);
+          console.log(`✅ Booking email SENT to: ${user.email}`);
+        } catch (emailError: any) {
+          console.error(`❌ Failed to send booking email:`, emailError.message);
+          console.error(`   Full error:`, emailError);
         }
       } else {
-        console.log(
-          `⏭️ Email notifications disabled or no email for user ${data.userId}`
-        );
+        console.log(`⏭️ Email notifications disabled or no email`);
       }
 
       // ============================================
@@ -225,34 +206,29 @@ class NotificationService {
       // ============================================
       if ((user.whatsappNotifications ?? true) && user.phone) {
         try {
-          const whatsappMessage = this.generateBookingWhatsAppMessage(
-            user,
-            booking,
-            lead
-          );
+          console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
+          
+          const whatsappMessage = this.generateBookingWhatsAppMessage(user, booking, lead);
 
-          const result = await whatsappService.sendTextMessage(
-            user.phone,
-            whatsappMessage
-          );
+          const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
 
           if (result.success) {
-            console.log(`✅ Booking WhatsApp sent to: ${user.phone}`);
+            console.log(`✅ Booking WhatsApp SENT to: ${user.phone}`);
           } else {
-            console.error(`❌ Booking WhatsApp failed for: ${user.phone}`);
+            console.error(`❌ Booking WhatsApp FAILED for: ${user.phone}`);
           }
-        } catch (whatsappError) {
-          console.error(`❌ Failed to send booking WhatsApp:`, whatsappError);
+        } catch (whatsappError: any) {
+          console.error(`❌ Failed to send booking WhatsApp:`, whatsappError.message);
         }
       } else {
-        console.log(
-          `⏭️ WhatsApp notifications disabled or no phone for user ${data.userId}`
-        );
+        console.log(`⏭️ WhatsApp notifications disabled or no phone`);
       }
 
       console.log(`✅ Booking notifications complete for user ${data.userId}`);
-    } catch (error) {
-      console.error(`❌ Error in sendBookingAlert:`, error);
+      console.log(`==========================================\n`);
+    } catch (error: any) {
+      console.error(`❌ CRITICAL ERROR in sendBookingAlert:`, error.message);
+      console.error(`   Stack:`, error.stack);
     }
   }
 

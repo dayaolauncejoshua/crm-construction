@@ -17,6 +17,12 @@ export interface WhatsAppMessage {
   };
 }
 
+export interface WhatsAppSendResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
 export class WhatsAppService {
   private accessToken: string;
   private phoneNumberId: string;
@@ -30,54 +36,59 @@ export class WhatsAppService {
       process.env.WHATSAPP_PHONE_NUMBER_ID || "default_phone_id";
   }
 
-  async sendMessage(message: WhatsAppMessage): Promise<{ success: boolean; messageId?: string }> {
-    try {
-      console.log("📤 Sending WhatsApp message:", {
-        to: message.to,
-        type: message.type,
-        messageLength: message.text?.body?.length || 0,
-      });
-      
-      const response = await fetch(
-        `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            ...message,
-          }),
-        }
-      );
+  async sendMessage(message: WhatsAppMessage): Promise<WhatsAppSendResult> {
+  try {
+    console.log("📤 Sending WhatsApp message:", {
+      to: message.to,
+      type: message.type,
+      messageLength: message.text?.body?.length || 0,
+    });
 
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        console.error("❌ WhatsApp API error response:", {
-          status: response.status,
-          statusText: response.statusText,
-          data: responseData,
-        });
-        return { success: false };
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${this.phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          ...message,
+        }),
       }
+    );
 
-      console.log("✅ WhatsApp API success:", responseData);
-      
-      // ✅ Return message ID
-      return { 
-        success: true, 
-        messageId: responseData.messages?.[0]?.id 
-      };
-    } catch (error) {
-      console.error("❌ Error sending WhatsApp message:", error);
-      return { success: false };
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ WhatsApp API error response:", {
+        status: response.status,
+        statusText: response.statusText,
+        data: responseData,
+      });
+
+      const errorMessage =
+        responseData?.error?.message ||
+        responseData?.message ||
+        `HTTP ${response.status} ${response.statusText}`;
+
+      return { success: false, error: errorMessage };
     }
-  }
 
-  async sendTextMessage(to: string, message: string): Promise<{ success: boolean; messageId?: string }> {
+    console.log("✅ WhatsApp API success:", responseData);
+
+    return {
+      success: true,
+      messageId: responseData.messages?.[0]?.id,
+    };
+  } catch (error: any) {
+    console.error("❌ Error sending WhatsApp message:", error);
+    return { success: false, error: error?.message || "Unknown error" };
+  }
+}
+
+  async sendTextMessage(to: string, message: string): Promise<WhatsAppSendResult> {
     const whatsappMessage: WhatsAppMessage = {
       to: to.replace(/\D/g, ""),
       type: "text",
@@ -89,11 +100,11 @@ export class WhatsAppService {
     return await this.sendMessage(whatsappMessage);
   }
 
-  async sendTemplateMessage(
-    to: string,
-    templateName: string,
-    variables: string[] = []
-  ): Promise<{ success: boolean; messageId?: string }> {
+async sendTemplateMessage(
+  to: string,
+  templateName: string,
+  variables: string[] = []
+): Promise<WhatsAppSendResult> {
     const whatsappMessage: WhatsAppMessage = {
       to: to.replace(/\D/g, ""),
       type: "template",
@@ -212,12 +223,12 @@ export class WhatsAppService {
 }
 
   async sendAuditResult(
-    to: string,
-    firstName: string,
-    auditType: string,
-    topFinding: string,
-    shortlink: string
-  ): Promise<{ success: boolean; messageId?: string }> {
+  to: string,
+  firstName: string,
+  auditType: string,
+  topFinding: string,
+  shortlink: string
+): Promise<WhatsAppSendResult> {
     const message = `Hi ${firstName}, your ${auditType} is ready. Top finding: ${topFinding}. See details: ${shortlink}. Reply 1 to book, 2 to ask a question, or STOP to opt out.`;
 
     return await this.sendTextMessage(to, message);

@@ -1005,51 +1005,59 @@ export class LeadQualificationService {
           });
 
           // 🆕 DEBUG: Verify update was saved
-  const freshConversation = await storage.getConversation(conversation.id);
-  console.log(`✅ DB Update Confirmed:`, {
-    conversationId: conversation.id,
-    isAiHandled: freshConversation?.isAiHandled,
-    humanTakeoverAt: freshConversation?.humanTakeoverAt,
-  });
+          const freshConversation = await storage.getConversation(
+            conversation.id
+          );
+          console.log(`✅ DB Update Confirmed:`, {
+            conversationId: conversation.id,
+            isAiHandled: freshConversation?.isAiHandled,
+            humanTakeoverAt: freshConversation?.humanTakeoverAt,
+          });
 
           // Event 1: Hot lead alert
-  this.broadcastUpdate({
-    type: "hot_lead_alert",
-    conversationId: conversation.id,
-    conversation: {
-      id: conversation.id,
-      isAiHandled: false, // ✅ Explicit
-      humanTakeoverAt: new Date(),
-      leadId: lead.id,
-      clientId: lead.clientId,
-      lead: updatedLead,
-      qualificationScore: qualification.score.toString(),
-    },
-    qualification,
-  });
+          this.broadcastUpdate({
+            type: "hot_lead_alert",
+            conversationId: conversation.id,
+            conversation: {
+              id: conversation.id,
+              isAiHandled: false, // ✅ Explicit
+              humanTakeoverAt: new Date(),
+              leadId: lead.id,
+              clientId: lead.clientId,
+              lead: updatedLead,
+              qualificationScore: qualification.score.toString(),
+            },
+            qualification,
+          });
 
-  console.log(`📡 Broadcasted hot_lead_alert for conversation ${conversation.id}`);
+          console.log(
+            `📡 Broadcasted hot_lead_alert for conversation ${conversation.id}`
+          );
 
           // Event 2: Explicit conversation update
-  this.broadcastUpdate({
-    type: "conversation_updated",
-    conversationId: conversation.id,
-    updates: {
-      isAiHandled: false,
-      humanTakeoverAt: new Date(),
-    },
-  });
+          this.broadcastUpdate({
+            type: "conversation_updated",
+            conversationId: conversation.id,
+            updates: {
+              isAiHandled: false,
+              humanTakeoverAt: new Date(),
+            },
+          });
 
-  console.log(`📡 Broadcasted conversation_updated for conversation ${conversation.id}`);
+          console.log(
+            `📡 Broadcasted conversation_updated for conversation ${conversation.id}`
+          );
 
-  // Event 3: Lead updated (for sidebar sync)
-  this.broadcastUpdate({
-    type: "lead_updated",
-    conversationId: conversation.id,
-    lead: updatedLead,
-  });
-  
-  console.log(`📡 Broadcasted lead_updated for conversation ${conversation.id}`);
+          // Event 3: Lead updated (for sidebar sync)
+          this.broadcastUpdate({
+            type: "lead_updated",
+            conversationId: conversation.id,
+            lead: updatedLead,
+          });
+
+          console.log(
+            `📡 Broadcasted lead_updated for conversation ${conversation.id}`
+          );
 
           const client = await storage.getClient(lead.clientId);
           if (client && client.userId) {
@@ -1333,7 +1341,6 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               console.error("❌ Failed to parse date or date is in the past");
               return;
             }
-
             console.log(`✅ Final parsed date: ${scheduledFor.toISOString()}`);
           } else {
             console.error("❌ Date missing after validation");
@@ -1384,6 +1391,32 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
 
             console.log("✅ Booking saved:", savedBooking.id);
 
+            // ✅ NEW: UPGRADE TO ULTRA-HOT (0.85) AND HAND OFF TO HUMAN
+            const ultraHotScore = 0.85;
+
+            console.log(
+              `🔥 UPGRADING LEAD TO ULTRA-HOT (${ultraHotScore}) - BOOKING CONFIRMED`
+            );
+
+            await storage.updateLead(lead.id, {
+              qualificationScore: ultraHotScore.toString(),
+              temperature: "hot",
+              status: "qualified",
+            });
+
+            await storage.updateConversation(conversation.id, {
+              qualificationScore: ultraHotScore.toString(),
+              isAiHandled: false, // ✅ CRITICAL: Hand off to human
+              humanTakeoverAt: new Date(),
+            });
+
+            console.log(
+              `✅ Conversation ${conversation.id} handed off to human`
+            );
+
+            // Get updated lead
+            const updatedLead = await storage.getLead(lead.id);
+
             // Send booking notification
             this.broadcastUpdate({
               type: eventType,
@@ -1398,8 +1431,23 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
+            // ✅ ALSO broadcast conversation handoff
+            this.broadcastUpdate({
+              type: "conversation_updated",
+              conversationId: conversation.id,
+              updates: {
+                isAiHandled: false,
+                humanTakeoverAt: new Date(),
+                qualificationScore: ultraHotScore.toString(),
+              },
+            });
+
             const client = await storage.getClient(lead.clientId);
             if (client && client.userId) {
+              console.log(
+                `📧 Sending booking notification to user: ${client.userId}`
+              );
+
               await notificationService.sendBookingAlert({
                 userId: client.userId,
                 booking: {
@@ -1411,7 +1459,7 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
                   attendeePhone: savedBooking.attendeePhone || "",
                   attendeeEmail: savedBooking.attendeeEmail || "",
                   meetingType: savedBooking.meetingType || "consultation",
-                  aiConfidence: savedBooking.aiConfidence || "0.8",
+                  aiConfidence: savedBooking.aiConfidence || "0.85",
                 },
                 lead: {
                   firstName: lead.firstName || "",
@@ -1420,9 +1468,13 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
                   phone: lead.phone || "",
                 },
               });
+            } else {
+              console.error(
+                `❌ Cannot send booking notification - client or userId missing`
+              );
             }
 
-            // Send confirmation to lead
+            // ✅ Send confirmation to lead
             const confirmationMessage = `Excellent! I've requested a ${
               bookingIntent.meetingType === "site-visit"
                 ? "site visit"
@@ -1441,6 +1493,7 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
             }project! 🏗️`;
 
             await whatsappService.sendTextMessage(from, confirmationMessage);
+
             await storage.createMessage({
               conversationId: conversation.id,
               content: confirmationMessage,
@@ -1461,7 +1514,9 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
               },
             });
 
-            console.log("✅ Booking created successfully");
+            console.log(
+              "✅ Booking created successfully - CONVERSATION HANDED OFF"
+            );
             return; // ✅ STOP - Booking created
           } catch (error) {
             console.error("❌ Error creating booking:", error);
@@ -1579,58 +1634,69 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
   }
 
   private broadcastUpdate(data: any): void {
-  if (!this.wss) {
-    console.error(`❌ CRITICAL: WebSocket server (wss) is NULL! Cannot broadcast.`);
-    return;
-  }
-
-  const message = JSON.stringify(data);
-  const allClients = Array.from(this.wss.clients);
-  const clientCount = allClients.length;
-  
-  console.log(`📡 ========== WEBSOCKET BROADCAST ==========`);
-  console.log(`   Event Type: ${data.type}`);
-  console.log(`   Conversation ID: ${data.conversationId}`);
-  console.log(`   Total Clients: ${clientCount}`);
-  console.log(`   Payload:`, JSON.stringify(data, null, 2));
-  
-  if (clientCount === 0) {
-    console.warn(`⚠️ WARNING: No WebSocket clients connected! Message will not be received.`);
-    return;
-  }
-
-  let sentCount = 0;
-  let openCount = 0;
-  let closedCount = 0;
-  
-  allClients.forEach((client, index) => {
-    console.log(`   Client ${index + 1} readyState: ${client.readyState} (1=OPEN, 0=CONNECTING, 2=CLOSING, 3=CLOSED)`);
-    
-    if (client.readyState === 1) { // WebSocket.OPEN
-      try {
-        client.send(message);
-        sentCount++;
-        openCount++;
-        console.log(`   ✅ Sent to client ${index + 1}`);
-      } catch (error) {
-        console.error(`   ❌ Failed to send to client ${index + 1}:`, error);
-      }
-    } else {
-      closedCount++;
-      console.warn(`   ⚠️ Client ${index + 1} not ready (state: ${client.readyState})`);
+    if (!this.wss) {
+      console.error(
+        `❌ CRITICAL: WebSocket server (wss) is NULL! Cannot broadcast.`
+      );
+      return;
     }
-  });
-  
-  console.log(`📊 Broadcast Summary:`);
-  console.log(`   ✅ Sent: ${sentCount}`);
-  console.log(`   🟢 Open: ${openCount}`);
-  console.log(`   🔴 Closed/Not Ready: ${closedCount}`);
-  console.log(`=========================================`);
-  
-  if (sentCount === 0) {
-    console.error(`❌ CRITICAL: Message NOT DELIVERED to any clients!`);
+
+    const message = JSON.stringify(data);
+    const allClients = Array.from(this.wss.clients);
+    const clientCount = allClients.length;
+
+    console.log(`📡 ========== WEBSOCKET BROADCAST ==========`);
+    console.log(`   Event Type: ${data.type}`);
+    console.log(`   Conversation ID: ${data.conversationId}`);
+    console.log(`   Total Clients: ${clientCount}`);
+    console.log(`   Payload:`, JSON.stringify(data, null, 2));
+
+    if (clientCount === 0) {
+      console.warn(
+        `⚠️ WARNING: No WebSocket clients connected! Message will not be received.`
+      );
+      return;
+    }
+
+    let sentCount = 0;
+    let openCount = 0;
+    let closedCount = 0;
+
+    allClients.forEach((client, index) => {
+      console.log(
+        `   Client ${index + 1} readyState: ${
+          client.readyState
+        } (1=OPEN, 0=CONNECTING, 2=CLOSING, 3=CLOSED)`
+      );
+
+      if (client.readyState === 1) {
+        // WebSocket.OPEN
+        try {
+          client.send(message);
+          sentCount++;
+          openCount++;
+          console.log(`   ✅ Sent to client ${index + 1}`);
+        } catch (error) {
+          console.error(`   ❌ Failed to send to client ${index + 1}:`, error);
+        }
+      } else {
+        closedCount++;
+        console.warn(
+          `   ⚠️ Client ${index + 1} not ready (state: ${client.readyState})`
+        );
+      }
+    });
+
+    console.log(`📊 Broadcast Summary:`);
+    console.log(`   ✅ Sent: ${sentCount}`);
+    console.log(`   🟢 Open: ${openCount}`);
+    console.log(`   🔴 Closed/Not Ready: ${closedCount}`);
+    console.log(`=========================================`);
+
+    if (sentCount === 0) {
+      console.error(`❌ CRITICAL: Message NOT DELIVERED to any clients!`);
+    }
   }
-}
 }
 
 export const leadQualificationService = new LeadQualificationService();
