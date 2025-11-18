@@ -1527,6 +1527,35 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
 
               try {
                 // ✅ CRITICAL: Await this call!
+                // ✅ Extract project details for booking notification too
+                const leadText = messages
+                  .filter((m: any) => m.sender === "lead")
+                  .map((m: any) => m.content)
+                  .join(" ");
+
+                let projectType = "Construction project";
+                if (/warehouse/i.test(leadText))
+                  projectType = "Warehouse construction";
+                else if (/kitchen/i.test(leadText))
+                  projectType = "Kitchen renovation";
+                else if (/deck/i.test(leadText))
+                  projectType = "Deck construction";
+                else if (/basement/i.test(leadText))
+                  projectType = "Basement finishing";
+                else if (/bathroom/i.test(leadText))
+                  projectType = "Bathroom renovation";
+                else if (/commercial/i.test(leadText))
+                  projectType = "Commercial building";
+                else if (lead.company !== "Unknown")
+                  projectType = `${lead.company} project`;
+
+                const budgetMatch = leadText.match(
+                  /(\d+[\d,]*)\s*(million|m|k|thousand)/i
+                );
+                const budget = budgetMatch
+                  ? `${budgetMatch[1]}${budgetMatch[2].charAt(0).toUpperCase()}`
+                  : "TBD";
+
                 await notificationService.sendHotLeadAlert({
                   userId: client.userId,
                   lead: {
@@ -1545,7 +1574,7 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
                   },
                   qualification: {
                     score: ultraHotScore,
-                    reasoning: `🔥 ULTRA-HOT: Lead confirmed booking for ${bookingIntent.proposedDateTime?.date} at ${bookingIntent.proposedDateTime?.time}. Immediate response recommended.`,
+                    reasoning: `🔥 ULTRA-HOT: ${projectType} booking confirmed for ${bookingIntent.proposedDateTime?.date} at ${bookingIntent.proposedDateTime?.time}. Budget: ${budget}. Location: ${bookingIntent.location}. Immediate response recommended.`,
                   },
                 });
 
