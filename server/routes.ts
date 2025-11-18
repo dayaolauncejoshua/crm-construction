@@ -32,9 +32,7 @@ import { vslGenerator } from "./services/vsl-generator";
 import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { normalizePhone, normalizeEmail } from "./utils/normalize";
-import { notificationService } from "./services/notification-sevice";
 
-// import vslapp from "./routes/vsl.route2";
 // Helper function to check if user owns the resource
 function checkOwnership(
   userRole: string,
@@ -203,51 +201,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   console.log("✅ WebSocket server initialized on path: /ws");
-
-
-  // 🆕 TEST: Manually trigger hot lead notification
-app.post("/api/test/hot-lead-notification", requireAuth, async (req, res) => {
-  try {
-    const userId = req.user!.id;
-    const user = await storage.getUserById(userId);
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    console.log(`🧪 [TEST] Triggering hot lead notification for user: ${user.email}`);
-
-    await notificationService.sendHotLeadAlert({
-      userId: user.id,
-      lead: {
-        id: "test-lead-id",
-        firstName: "John",
-        lastName: "Doe",
-        email: "john.doe@example.com",
-        phone: "+1234567890",
-        company: "Test Construction Co",
-        qualificationScore: "0.85",
-        temperature: "hot",
-      },
-      conversation: {
-        id: "test-conversation-id",
-        qualificationScore: "0.85",
-      },
-      qualification: {
-        score: 0.85,
-        reasoning: "Test hot lead: Has budget, timeline, and decision maker confirmed",
-      },
-    });
-
-    res.json({ 
-      success: true, 
-      message: "Hot lead notification sent (check terminal and email/WhatsApp)" 
-    });
-  } catch (error: any) {
-    console.error("❌ Test notification failed:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
   // ========================= LEADS ROUTE ======================================
 

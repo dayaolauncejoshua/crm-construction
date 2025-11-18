@@ -1059,30 +1059,61 @@ export class LeadQualificationService {
             `📡 Broadcasted lead_updated for conversation ${conversation.id}`
           );
 
+          // ✅ NOW SEND NOTIFICATION (with enhanced error logging)
+          console.log(
+            `\n📧 ========== SENDING HOT LEAD NOTIFICATION ==========`
+          );
+
           const client = await storage.getClient(lead.clientId);
-          if (client && client.userId) {
-            await notificationService.sendHotLeadAlert({
-              userId: client.userId,
-              lead: {
-                id: updatedLead?.id || "",
-                firstName: updatedLead?.firstName || "",
-                lastName: updatedLead?.lastName || "",
-                email: updatedLead?.email || "",
-                phone: updatedLead?.phone || "",
-                company: updatedLead?.company || "",
-                qualificationScore: updatedLead?.qualificationScore || "0.8",
-                temperature: updatedLead?.temperature || "hot",
-              },
-              conversation: {
-                id: conversation.id,
-                qualificationScore: qualification.score.toString(),
-              },
-              qualification: {
-                score: qualification.score,
-                reasoning: qualification.reasoning,
-              },
-            });
+          console.log(`   Client found: ${client ? client.name : "NOT FOUND"}`);
+          console.log(`   Client userId: ${client?.userId || "MISSING"}`);
+
+          if (!client) {
+            console.error(
+              `❌ CRITICAL: Client not found for clientId: ${lead.clientId}`
+            );
+            console.error(`   Cannot send notification without client!`);
+          } else if (!client.userId) {
+            console.error(`❌ CRITICAL: Client ${client.name} has no userId!`);
+            console.error(`   Client data:`, JSON.stringify(client, null, 2));
+          } else {
+            console.log(
+              `✅ Client and userId confirmed - proceeding with notification`
+            );
+            console.log(`   Calling notificationService.sendHotLeadAlert()...`);
+
+            try {
+              await notificationService.sendHotLeadAlert({
+                userId: client.userId,
+                lead: {
+                  id: updatedLead?.id || lead.id,
+                  firstName: updatedLead?.firstName || lead.firstName || "",
+                  lastName: updatedLead?.lastName || lead.lastName || "",
+                  email: updatedLead?.email || lead.email || "",
+                  phone: updatedLead?.phone || lead.phone || "",
+                  company: updatedLead?.company || lead.company || "",
+                  qualificationScore: updatedLead?.qualificationScore || "0.8",
+                  temperature: updatedLead?.temperature || "hot",
+                },
+                conversation: {
+                  id: conversation.id,
+                  qualificationScore: qualification.score.toString(),
+                },
+                qualification: {
+                  score: qualification.score,
+                  reasoning: qualification.reasoning,
+                },
+              });
+
+              console.log(`✅ Hot lead notification sent successfully!`);
+            } catch (notificationError: any) {
+              console.error(`❌ NOTIFICATION FAILED:`, notificationError);
+              console.error(`   Error message:`, notificationError.message);
+              console.error(`   Error stack:`, notificationError.stack);
+            }
           }
+
+          console.log(`================================================\n`);
 
           const handoffMessage =
             "Thanks for sharing those details! You've been identified as a priority lead. One of our senior team members will reach out to you within 5 minutes to discuss your project in detail. 🏗️";
@@ -1374,7 +1405,6 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               proposedBy: "ai",
               aiConfidence: bookingIntent.confidence.toString(),
             };
-
             let savedBooking;
             let eventType = "booking_approval_needed";
 
@@ -1417,7 +1447,11 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
             // Get updated lead
             const updatedLead = await storage.getLead(lead.id);
 
-            // Send booking notification
+            // ============================================
+            // ✅ BROADCAST WEBSOCKET EVENTS
+            // ============================================
+
+            // 1. Booking event
             this.broadcastUpdate({
               type: eventType,
               booking: {
@@ -1431,7 +1465,7 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
-            // ✅ ALSO broadcast conversation handoff
+            // 2. Conversation handoff
             this.broadcastUpdate({
               type: "conversation_updated",
               conversationId: conversation.id,
@@ -1442,36 +1476,137 @@ Please provide all in one message (e.g., "My name is John Smith, email john@emai
               },
             });
 
+            // 3. Lead updated
+            this.broadcastUpdate({
+              type: "lead_updated",
+              conversationId: conversation.id,
+              lead: updatedLead,
+            });
+
+            // 4. Hot lead alert (since score is now 0.85)
+            this.broadcastUpdate({
+              type: "hot_lead_alert",
+              conversationId: conversation.id,
+              conversation: {
+                id: conversation.id,
+                isAiHandled: false,
+                humanTakeoverAt: new Date(),
+                leadId: lead.id,
+                clientId: lead.clientId,
+                lead: updatedLead,
+                qualificationScore: ultraHotScore.toString(),
+              },
+              qualification: {
+                score: ultraHotScore,
+                reasoning: `Booking confirmed - Lead upgraded to ultra-hot (${(
+                  ultraHotScore * 100
+                ).toFixed(0)}%)`,
+              },
+            });
+
+            console.log(
+              `📡 Broadcasted hot_lead_alert for booking-confirmed lead`
+            );
+
+            // ============================================
+            // ✅ SEND DUAL NOTIFICATIONS TO USER
+            // ============================================
+
             const client = await storage.getClient(lead.clientId);
+
             if (client && client.userId) {
               console.log(
-                `📧 Sending booking notification to user: ${client.userId}`
+                `\n📧 ========== SENDING DUAL NOTIFICATIONS ==========`
               );
+              console.log(`   User: ${client.userId}`);
+              console.log(`   Lead: ${lead.firstName} ${lead.lastName}`);
+              console.log(`   Reason: Booking proposal + Ultra-hot upgrade`);
 
-              await notificationService.sendBookingAlert({
-                userId: client.userId,
-                booking: {
-                  id: savedBooking.id,
-                  title: savedBooking.title || "",
-                  scheduledFor: savedBooking.scheduledFor,
-                  location: savedBooking.location || "TBD",
-                  attendeeName: savedBooking.attendeeName || "",
-                  attendeePhone: savedBooking.attendeePhone || "",
-                  attendeeEmail: savedBooking.attendeeEmail || "",
-                  meetingType: savedBooking.meetingType || "consultation",
-                  aiConfidence: savedBooking.aiConfidence || "0.85",
-                },
-                lead: {
-                  firstName: lead.firstName || "",
-                  lastName: lead.lastName || "",
-                  company: lead.company || "",
-                  phone: lead.phone || "",
-                },
-              });
+              // ✅ NOTIFICATION 1: HOT LEAD ALERT (MUST BE FIRST!)
+              console.log(`\n🔥 [1/2] Sending HOT LEAD alert...`);
+
+              try {
+                // ✅ CRITICAL: Await this call!
+                await notificationService.sendHotLeadAlert({
+                  userId: client.userId,
+                  lead: {
+                    id: updatedLead?.id || lead.id,
+                    firstName: updatedLead?.firstName || lead.firstName || "",
+                    lastName: updatedLead?.lastName || lead.lastName || "",
+                    email: updatedLead?.email || lead.email || "",
+                    phone: updatedLead?.phone || lead.phone || "",
+                    company: updatedLead?.company || lead.company || "",
+                    qualificationScore: ultraHotScore.toString(),
+                    temperature: "hot",
+                  },
+                  conversation: {
+                    id: conversation.id,
+                    qualificationScore: ultraHotScore.toString(),
+                  },
+                  qualification: {
+                    score: ultraHotScore,
+                    reasoning: `🔥 ULTRA-HOT: Lead confirmed booking for ${bookingIntent.proposedDateTime?.date} at ${bookingIntent.proposedDateTime?.time}. Immediate response recommended.`,
+                  },
+                });
+
+                console.log(`✅ [1/2] Hot lead alert COMPLETED successfully`);
+              } catch (hotLeadError: any) {
+                console.error(
+                  `❌ [1/2] Hot lead alert FAILED:`,
+                  hotLeadError.message
+                );
+                console.error(`   Stack:`, hotLeadError.stack);
+                // Don't fail the whole flow if hot lead notification fails
+              }
+
+              // ✅ Small delay between notifications (prevents email collision)
+              await new Promise((resolve) => setTimeout(resolve, 500));
+
+              // ✅ NOTIFICATION 2: BOOKING PROPOSAL ALERT
+              console.log(`\n📅 [2/2] Sending BOOKING PROPOSAL alert...`);
+
+              try {
+                // ✅ CRITICAL: Await this call too!
+                await notificationService.sendBookingAlert({
+                  userId: client.userId,
+                  booking: {
+                    id: savedBooking.id,
+                    title: savedBooking.title || "",
+                    scheduledFor: savedBooking.scheduledFor,
+                    location: savedBooking.location || "TBD",
+                    attendeeName: savedBooking.attendeeName || "",
+                    attendeePhone: savedBooking.attendeePhone || "",
+                    attendeeEmail: savedBooking.attendeeEmail || "",
+                    meetingType: savedBooking.meetingType || "consultation",
+                    aiConfidence: savedBooking.aiConfidence || "0.85",
+                  },
+                  lead: {
+                    firstName: lead.firstName || "",
+                    lastName: lead.lastName || "",
+                    company: lead.company || "",
+                    phone: lead.phone || "",
+                  },
+                });
+
+                console.log(
+                  `✅ [2/2] Booking proposal alert COMPLETED successfully`
+                );
+              } catch (bookingError: any) {
+                console.error(
+                  `❌ [2/2] Booking proposal alert FAILED:`,
+                  bookingError.message
+                );
+                console.error(`   Stack:`, bookingError.stack);
+              }
+
+              console.log(`\n✅ DUAL NOTIFICATIONS COMPLETE`);
+              console.log(`================================================\n`);
             } else {
               console.error(
-                `❌ Cannot send booking notification - client or userId missing`
+                `❌ Cannot send notifications - client or userId missing`
               );
+              console.error(`   Client:`, client ? client.name : "NOT FOUND");
+              console.error(`   UserId:`, client?.userId || "MISSING");
             }
 
             // ✅ Send confirmation to lead
@@ -1515,9 +1650,9 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
             });
 
             console.log(
-              "✅ Booking created successfully - CONVERSATION HANDED OFF"
+              "✅ Booking created successfully - CONVERSATION HANDED OFF WITH DUAL NOTIFICATIONS"
             );
-            return; // ✅ STOP - Booking created
+            return; // ✅ STOP - Booking created// ✅ STOP - Booking created
           } catch (error) {
             console.error("❌ Error creating booking:", error);
           }

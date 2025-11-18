@@ -53,96 +53,115 @@ class NotificationService {
    * Send hot lead alert notifications
    */
   async sendHotLeadAlert(data: HotLeadNotification): Promise<void> {
-    try {
-      console.log(`\n🔥 ========== HOT LEAD ALERT ==========`);
-      console.log(`   User ID: ${data.userId}`);
-      console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
-      console.log(`   Score: ${data.qualification.score}`);
-      console.log(`   Temperature: ${data.lead.temperature}`);
+  try {
+    console.log(`\n🔥 ========== HOT LEAD ALERT ==========`);
+    console.log(`   User ID: ${data.userId}`);
+    console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
+    console.log(`   Score: ${data.qualification.score}`);
+    console.log(`   Temperature: ${data.lead.temperature}`);
 
-      // Get user and preferences
-      const user = await storage.getUserById(data.userId);
-      
-      if (!user) {
-        console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
-        return;
-      }
+    // Get user and preferences
+    const user = await storage.getUserById(data.userId);
 
-      console.log(`✅ User found: ${user.email}`);
-      console.log(`   Email notifications: ${user.emailNotifications}`);
-      console.log(`   WhatsApp notifications: ${user.whatsappNotifications}`);
-      console.log(`   Lead notifications: ${user.leadNotifications}`);
-
-      // Check if lead notifications are enabled
-      if (user.leadNotifications === false) {
-        console.log(`⏭️ Lead notifications disabled for user ${data.userId}`);
-        return;
-      }
-
-      console.log(`✅ Lead notifications enabled for user ${data.userId}`);
-
-      const { lead, qualification } = data;
-
-      // ============================================
-      // EMAIL NOTIFICATION
-      // ============================================
-      if (user.emailNotifications && user.email) {
-        try {
-          console.log(`📧 Attempting to send email to: ${user.email}`);
-          
-          const emailSubject = `🔥 Hot Lead Alert: ${lead.firstName} ${lead.lastName}`;
-          const emailBody = this.generateHotLeadEmailHTML(user, lead, qualification);
-          const textBody = this.generateHotLeadEmailText(user, lead, qualification);
-
-          await emailService.sendEmail({
-            to: user.email,
-            toName: `${user.firstName} ${user.lastName}`,
-            subject: emailSubject,
-            htmlBody: emailBody,
-            textBody: textBody,
-          });
-
-          console.log(`✅ Hot lead email SENT to: ${user.email}`);
-        } catch (emailError: any) {
-          console.error(`❌ Failed to send hot lead email:`, emailError.message);
-          console.error(`   Full error:`, emailError);
-        }
-      } else {
-        console.log(`⏭️ Email notifications disabled or no email (emailNotifications: ${user.emailNotifications}, email: ${user.email})`);
-      }
-
-      // ============================================
-      // WHATSAPP NOTIFICATION
-      // ============================================
-      if ((user.whatsappNotifications ?? true) && user.phone) {
-        try {
-          console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
-          
-          const whatsappMessage = this.generateHotLeadWhatsAppMessage(user, lead, qualification);
-
-          const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
-
-          if (result.success) {
-            console.log(`✅ Hot lead WhatsApp SENT to: ${user.phone}`);
-          } else {
-            console.error(`❌ Hot lead WhatsApp FAILED for: ${user.phone}`);
-            console.error(`   Reason:`, result.error);
-          }
-        } catch (whatsappError: any) {
-          console.error(`❌ Failed to send hot lead WhatsApp:`, whatsappError.message);
-          console.error(`   Full error:`, whatsappError);
-        }
-      } else {
-        console.log(`⏭️ WhatsApp notifications disabled or no phone (whatsappNotifications: ${user.whatsappNotifications}, phone: ${user.phone})`);
-      }
-
-      console.log(`✅ Hot lead notifications complete for user ${data.userId}`);
-      console.log(`==========================================\n`);
-    } catch (error: any) {
-      console.error(`❌ CRITICAL ERROR in sendHotLeadAlert:`, error.message);
-      console.error(`   Stack:`, error.stack);
+    if (!user) {
+      console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
+      console.error(`   This is a critical error - user should exist!`);
+      return;
     }
+
+    console.log(`✅ User found: ${user.email}`);
+    console.log(`   User data:`, JSON.stringify({
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      emailNotifications: user.emailNotifications,
+      whatsappNotifications: user.whatsappNotifications,
+      leadNotifications: user.leadNotifications,
+      bookingNotifications: user.bookingNotifications,
+    }, null, 2));
+
+    // ✅ NEW: Check if notification settings exist (might be undefined)
+    const emailNotificationsEnabled = user.emailNotifications !== false; // Default to true
+    const whatsappNotificationsEnabled = user.whatsappNotifications !== false; // Default to true
+    const leadNotificationsEnabled = user.leadNotifications !== false; // Default to true
+
+    console.log(`📊 Notification Settings (after defaults):`);
+    console.log(`   Email: ${emailNotificationsEnabled}`);
+    console.log(`   WhatsApp: ${whatsappNotificationsEnabled}`);
+    console.log(`   Lead alerts: ${leadNotificationsEnabled}`);
+
+    // Check if lead notifications are enabled
+    if (!leadNotificationsEnabled) {
+      console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
+      return;
+    }
+
+    const { lead, qualification } = data;
+
+    // ============================================
+    // EMAIL NOTIFICATION
+    // ============================================
+    if (emailNotificationsEnabled && user.email) {
+      try {
+        console.log(`📧 Attempting to send email to: ${user.email}`);
+
+        const emailSubject = `🔥 Hot Lead Alert: ${lead.firstName} ${lead.lastName}`;
+        const emailBody = this.generateHotLeadEmailHTML(user, lead, qualification);
+        const textBody = this.generateHotLeadEmailText(user, lead, qualification);
+
+        await emailService.sendEmail({
+          to: user.email,
+          toName: `${user.firstName} ${user.lastName}`,
+          subject: emailSubject,
+          htmlBody: emailBody,
+          textBody: textBody,
+        });
+
+        console.log(`✅ Hot lead email SENT to: ${user.email}`);
+      } catch (emailError: any) {
+        console.error(`❌ Failed to send hot lead email:`, emailError.message);
+        console.error(`   Full error:`, emailError);
+        
+        // ✅ Don't fail completely if email fails - try WhatsApp
+      }
+    } else {
+      console.log(`⏭️ Email notifications disabled or no email (emailNotifications: ${user.emailNotifications}, email: ${user.email})`);
+    }
+
+    // ============================================
+    // WHATSAPP NOTIFICATION
+    // ============================================
+    if (whatsappNotificationsEnabled && user.phone) {
+      try {
+        console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
+
+        const whatsappMessage = this.generateHotLeadWhatsAppMessage(user, lead, qualification);
+
+        const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
+
+        if (result.success) {
+          console.log(`✅ Hot lead WhatsApp SENT to: ${user.phone}`);
+        } else {
+          console.error(`❌ Hot lead WhatsApp FAILED for: ${user.phone}`);
+          console.error(`   Reason:`, result.error);
+        }
+      } catch (whatsappError: any) {
+        console.error(`❌ Failed to send hot lead WhatsApp:`, whatsappError.message);
+        console.error(`   Full error:`, whatsappError);
+      }
+    } else {
+      console.log(`⏭️ WhatsApp notifications disabled or no phone (whatsappNotifications: ${user.whatsappNotifications}, phone: ${user.phone})`);
+    }
+
+    console.log(`✅ Hot lead notifications complete for user ${data.userId}`);
+    console.log(`==========================================\n`);
+  } catch (error: any) {
+    console.error(`❌ CRITICAL ERROR in sendHotLeadAlert:`, error.message);
+    console.error(`   Stack:`, error.stack);
   }
+}
 
   /**
    * Send booking alert notifications
@@ -243,85 +262,129 @@ class NotificationService {
   ): string {
     const appUrl = process.env.FRONTEND_URL || "http://localhost:5000";
 
-    return `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #f97316 0%, #dc2626 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">🔥 Hot Lead Alert!</h1>
-        </div>
-        
-        <div style="background: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-          <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
-            Hi ${user.firstName},
-          </p>
-          
-          <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-            You've received a <strong style="color: #dc2626;">high-priority lead</strong> that needs your immediate attention!
-          </p>
-          
-          <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin: 30px 0; border-radius: 4px;">
-            <h3 style="color: #7f1d1d; margin-top: 0; font-size: 18px;">Lead Details:</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">👤 Name:</td>
-                <td style="padding: 8px 0; color: #450a0a;">${lead.firstName} ${
-      lead.lastName
-    }</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📧 Email:</td>
-                <td style="padding: 8px 0; color: #450a0a;">${lead.email}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📱 Phone:</td>
-                <td style="padding: 8px 0; color: #450a0a;">${lead.phone}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🏢 Company:</td>
-                <td style="padding: 8px 0; color: #450a0a;">${lead.company}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🔥 Priority:</td>
-                <td style="padding: 8px 0; color: #450a0a;"><strong style="color: #dc2626;">${lead.temperature.toUpperCase()}</strong></td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📊 Score:</td>
-                <td style="padding: 8px 0; color: #450a0a;">${(
-                  parseFloat(lead.qualificationScore) * 100
-                ).toFixed(0)}%</td>
-              </tr>
-            </table>
-          </div>
-          
-          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p style="font-size: 14px; color: #6b7280; margin: 0;">
-              <strong style="color: #374151;">AI Analysis:</strong><br>
-              ${qualification.reasoning}
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${appUrl}/conversations" style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #dc2626 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
-              View Lead in CRM →
-            </a>
-          </div>
-          
-          <p style="font-size: 14px; color: #6b7280; text-align: center; margin-top: 30px;">
-            ⏱️ <strong>Respond within 5 minutes</strong> to maximize conversion rate
-          </p>
-        </div>
-        
-        <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
-          <p>This is an automated alert. You can manage your notification preferences in Settings.</p>
-        </div>
-      </div>
-    `;
+     // ✅ NEW: Extract project details from qualification reasoning
+  const reasoning = qualification.reasoning || "";
+  
+  // Try to extract project type from reasoning or lead data
+  let projectType = "Construction project";
+  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
+  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
+  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
+  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
+  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
+  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
+  else if (reasoning.toLowerCase().includes("residential")) projectType = "Residential construction";
+
+  // Extract address from reasoning if available
+  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+
+  // Use lead's company as fallback project descriptor
+  if (lead.company && lead.company !== "Unknown" && projectType === "Construction project") {
+    projectType = `${lead.company} project`;
   }
+
+    return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #f97316 0%, #dc2626 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">🔥 Hot Lead Alert!</h1>
+      </div>
+      
+      <div style="background: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
+          Hi ${user.firstName},
+        </p>
+        
+        <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+          You've received a <strong style="color: #dc2626;">high-priority lead</strong> that needs your immediate attention!
+        </p>
+        
+        <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin: 30px 0; border-radius: 4px;">
+          <h3 style="color: #7f1d1d; margin-top: 0; font-size: 18px;">Lead Details:</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">👤 Name:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${lead.firstName} ${lead.lastName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🏗️ Project:</td>
+              <td style="padding: 8px 0; color: #450a0a;"><strong>${projectType}</strong></td>
+            </tr>
+            ${extractedAddress || lead.company !== "Unknown" ? `
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📍 Location:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${extractedAddress || lead.company || "Not specified"}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📧 Email:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${lead.email}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📱 Phone:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${lead.phone}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🏢 Company:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${lead.company}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🔥 Priority:</td>
+              <td style="padding: 8px 0; color: #450a0a;"><strong style="color: #dc2626;">${lead.temperature.toUpperCase()}</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📊 Score:</td>
+              <td style="padding: 8px 0; color: #450a0a;">${(parseFloat(lead.qualificationScore) * 100).toFixed(0)}%</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p style="font-size: 14px; color: #6b7280; margin: 0;">
+            <strong style="color: #374151;">AI Analysis:</strong><br>
+            ${qualification.reasoning}
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${appUrl}/conversations" style="display: inline-block; background: linear-gradient(135deg, #f97316 0%, #dc2626 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+            View Lead in CRM →
+          </a>
+        </div>
+        
+        <p style="font-size: 14px; color: #6b7280; text-align: center; margin-top: 30px;">
+          ⏱️ <strong>Respond within 5 minutes</strong> to maximize conversion rate
+        </p>
+      </div>
+      
+      <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+        <p>This is an automated alert. You can manage your notification preferences in Settings.</p>
+      </div>
+    </div>
+  `;
+}
 
   private generateHotLeadEmailText(
     user: any,
     lead: any,
     qualification: any
   ): string {
+    const reasoning = qualification.reasoning || "";
+  
+  // Extract project type
+  let projectType = "Construction project";
+  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
+  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
+  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
+  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
+  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
+  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
+  else if (lead.company && lead.company !== "Unknown") projectType = `${lead.company} project`;
+
+  // Extract address
+  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+
     return `
 Hi ${user.firstName},
 
@@ -332,7 +395,8 @@ You've received a high-priority lead that needs your immediate attention!
 Lead Details:
 ━━━━━━━━━━━━━━━━━━━━━━━━
 👤 Name: ${lead.firstName} ${lead.lastName}
-📧 Email: ${lead.email}
+🏗️ Project: ${projectType}
+${extractedAddress || lead.company !== "Unknown" ? `📍 Location: ${extractedAddress || lead.company}\n` : ''}📧 Email: ${lead.email}
 📱 Phone: ${lead.phone}
 🏢 Company: ${lead.company}
 🔥 Priority: ${lead.temperature.toUpperCase()}
@@ -345,14 +409,12 @@ ${qualification.reasoning}
 
 ⏱️ Respond within 5 minutes to maximize conversion rate
 
-View in CRM: ${
-      process.env.FRONTEND_URL || "http://localhost:5000"
-    }/conversations
+View in CRM: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations
 
 Best regards,
 LeadFlow CRM
-    `;
-  }
+  `;
+}
 
   private generateBookingEmailHTML(user: any, booking: any, lead: any): string {
     const appUrl = process.env.FRONTEND_URL || "http://localhost:5000";
@@ -525,10 +587,28 @@ LeadFlow CRM
     lead: any,
     qualification: any
   ): string {
-    return `🔥 *Hot Lead Alert!*
+
+    const reasoning = qualification.reasoning || "";
+  
+  // Extract project type
+  let projectType = "Construction project";
+  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
+  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
+  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
+  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
+  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
+  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
+  else if (lead.company && lead.company !== "Unknown") projectType = `${lead.company} project`;
+
+  // Extract address
+  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+
+     return `🔥 *Hot Lead Alert!*
 
 👤 *${lead.firstName} ${lead.lastName}*
-🏢 ${lead.company}
+🏗️ Project: ${projectType}
+${extractedAddress ? `📍 Location: ${extractedAddress}\n` : ''}🏢 ${lead.company}
 📱 ${lead.phone}
 📊 Score: ${(parseFloat(lead.qualificationScore) * 100).toFixed(0)}%
 
@@ -536,10 +616,8 @@ _${qualification.reasoning}_
 
 ⏱️ Respond within 5 minutes!
 
-View in CRM: ${
-      process.env.FRONTEND_URL || "http://localhost:5000"
-    }/conversations`;
-  }
+View in CRM: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
+}
 
   private generateBookingWhatsAppMessage(
     user: any,
