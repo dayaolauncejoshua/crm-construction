@@ -804,7 +804,7 @@ export class LeadQualificationService {
           });
 
           // ✅ TERMINATE IMMEDIATELY after 2nd redirect
-          if (redirectCount >= 1) {
+          if (redirectCount >= 2) {
             console.log(
               "⛔ Max redirects reached (2 total) - terminating conversation"
             );
@@ -863,7 +863,7 @@ export class LeadQualificationService {
             });
 
             console.log("✅ Conversation terminated, no further AI responses");
-            return; // ✅ STOP PROCESSING
+            return; 
           }
 
           // First redirect - send warning
@@ -989,9 +989,13 @@ export class LeadQualificationService {
 
         // ✅ ULTRA-HOT: Score 0.8+ AND 2+ signals AND 3+ messages → IMMEDIATE HANDOFF
         const isUltraHot =
-          qualification.score >= 0.8 &&
-          hotSignals >= 2 &&
-          leadMessageCount >= 3;
+  (qualification.score >= 0.88 && hotSignals >= 2) ||
+  (qualification.score >= 0.85 && hotSignals >= 2 && leadMessageCount >= 3);
+
+console.log(`🔥 Ultra-Hot Decision Logic:`);
+console.log(`   Path 1 (Extreme): ${qualification.score >= 0.88 && hotSignals >= 2} (score ${qualification.score.toFixed(2)} >= 0.88, signals ${hotSignals} >= 2)`);
+console.log(`   Path 2 (Conservative): ${qualification.score >= 0.85 && hotSignals >= 2 && leadMessageCount >= 3} (score ${qualification.score.toFixed(2)} >= 0.85, signals ${hotSignals} >= 2, messages ${leadMessageCount} >= 3)`);
+console.log(`   Final: isUltraHot = ${isUltraHot}`);
 
         if (isUltraHot) {
           console.log(
