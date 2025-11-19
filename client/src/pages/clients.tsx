@@ -86,16 +86,16 @@ const createClientSchema = z.object({
   website: z
     .string()
     .url("Please enter a valid website URL")
-    .optional()
-    .or(z.literal("")),
-  phone: z.string().optional(),
+    .min(1, "Website is required"),
+  phone: z.string().min(1, "Phone is required"),
   email: z
     .string()
     .email("Please enter a valid email")
-    .optional()
-    .or(z.literal("")),
-  whatsappNumber: z.string().optional(),
-  whatsappPhoneNumberId: z.string().optional(),
+    .min(1, "Email is required"),
+  whatsappNumber: z.string().min(1, "WhatsApp number is required"),
+  whatsappPhoneNumberId: z
+    .string()
+    .min(1, "WhatsApp Phone Number ID is required"),
 });
 
 type CreateClientData = z.infer<typeof createClientSchema>;
@@ -119,7 +119,8 @@ export default function Clients() {
   const [setupEmail, setSetupEmail] = useState("");
   const [setupPhone, setSetupPhone] = useState("");
   const [setupWhatsappNumber, setSetupWhatsappNumber] = useState("");
-  const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] = useState("");
+  const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] =
+    useState("");
 
   // ✅ Validation errors for setup form
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
@@ -238,13 +239,29 @@ export default function Clients() {
       errors.industry = "Industry is required";
     }
 
-    // Optional: Add more validations if needed
-    if (setupWebsite && !/^https?:\/\/.+/.test(setupWebsite)) {
-      errors.website = "Please enter a valid URL";
+    if (!setupWebsite.trim()) {
+      errors.website = "Website is required";
+    } else if (!/^https?:\/\/.+/.test(setupWebsite)) {
+      errors.website =
+        "Please enter a valid URL (must start with http:// or https://)";
     }
 
-    if (setupEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setupEmail)) {
+    if (!setupEmail.trim()) {
+      errors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setupEmail)) {
       errors.email = "Please enter a valid email";
+    }
+
+    if (!setupPhone.trim()) {
+      errors.phone = "Phone is required";
+    }
+
+    if (!setupWhatsappNumber.trim()) {
+      errors.whatsappNumber = "WhatsApp number is required";
+    }
+
+    if (!setupWhatsappPhoneNumberId.trim()) {
+      errors.whatsappPhoneNumberId = "WhatsApp Phone Number ID is required";
     }
 
     setSetupErrors(errors);
@@ -379,7 +396,9 @@ export default function Clients() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = `clients-export-${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `clients-export-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(downloadUrl);
@@ -520,7 +539,10 @@ export default function Clients() {
             </Button>
 
             {canCreateClient && (
-              <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+              <Dialog
+                open={showCreateDialog}
+                onOpenChange={setShowCreateDialog}
+              >
                 <DialogTrigger asChild>
                   <Button className="bg-primary text-white hover:bg-primary/90">
                     <Plus className="w-4 h-4 mr-2" />
@@ -541,7 +563,10 @@ export default function Clients() {
                         name="name"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Company Name</FormLabel>
+                            <FormLabel>
+                              Company Name{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 placeholder="Enter company name"
@@ -558,7 +583,9 @@ export default function Clients() {
                         name="industry"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Industry</FormLabel>
+                            <FormLabel>
+                              Industry <span className="text-red-500">*</span>
+                            </FormLabel>
                             <Select
                               onValueChange={field.onChange}
                               defaultValue={field.value}
@@ -603,7 +630,9 @@ export default function Clients() {
                           name="website"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Website</FormLabel>
+                              <FormLabel>
+                                Website <span className="text-red-500">*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="https://example.com"
@@ -620,7 +649,9 @@ export default function Clients() {
                           name="phone"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Phone</FormLabel>
+                              <FormLabel>
+                                Phone <span className="text-red-500">*</span>
+                              </FormLabel>
                               <FormControl>
                                 <Input
                                   placeholder="+1 (555) 123-4567"
@@ -638,7 +669,9 @@ export default function Clients() {
                         name="email"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Email</FormLabel>
+                            <FormLabel>
+                              Email <span className="text-red-500">*</span>
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 placeholder="contact@company.com"
@@ -655,9 +688,15 @@ export default function Clients() {
                         name="whatsappNumber"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>WhatsApp Business Number</FormLabel>
+                            <FormLabel>
+                              WhatsApp Business Number{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
                             <FormControl>
-                              <Input placeholder="+1 (555) 123-4567" {...field} />
+                              <Input
+                                placeholder="+1 (555) 123-4567"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -669,7 +708,10 @@ export default function Clients() {
                         name="whatsappPhoneNumberId"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>WhatsApp Phone Number ID</FormLabel>
+                            <FormLabel>
+                              WhatsApp Phone Number ID{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
                             <FormControl>
                               <Input placeholder="808896282312368" {...field} />
                             </FormControl>
@@ -805,7 +847,9 @@ export default function Clients() {
                                 setSetupWebsite(client.website || "");
                                 setSetupEmail(client.email || "");
                                 setSetupPhone(client.phone || "");
-                                setSetupWhatsappNumber(client.whatsappNumber || "");
+                                setSetupWhatsappNumber(
+                                  client.whatsappNumber || ""
+                                );
                                 setSetupWhatsappPhoneNumberId(
                                   client.whatsappPhoneNumberId || ""
                                 );
@@ -940,9 +984,10 @@ export default function Clients() {
               <TabsTrigger value="ai">AI Settings</TabsTrigger>
             </TabsList>
 
-            {/* Details Tab */}
+            {/* Details Tab - Around line 920 */}
             <TabsContent value="details" className="space-y-4 mt-4">
               <div className="space-y-3">
+                {/* Company Name */}
                 <div>
                   <label className="text-sm font-medium">
                     Company Name <span className="text-red-500">*</span>
@@ -959,10 +1004,13 @@ export default function Clients() {
                     className={setupErrors.name ? "border-red-500" : ""}
                   />
                   {setupErrors.name && (
-                    <p className="text-sm text-red-500 mt-1">{setupErrors.name}</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.name}
+                    </p>
                   )}
                 </div>
 
+                {/* Industry */}
                 <div>
                   <label className="text-sm font-medium">
                     Industry <span className="text-red-500">*</span>
@@ -976,7 +1024,9 @@ export default function Clients() {
                       }
                     }}
                   >
-                    <SelectTrigger className={setupErrors.industry ? "border-red-500" : ""}>
+                    <SelectTrigger
+                      className={setupErrors.industry ? "border-red-500" : ""}
+                    >
                       <SelectValue placeholder="Select industry" />
                     </SelectTrigger>
                     <SelectContent>
@@ -992,12 +1042,17 @@ export default function Clients() {
                     </SelectContent>
                   </Select>
                   {setupErrors.industry && (
-                    <p className="text-sm text-red-500 mt-1">{setupErrors.industry}</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.industry}
+                    </p>
                   )}
                 </div>
 
+                {/* Website */}
                 <div>
-                  <label className="text-sm font-medium">Website</label>
+                  <label className="text-sm font-medium">
+                    Website <span className="text-red-500">*</span>
+                  </label>
                   <Input
                     value={setupWebsite}
                     onChange={(e) => {
@@ -1010,12 +1065,17 @@ export default function Clients() {
                     className={setupErrors.website ? "border-red-500" : ""}
                   />
                   {setupErrors.website && (
-                    <p className="text-sm text-red-500 mt-1">{setupErrors.website}</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.website}
+                    </p>
                   )}
                 </div>
 
+                {/* Email */}
                 <div>
-                  <label className="text-sm font-medium">Email</label>
+                  <label className="text-sm font-medium">
+                    Email <span className="text-red-500">*</span>
+                  </label>
                   <Input
                     value={setupEmail}
                     onChange={(e) => {
@@ -1028,47 +1088,99 @@ export default function Clients() {
                     className={setupErrors.email ? "border-red-500" : ""}
                   />
                   {setupErrors.email && (
-                    <p className="text-sm text-red-500 mt-1">{setupErrors.email}</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.email}
+                    </p>
                   )}
                 </div>
 
+                {/* Phone */}
                 <div>
-                  <label className="text-sm font-medium">Phone</label>
+                  <label className="text-sm font-medium">
+                    Phone <span className="text-red-500">*</span>
+                  </label>
                   <Input
                     value={setupPhone}
-                    onChange={(e) => setSetupPhone(e.target.value)}
+                    onChange={(e) => {
+                      setSetupPhone(e.target.value);
+                      if (setupErrors.phone) {
+                        setSetupErrors((prev) => ({ ...prev, phone: "" }));
+                      }
+                    }}
                     placeholder="+1 (555) 123-4567"
+                    className={setupErrors.phone ? "border-red-500" : ""}
                   />
+                  {setupErrors.phone && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.phone}
+                    </p>
+                  )}
                 </div>
               </div>
             </TabsContent>
 
-            {/* WhatsApp Tab */}
+            {/* WhatsApp Tab - Around line 1010 */}
             <TabsContent value="whatsapp" className="space-y-4 mt-4">
               <div className="space-y-3">
+                {/* WhatsApp Number */}
                 <div>
                   <label className="text-sm font-medium">
-                    WhatsApp Business Number
+                    WhatsApp Business Number{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <Input
                     value={setupWhatsappNumber}
-                    onChange={(e) => setSetupWhatsappNumber(e.target.value)}
+                    onChange={(e) => {
+                      setSetupWhatsappNumber(e.target.value);
+                      if (setupErrors.whatsappNumber) {
+                        setSetupErrors((prev) => ({
+                          ...prev,
+                          whatsappNumber: "",
+                        }));
+                      }
+                    }}
                     placeholder="+1 (555) 123-4567"
+                    className={
+                      setupErrors.whatsappNumber ? "border-red-500" : ""
+                    }
                   />
+                  {setupErrors.whatsappNumber && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.whatsappNumber}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 mt-1">
                     Your verified WhatsApp Business number
                   </p>
                 </div>
 
+                {/* WhatsApp Phone Number ID */}
                 <div>
                   <label className="text-sm font-medium">
-                    WhatsApp Phone Number ID
+                    WhatsApp Phone Number ID{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <Input
                     value={setupWhatsappPhoneNumberId}
-                    onChange={(e) => setSetupWhatsappPhoneNumberId(e.target.value)}
+                    onChange={(e) => {
+                      setSetupWhatsappPhoneNumberId(e.target.value);
+                      if (setupErrors.whatsappPhoneNumberId) {
+                        setSetupErrors((prev) => ({
+                          ...prev,
+                          whatsappPhoneNumberId: "",
+                        }));
+                      }
+                    }}
                     placeholder="808896282312368"
+                    className={
+                      setupErrors.whatsappPhoneNumberId ? "border-red-500" : ""
+                    }
                   />
+                  {setupErrors.whatsappPhoneNumberId && (
+                    <p className="text-sm text-red-500 mt-1">
+                      {setupErrors.whatsappPhoneNumberId}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 mt-1">
                     From Meta Business Suite → WhatsApp → API Setup
                   </p>
@@ -1092,7 +1204,9 @@ export default function Clients() {
             <TabsContent value="ai" className="space-y-4 mt-4">
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium">AI Response Tone</label>
+                  <label className="text-sm font-medium">
+                    AI Response Tone
+                  </label>
                   <Select defaultValue="professional">
                     <SelectTrigger>
                       <SelectValue />
