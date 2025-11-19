@@ -63,6 +63,7 @@ import {
   FileText,
   Edit3,
   RefreshCw,
+  Download,
 } from "lucide-react";
 
 export default function CalendarPage() {
@@ -375,6 +376,52 @@ export default function CalendarPage() {
       }
     },
   });
+
+  // Export bookings handler
+const handleExportBookings = async () => {
+  try {
+    if (!selectedClientId) {
+      toast({
+        title: "Error",
+        description: "No client selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const response = await fetch(
+      `/api/bookings/${selectedClientId}/export`,
+      {
+        credentials: "include",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to export bookings");
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bookings-export-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    toast({
+      title: "Export Successful",
+      description: "Your bookings have been exported to CSV.",
+    });
+  } catch (error) {
+    toast({
+      title: "Export Failed",
+      description: "Failed to export bookings. Please try again.",
+      variant: "destructive",
+    });
+  }
+};
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
@@ -690,9 +737,14 @@ export default function CalendarPage() {
               Manage your appointments and meetings
             </p>
           </div>
-          <Button variant="outline" className="w-full sm:w-auto">
-            Export Schedule
-          </Button>
+          <Button 
+  variant="outline" 
+  className="w-full sm:w-auto"
+  onClick={handleExportBookings}
+>
+  <Download className="w-4 h-4 mr-2" />
+  Export Schedule
+</Button>
         </div>
       </header>
 

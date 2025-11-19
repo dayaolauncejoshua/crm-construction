@@ -3834,6 +3834,82 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
+  // Export bookings to CSV
+app.get("/api/bookings/:clientId/export", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const requestUser = req.user!;
+
+    // Verify ownership
+    if (requestUser.role !== "super_admin") {
+      const client = await storage.getClient(clientId);
+      if (!client || client.userId !== requestUser.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    const bookings = await storage.getBookings(clientId);
+
+    // Build CSV
+    const csvHeaders = [
+      "Title",
+      "Attendee Name",
+      "Email",
+      "Phone",
+      "Date",
+      "Time",
+      "Duration (min)",
+      "Location",
+      "Meeting Type",
+      "Status",
+      "Notes",
+      "Created Date",
+    ].join(",");
+
+    const csvRows = bookings.map((booking) => {
+      const scheduledDate = new Date(booking.scheduledFor);
+      const dateStr = scheduledDate.toLocaleDateString("en-US", {
+        timeZone: "America/Vancouver",
+      });
+      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Vancouver",
+      });
+      const createdDate = booking.createdAt
+        ? new Date(booking.createdAt).toLocaleDateString()
+        : "";
+
+      return [
+        `"${booking.title || ""}"`,
+        `"${booking.attendeeName || ""}"`,
+        `"${booking.attendeeEmail || ""}"`,
+        `"${booking.attendeePhone || ""}"`,
+        `"${dateStr}"`,
+        `"${timeStr}"`,
+        `"${booking.duration || 60}"`,
+        `"${booking.location || ""}"`,
+        `"${booking.meetingType || "consultation"}"`,
+        `"${booking.status || "scheduled"}"`,
+        `"${(booking.notes || "").replace(/"/g, '""')}"`,
+        `"${createdDate}"`,
+      ].join(",");
+    });
+
+    const csv = [csvHeaders, ...csvRows].join("\n");
+
+    // Set headers for download
+    const filename = `bookings-export-${new Date().toISOString().split("T")[0]}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    res.send(csv);
+  } catch (error) {
+    console.error("Error exporting bookings:", error);
+    res.status(500).json({ message: "Failed to export bookings" });
+  }
+});
+
   // =========================== USER TRIAL MANAGEMENT ROUTES  ====================================
 
   // Get user trial status
