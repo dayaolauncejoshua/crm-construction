@@ -919,7 +919,7 @@ export default function Analytics() {
                     {aiPerf.aiQualificationRate}%
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    AI qualified leads (score ≥0.7)
+                    AI qualified leads (score ≥0.6 hot threshold)
                   </p>
                 </CardContent>
               </Card>
@@ -1081,7 +1081,7 @@ export default function Analytics() {
                         <div>
                           <p className="text-sm font-medium">Qualified Leads</p>
                           <p className="text-xs text-slate-500">
-                            Leads ≥0.7 threshold
+                            Leads ≥0.6 hot threshold
                           </p>
                         </div>
                       </div>

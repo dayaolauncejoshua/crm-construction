@@ -523,6 +523,73 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
     }
   });
 
+  // Export leads to CSV
+app.get("/api/leads/:clientId/export", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const requestUser = req.user!;
+
+    // Verify ownership
+    if (requestUser.role !== "super_admin") {
+      const client = await storage.getClient(clientId);
+      if (!client || client.userId !== requestUser.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    const leads = await storage.getLeads(clientId, 10000); // Get all leads
+
+    // Build CSV
+    const csvHeaders = [
+      "Name",
+      "Email",
+      "Phone",
+      "Company",
+      "Score",
+      "Status",
+      "Temperature",
+      "Source",
+      "Created",
+      "Last Contact",
+      "Tags",
+    ].join(",");
+
+    const csvRows = leads.map((lead) => {
+      const name = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+      const score = ((parseFloat(lead.manualScore || lead.qualificationScore || "0") * 100).toFixed(0));
+      const created = lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "";
+      const lastContact = lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : "Never";
+      const tags = Array.isArray(lead.tags) ? lead.tags.join("; ") : "";
+
+      return [
+        `"${name}"`,
+        `"${lead.email || ""}"`,
+        `"${lead.phone || ""}"`,
+        `"${lead.company || ""}"`,
+        `"${score}%"`,
+        `"${lead.status || "new"}"`,
+        `"${lead.temperature || "cold"}"`,
+        `"${lead.source || ""}"`,
+        `"${created}"`,
+        `"${lastContact}"`,
+        `"${tags}"`,
+      ].join(",");
+    });
+
+    const csv = [csvHeaders, ...csvRows].join("\n");
+
+    // Set headers for download
+    const filename = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    res.send(csv);
+  } catch (error) {
+    console.error("Error exporting leads:", error);
+    res.status(500).json({ message: "Failed to export leads" });
+  }
+});
+
   // ============================ WHATSAPP WEBHOOK ROUTES  ==================================
 
   // WhatsApp webhook

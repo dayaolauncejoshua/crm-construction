@@ -1,9 +1,6 @@
 // server/services/claude.ts
-// ✅ PRODUCTION READY: Claude Sonnet 4.5 with Balanced Approach
-// ✅ Simplified prompts (50% token reduction)
-// ✅ Essential guardrails (anti-repetition, context tracking)
-// ✅ Correct scoring: 0.70 for normal bookings, 0.85+ for extreme cases only
-// ✅ Robust JSON parsing (handles Claude's extra text)
+// ✅ PRODUCTION READY: Claude Sonnet 4.5 with ALL fixes integrated
+// Version: 2.0 (Nov 2025)
 
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -11,11 +8,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// ✅ Claude Sonnet 4.5 (25% faster, better instruction following)
 const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 
 // ============================================
-// ✅ TYPES & INTERFACES
+// TYPES & INTERFACES
 // ============================================
 
 export interface LeadQualificationResult {
@@ -66,13 +62,9 @@ export interface AuditResult {
 }
 
 // ============================================
-// ✅ HELPER FUNCTIONS
+// HELPER FUNCTIONS
 // ============================================
 
-/**
- * Retry logic for Claude API overloaded errors (529, 429)
- * ✅ ESSENTIAL: Production reliability
- */
 async function callClaudeWithRetry<T>(
   apiCall: () => Promise<T>,
   maxRetries: number = 3,
@@ -112,33 +104,25 @@ async function callClaudeWithRetry<T>(
   throw lastError;
 }
 
-/**
- * Parse Claude JSON responses (handles markdown, extra text, malformed responses)
- * ✅ IMPROVED: Extracts JSON even if Claude adds explanatory text after
- */
 function parseClaudeJSON(text: string): any {
   try {
-    // Step 1: Remove markdown code blocks
     let cleaned = text
       .replace(/```json\s*/g, "")
       .replace(/```\s*/g, "")
       .trim();
 
-    // Step 2: Try direct parse (fastest path)
     try {
       return JSON.parse(cleaned);
     } catch (e) {
-      // Direct parse failed, need to extract JSON
+      // Direct parse failed
     }
 
-    // Step 3: Extract JSON object using regex (handles text before/after JSON)
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const extracted = jsonMatch[0];
       return JSON.parse(extracted);
     }
 
-    // Step 4: If still failing, log for debugging
     console.error("❌ Failed to parse Claude JSON response:");
     console.error("Raw text (first 500 chars):", text.substring(0, 500));
     console.error("Cleaned text:", cleaned);
@@ -151,10 +135,6 @@ function parseClaudeJSON(text: string): any {
   }
 }
 
-/**
- * Normalize time string to standard format (e.g., "2 PM", "10:30 AM")
- * ✅ ESSENTIAL: Booking accuracy depends on this
- */
 function normalizeTimeString(timeStr: string | undefined): string {
   if (!timeStr) {
     console.log("⚠️ No time provided, defaulting to 10:00 AM");
@@ -162,8 +142,6 @@ function normalizeTimeString(timeStr: string | undefined): string {
   }
 
   const upperTime = timeStr.toUpperCase().trim();
-
-  // Handle formats: "9AM", "9 AM", "2PM", "2:00PM", "2:00 PM", "14:00"
   const match = upperTime.match(/(\d{1,2})(?::(\d{2}))?\s*([AP]M)?/);
 
   if (!match) {
@@ -177,7 +155,6 @@ function normalizeTimeString(timeStr: string | undefined): string {
   const minutes = match[2] || "00";
   let period = match[3];
 
-  // Handle 24-hour format (if no AM/PM specified)
   if (!period) {
     if (hours >= 12) {
       period = "PM";
@@ -188,7 +165,6 @@ function normalizeTimeString(timeStr: string | undefined): string {
     }
   }
 
-  // Validate
   if (hours < 1 || hours > 12) {
     console.warn(
       `⚠️ Invalid hour "${hours}" after conversion, using default 10:00 AM`
@@ -199,10 +175,6 @@ function normalizeTimeString(timeStr: string | undefined): string {
   return `${hours}:${minutes} ${period}`;
 }
 
-/**
- * Quick spam check for obvious first-message spam
- * ✅ KEPT: Filters out test messages
- */
 function isObviousSpam(message: string, isFirstMessage: boolean): boolean {
   if (!isFirstMessage) return false;
 
@@ -210,21 +182,17 @@ function isObviousSpam(message: string, isFirstMessage: boolean): boolean {
     /^test\s*test$/i,
     /^hello\s*hello$/i,
     /^hi\s*hi\s*hi$/i,
-    /^[0-9]+$/, // Just numbers
+    /^[0-9]+$/,
   ];
 
   return spamPatterns.some((pattern) => pattern.test(message.trim()));
 }
 
 // ============================================
-// ✅ CONTEXT TRACKING (Essential for Quality)
+// CONTEXT TRACKING
 // ============================================
 
-/**
- * Extract conversation context to prevent repetition
- * ✅ ESSENTIAL: Prevents AI from asking same questions twice
- */
-function extractConversationContext(messages: any[]): {
+export function extractConversationContext(messages: any[]): {
   lastAIQuestions: string[];
   lastLeadAnswers: string[];
   askedTopics: Set<string>;
@@ -241,7 +209,6 @@ function extractConversationContext(messages: any[]): {
   const askedTopics = new Set<string>();
   const providedInfo = new Map<string, string>();
 
-  // Track what topics AI already asked about
   const topicPatterns: Record<string, RegExp> = {
     budget: /budget|cost|price|how much/i,
     timeline: /timeline|when|start date|how soon/i,
@@ -254,7 +221,6 @@ function extractConversationContext(messages: any[]): {
     materials: /material|composite|cedar|wood|type of/i,
   };
 
-  // Track what AI asked
   for (const msg of aiMessages) {
     for (const [topic, pattern] of Object.entries(topicPatterns)) {
       if (pattern.test(msg.content)) {
@@ -263,7 +229,6 @@ function extractConversationContext(messages: any[]): {
     }
   }
 
-  // Track what Lead provided
   const allLeadText = leadMessages.map((m) => m.content).join(" ");
 
   if (
@@ -295,10 +260,6 @@ function extractConversationContext(messages: any[]): {
   };
 }
 
-/**
- * Check if AI is about to repeat itself
- * ✅ ESSENTIAL: Prevents "Hi! I'd be happy to help..." repetition
- */
 function isRepetitiveResponse(
   proposedResponse: string,
   conversationHistory: any[]
@@ -314,9 +275,7 @@ function isRepetitiveResponse(
 
   const proposedLower = proposedResponse.toLowerCase().trim();
 
-  // Check for exact or near-exact repetition
   for (const prevMessage of recentAIMessages) {
-    // Check first 50 characters (opening phrase)
     const prevStart = prevMessage.substring(0, 50);
     const proposedStart = proposedLower.substring(0, 50);
 
@@ -329,7 +288,6 @@ function isRepetitiveResponse(
       return { isRepetitive: true, reason: "Same opening phrase" };
     }
 
-    // Check for repeated greetings
     const greetingPattern =
       /^(hi|hello|hey)[!,.]?\s+(i'd be happy|i'd love|thanks for)/i;
     if (
@@ -341,7 +299,6 @@ function isRepetitiveResponse(
     }
   }
 
-  // Check for asking the same question again
   const questionIndicators = [
     /what'?s the location/i,
     /where is the (property|project|site)/i,
@@ -364,7 +321,148 @@ function isRepetitiveResponse(
 }
 
 // ============================================
-// ✅ INTENT CLASSIFICATION
+// BOOKING STATE TRACKING
+// ============================================
+
+export function detectBookingState(
+  conversationHistory: any[],
+  context: any
+): {
+  state:
+    | "gathering_info"
+    | "suggesting_meeting"
+    | "getting_date"
+    | "getting_time"
+    | "getting_details"
+    | "ready_to_book";
+  collectedInfo: {
+    hasDate: boolean;
+    hasTime: boolean;
+    hasName: boolean;
+    hasEmail: boolean;
+    hasAddress: boolean;
+    date?: string;
+    time?: string;
+    name?: string;
+    email?: string;
+    address?: string;
+  };
+} {
+  const leadMessages = conversationHistory
+    .filter((m) => m.sender === "lead")
+    .map((m) => m.content)
+    .join(" ");
+
+  const aiMessages = conversationHistory
+    .filter((m) => m.sender === "ai")
+    .map((m) => m.content);
+
+  const hasDate = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
+    leadMessages
+  );
+  const hasTime = /\b\d{1,2}\s*(am|pm|AM|PM)\b/i.test(leadMessages);
+  const hasEmail = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i.test(
+    leadMessages
+  );
+  const hasAddress = /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)\b/i.test(
+    leadMessages
+  );
+
+  const nameMatch = leadMessages.match(
+    /(?:my name is|name is|i'm|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
+  );
+  const hasName = !!nameMatch;
+
+  let date: string | undefined;
+  let time: string | undefined;
+  let name: string | undefined;
+  let email: string | undefined;
+  let address: string | undefined;
+
+  if (hasDate) {
+    const dateMatch = leadMessages.match(
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+    );
+    date = dateMatch ? dateMatch[0] : undefined;
+  }
+
+  if (hasTime) {
+    const timeMatches = leadMessages.match(/\b\d{1,2}\s*(am|pm|AM|PM)\b/gi);
+    time = timeMatches ? timeMatches[timeMatches.length - 1] : undefined;
+  }
+
+  if (hasName) {
+    name = nameMatch ? nameMatch[1] : undefined;
+  }
+
+  if (hasEmail) {
+    const emailMatch = leadMessages.match(
+      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i
+    );
+    email = emailMatch ? emailMatch[0] : undefined;
+  }
+
+  if (hasAddress) {
+    const addressMatch = leadMessages.match(
+      /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)[^,]*(?:,\s*[^,]+)*/i
+    );
+    address = addressMatch ? addressMatch[0] : undefined;
+  }
+
+  let state:
+    | "gathering_info"
+    | "suggesting_meeting"
+    | "getting_date"
+    | "getting_time"
+    | "getting_details"
+    | "ready_to_book" = "gathering_info";
+
+  const aiAskedForMeeting = aiMessages.some((msg) =>
+    /\b(available|meet|site visit|schedule|book|appointment)\b/i.test(msg)
+  );
+
+  const aiAskedForTime = aiMessages.some((msg) =>
+    /\bwhat time\b|\bwhen|morning or afternoon/i.test(msg)
+  );
+
+  const aiAskedForDetails = aiMessages.some((msg) =>
+    /\b(name|email|address)\b/i.test(msg)
+  );
+
+  if (hasDate && hasTime && hasName && hasEmail && hasAddress) {
+    state = "ready_to_book";
+  } else if (aiAskedForDetails || (hasDate && hasTime)) {
+    state = "getting_details";
+  } else if (aiAskedForTime || hasDate) {
+    state = "getting_time";
+  } else if (aiAskedForMeeting) {
+    state = "getting_date";
+  } else if (
+    context.providedInfo.has("location") &&
+    context.providedInfo.has("budget")
+  ) {
+    state = "suggesting_meeting";
+  }
+
+  return {
+    state,
+    collectedInfo: {
+      hasDate,
+      hasTime,
+      hasName,
+      hasEmail,
+      hasAddress,
+      date,
+      time,
+      name,
+      email,
+      address,
+    },
+  };
+}
+
+// ============================================
+// INTENT CLASSIFICATION
 // ============================================
 
 export async function classifyIntent(
@@ -372,7 +470,6 @@ export async function classifyIntent(
   conversationHistory: any[],
   clientData: any
 ): Promise<IntentClassification> {
-  // Quick spam check for first message
   if (conversationHistory.length <= 1 && isObviousSpam(message, true)) {
     console.log("🚫 Obvious spam detected (first message)");
     return {
@@ -451,7 +548,7 @@ Return JSON:
 }
 
 // ============================================
-// ✅ BOOKING INTENT DETECTION
+// BOOKING INTENT DETECTION
 // ============================================
 
 export async function detectBookingIntent(
@@ -547,7 +644,7 @@ Return JSON ONLY (no explanations):
 }
 
 // ============================================
-// ✅ LEAD QUALIFICATION (Balanced Scoring)
+// LEAD QUALIFICATION
 // ============================================
 
 export async function qualifyLead(
@@ -555,7 +652,6 @@ export async function qualifyLead(
   conversationHistory: any[]
 ): Promise<LeadQualificationResult> {
   try {
-    // Step 1: Check if non-construction inquiry
     const latestMessage = conversationHistory[conversationHistory.length - 1];
     if (latestMessage && latestMessage.sender === "lead") {
       const clientData = { name: "Construction Company" };
@@ -583,7 +679,6 @@ export async function qualifyLead(
       }
     }
 
-    // Step 2: Qualify the lead
     const conversationText = conversationHistory
       .map(
         (m) => `${m.sender === "lead" ? "Customer" : "Agent"}: ${m.content}`
@@ -594,7 +689,6 @@ export async function qualifyLead(
       (m) => m.sender === "lead"
     ).length;
 
-    // ✅ BALANCED SCORING: Normal bookings = 0.70, Extreme cases = 0.85+
     const prompt = `You're a lead qualification expert for a construction company.
 
 CONVERSATION:
@@ -707,151 +801,8 @@ Return JSON:
 }
 
 // ============================================
-// ✅ RESPONSE GENERATION (Simplified + Guardrails)
+// RESPONSE GENERATION
 // ============================================
-
-function detectBookingState(
-  conversationHistory: any[],
-  context: any
-): {
-  state:
-    | "gathering_info"
-    | "suggesting_meeting"
-    | "getting_date"
-    | "getting_time"
-    | "getting_details"
-    | "ready_to_book";
-  collectedInfo: {
-    hasDate: boolean;
-    hasTime: boolean;
-    hasName: boolean;
-    hasEmail: boolean;
-    hasAddress: boolean;
-    date?: string;
-    time?: string;
-    name?: string;
-    email?: string;
-    address?: string;
-  };
-} {
-  const leadMessages = conversationHistory
-    .filter((m) => m.sender === "lead")
-    .map((m) => m.content)
-    .join(" ");
-
-  const aiMessages = conversationHistory
-    .filter((m) => m.sender === "ai")
-    .map((m) => m.content);
-
-  // Extract what we have
-  const hasDate = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
-    leadMessages
-  );
-  const hasTime = /\b\d{1,2}\s*(am|pm|AM|PM)\b/i.test(leadMessages);
-  const hasEmail = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i.test(
-    leadMessages
-  );
-  const hasAddress = /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)\b/i.test(
-    leadMessages
-  );
-
-  // Extract name (look for "my name is" or "name is")
-  const nameMatch = leadMessages.match(
-    /(?:my name is|name is|i'm|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
-  );
-  const hasName = !!nameMatch;
-
-  // Extract actual values
-  let date: string | undefined;
-  let time: string | undefined;
-  let name: string | undefined;
-  let email: string | undefined;
-  let address: string | undefined;
-
-  if (hasDate) {
-    const dateMatch = leadMessages.match(
-      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
-    );
-    date = dateMatch ? dateMatch[0] : undefined;
-  }
-
-  if (hasTime) {
-    const timeMatches = leadMessages.match(/\b\d{1,2}\s*(am|pm|AM|PM)\b/gi);
-    time = timeMatches ? timeMatches[timeMatches.length - 1] : undefined; // Get LAST time mentioned
-  }
-
-  if (hasName) {
-    name = nameMatch ? nameMatch[1] : undefined;
-  }
-
-  if (hasEmail) {
-    const emailMatch = leadMessages.match(
-      /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i
-    );
-    email = emailMatch ? emailMatch[0] : undefined;
-  }
-
-  if (hasAddress) {
-    const addressMatch = leadMessages.match(
-      /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)[^,]*(?:,\s*[^,]+)*/i
-    );
-    address = addressMatch ? addressMatch[0] : undefined;
-  }
-
-  // Determine state
-  let state:
-    | "gathering_info"
-    | "suggesting_meeting"
-    | "getting_date"
-    | "getting_time"
-    | "getting_details"
-    | "ready_to_book" = "gathering_info";
-
-  // Check if AI asked for meeting
-  const aiAskedForMeeting = aiMessages.some((msg) =>
-    /\b(available|meet|site visit|schedule|book|appointment)\b/i.test(msg)
-  );
-
-  // Check if AI asked for specific details
-  const aiAskedForTime = aiMessages.some((msg) =>
-    /\bwhat time\b|\bwhen|morning or afternoon/i.test(msg)
-  );
-
-  const aiAskedForDetails = aiMessages.some((msg) =>
-    /\b(name|email|address)\b/i.test(msg)
-  );
-
-  if (hasDate && hasTime && hasName && hasEmail && hasAddress) {
-    state = "ready_to_book";
-  } else if (aiAskedForDetails || (hasDate && hasTime)) {
-    state = "getting_details";
-  } else if (aiAskedForTime || hasDate) {
-    state = "getting_time";
-  } else if (aiAskedForMeeting) {
-    state = "getting_date";
-  } else if (
-    context.providedInfo.has("location") &&
-    context.providedInfo.has("budget")
-  ) {
-    state = "suggesting_meeting";
-  }
-
-  return {
-    state,
-    collectedInfo: {
-      hasDate,
-      hasTime,
-      hasName,
-      hasEmail,
-      hasAddress,
-      date,
-      time,
-      name,
-      email,
-      address,
-    },
-  };
-}
 
 export async function generateAIResponse(
   conversationHistory: any[],
@@ -864,26 +815,19 @@ export async function generateAIResponse(
     return "Great! Our team will send you the meeting details shortly. Is there anything else you'd like to discuss about your project?";
   }
 
-  // ✅ Extract context
   const context = extractConversationContext(conversationHistory);
-
-  // ✅ NEW: Detect booking state
   const bookingState = detectBookingState(conversationHistory, context);
 
   console.log("🔍 Booking State:", bookingState.state);
   console.log("📋 Collected Info:", bookingState.collectedInfo);
 
-  // ✅ CRITICAL: If we have ALL details, tell AI to STOP ASKING
   if (bookingState.state === "ready_to_book") {
     console.log(
       "✅ ALL BOOKING DETAILS COLLECTED - AI should NOT ask for anything!"
     );
-    // This shouldn't happen - booking should be created in leadQualification.ts
-    // But if we're here, something went wrong
     return "I have all the details I need. Let me finalize the booking and send you confirmation shortly!";
   }
 
-  // Build explicit state guidance
   let stateGuidance = "";
 
   if (bookingState.collectedInfo.hasDate && bookingState.collectedInfo.date) {
@@ -909,7 +853,6 @@ export async function generateAIResponse(
     stateGuidance += `\n**✅ ADDRESS PROVIDED: ${bookingState.collectedInfo.address}**`;
   }
 
-  // Determine what's MISSING
   const missing: string[] = [];
   if (bookingState.state === "getting_details") {
     if (!bookingState.collectedInfo.hasName) missing.push("full name");
@@ -922,7 +865,6 @@ export async function generateAIResponse(
     stateGuidance += `\n\n**⚠️ STILL NEED: ${missing.join(", ")}**\nAsk for ONLY these missing details.`;
   }
 
-  // Build info already provided
   const alreadyHave: string[] = [];
   if (context.providedInfo.has("location")) alreadyHave.push("location");
   if (context.providedInfo.has("budget")) alreadyHave.push("budget");
@@ -942,7 +884,6 @@ ${alreadyHave.map((info) => `- ${info.toUpperCase()}`).join("\n")}`;
   const lastMessage = conversationHistory[conversationHistory.length - 1];
   const daySuggestionsText = daySuggestions || "this week";
 
-  // ✅ STATE-AWARE PROMPT
   const prompt = `You're a professional construction project manager for ${
     clientData?.name || "a construction company"
   }.
@@ -1020,7 +961,6 @@ EXAMPLE: "Perfect! To finalize the booking, I need your ${missing.join(" and ")}
 
 Respond naturally (2-3 sentences):`;
 
-  // ✅ Retry loop
   let attempts = 0;
   const maxAttempts = 3;
 
@@ -1046,7 +986,6 @@ Respond naturally (2-3 sentences):`;
 
       const aiResponse = content.text.trim();
 
-      // ✅ Check for repetition
       const repetitionCheck = isRepetitiveResponse(
         aiResponse,
         conversationHistory
@@ -1055,13 +994,12 @@ Respond naturally (2-3 sentences):`;
       if (!repetitionCheck.isRepetitive) {
         console.log(`✅ Non-repetitive response (attempt ${attempts})`);
 
-        // ✅ EXTRA CHECK: Verify AI isn't asking for info we already have
         if (bookingState.collectedInfo.hasTime) {
           if (/what time|when.*available|morning or afternoon/i.test(aiResponse)) {
             console.warn(
               "⚠️ AI asking for time when we already have it, retrying..."
             );
-            continue; // Retry
+            continue;
           }
         }
 
@@ -1070,7 +1008,7 @@ Respond naturally (2-3 sentences):`;
             console.warn(
               "⚠️ AI asking for date when we already have it, retrying..."
             );
-            continue; // Retry
+            continue;
           }
         }
 
@@ -1084,7 +1022,6 @@ Respond naturally (2-3 sentences):`;
       if (attempts === maxAttempts) {
         console.error("❌ Max attempts reached, using state-aware fallback");
 
-        // State-aware fallback
         if (bookingState.state === "getting_details" && missing.length > 0) {
           return `To finalize the booking for ${bookingState.collectedInfo.date} at ${bookingState.collectedInfo.time}, I need your ${missing.join(" and ")}.`;
         } else if (bookingState.state === "getting_time") {
@@ -1105,7 +1042,7 @@ Respond naturally (2-3 sentences):`;
 }
 
 // ============================================
-// ✅ EXTRACT LEAD DETAILS
+// EXTRACT LEAD DETAILS
 // ============================================
 
 export async function extractLeadDetails(
@@ -1171,7 +1108,7 @@ Return JSON:
 }
 
 // ============================================
-// ✅ AUDIT GENERATION
+// AUDIT GENERATION
 // ============================================
 
 export async function generateAudit(
@@ -1233,7 +1170,7 @@ Provide improvement opportunities, risks, timeline, and ROI estimate.`;
 }
 
 // ============================================
-// ✅ VSL SCRIPT GENERATION
+// VSL SCRIPT GENERATION
 // ============================================
 
 export async function generateVSLScript(
@@ -1292,13 +1229,9 @@ Write the complete script now:`;
 }
 
 // ============================================
-// ✅ TIME CHANGE DETECTION (For leadQualification.ts)
+// TIME CHANGE DETECTION
 // ============================================
 
-/**
- * Detect if lead changed their preferred time
- * ✅ KEPT: Useful for booking flow in leadQualification.ts
- */
 export function detectTimeChange(conversationHistory: any[]): {
   hasChange: boolean;
   originalTime?: string;

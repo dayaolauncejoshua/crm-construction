@@ -3,10 +3,17 @@
 
 import { messageQueue } from "./messageQueue";
 import { storage } from "../storage";
-import { qualifyLead, generateAIResponse, detectTimeChange } from "./claude";
+import { 
+  qualifyLead, 
+  generateAIResponse, 
+  detectTimeChange,
+  detectBookingIntent, 
+  extractLeadDetails,
+  extractConversationContext,
+  detectBookingState
+} from "./claude";
 import { whatsappService } from "./whatsapp";
 import { WebSocketServer } from "ws";
-import { detectBookingIntent, extractLeadDetails } from "./claude";
 import type { InsertBooking } from "../../shared/schema";
 import { notificationService } from "./notification-sevice";
 
@@ -1189,6 +1196,53 @@ console.log(`   Final: isUltraHot = ${isUltraHot}`);
         );
         console.log("✓ Location:", bookingIntent.location || "NOT SET");
         console.log("=".repeat(60));
+
+        // ============================================
+        // 🆕 STEP 4.5: SAFETY NET - Check Booking State
+        // ============================================
+        console.log("🔍 Step 4.5: Safety net - checking booking state from context...");
+
+        const context = extractConversationContext(freshMessages);
+        const bookingStateFromContext = detectBookingState(freshMessages, context);
+
+        console.log(`📋 Booking State from Context: ${bookingStateFromContext.state}`);
+        console.log(`📋 Collected Info:`, bookingStateFromContext.collectedInfo);
+
+        // ✅ SAFETY NET: If we have ALL details, create booking even if detectBookingIntent is conservative
+        if (bookingStateFromContext.state === "ready_to_book") {
+          console.log("🎯 SAFETY NET TRIGGERED: All booking details present, forcing booking creation");
+          
+          // Override booking intent to force creation
+          bookingIntent.wantsToBook = true;
+          bookingIntent.isConfirmed = true;
+          bookingIntent.confidence = 0.95;
+          
+          // Use values from bookingStateFromContext
+          if (!bookingIntent.proposedDateTime?.date || !bookingIntent.proposedDateTime?.time) {
+            bookingIntent.proposedDateTime = {
+              date: bookingStateFromContext.collectedInfo.date || bookingIntent.proposedDateTime?.date,
+              time: bookingStateFromContext.collectedInfo.time || bookingIntent.proposedDateTime?.time,
+              isFlexible: false,
+            };
+          }
+          
+          // Extract location from messages if not set
+          if (!bookingIntent.location || bookingIntent.location === "TBD") {
+            const extractedDetails = await extractLeadDetails(freshMessages);
+            if (extractedDetails.address && extractedDetails.confidence > 0.7) {
+              bookingIntent.location = extractedDetails.address;
+              console.log(`✅ Using extracted address: ${extractedDetails.address}`);
+            }
+          }
+          
+          console.log("✅ Booking intent OVERRIDDEN by safety net:");
+          console.log(`   - wantsToBook: true`);
+          console.log(`   - isConfirmed: true`);
+          console.log(`   - confidence: 0.95`);
+          console.log(`   - date: ${bookingIntent.proposedDateTime?.date}`);
+          console.log(`   - time: ${bookingIntent.proposedDateTime?.time}`);
+          console.log(`   - location: ${bookingIntent.location}`);
+        }
 
         // ✅ Check if lead is actively in booking workflow
         const isActivelyBooking =

@@ -325,9 +325,6 @@ const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 🆕 Mobile state management
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLeadDetails, setShowLeadDetails] = useState(false);
-  const [showManualControls, setShowManualControls] = useState(false);
-  const [manualScore, setManualScore] = useState(0);
-  const [internalNote, setInternalNote] = useState("");
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingDate, setBookingDate] = useState<Date>();
   const [bookingTime, setBookingTime] = useState("10:00");
@@ -640,51 +637,6 @@ const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const conversations = dashboardData?.conversations || [];
 
-  const updateLeadMutation = useMutation({
-    mutationFn: async (updates: any) => {
-      const response = await apiRequest(
-        "PATCH",
-        `/api/leads/${selectedConversation.lead.id}/manual`,
-        updates
-      );
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setSelectedConversation((prev: any) => ({
-        ...prev,
-        lead: { ...prev.lead, ...data },
-        qualificationScore: data.manualScore || prev.qualificationScore,
-      }));
-      queryClient.invalidateQueries({
-        queryKey: [`/api/dashboard/${selectedClientId}`],
-      });
-      refetch();
-      toast({
-        title: "Lead updated",
-        description: "Changes saved successfully",
-      });
-    },
-  });
-
-  const updateScore = (score: number) => {
-    updateLeadMutation.mutate({
-      manualScore: (score / 100).toString(),
-      isManualOverride: true,
-    });
-  };
-
-  const updateStatus = (status: string) => {
-    updateLeadMutation.mutate({ status });
-  };
-
-  const toggleTag = (tagName: string) => {
-    const currentTags = selectedConversation?.lead?.tags || [];
-    const newTags = currentTags.includes(tagName)
-      ? currentTags.filter((t: string) => t !== tagName)
-      : [...currentTags, tagName];
-    updateLeadMutation.mutate({ tags: newTags });
-  };
-
   const bookMeetingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const response = await fetch("/api/bookings/schedule", {
@@ -766,22 +718,6 @@ const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     });
   };
 
-  const saveNote = () => {
-    if (!internalNote.trim()) return;
-    updateLeadMutation.mutate({
-      internalNotes: internalNote,
-    });
-    setInternalNote("");
-  };
-
-  const setFollowUpReminder = (days: number) => {
-    const followUpDate = new Date();
-    followUpDate.setDate(followUpDate.getDate() + days);
-    updateLeadMutation.mutate({
-      nextFollowUpAt: followUpDate,
-    });
-  };
-
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const conversationId = urlParams.get("id");
@@ -824,15 +760,15 @@ const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     return matchesSearch && matchesStatus;
   });
 
-  const hotCount = conversations.filter((c: any) => {
-    const score = parseFloat(
-      c.lead?.manualScore ||
-        c.lead?.qualificationScore ||
-        c.qualificationScore ||
-        "0"
-    );
-    return score >= 0.6 || c.lead?.temperature === "hot";
-  }).length;
+const hotCount = conversations.filter((c: any) => {
+  const score = parseFloat(
+    c.lead?.manualScore ||
+      c.lead?.qualificationScore ||
+      c.qualificationScore ||
+      "0"
+  );
+  return score >= 0.6 || c.lead?.temperature === "hot";
+}).length;
   const aiHandlingCount = conversations.filter(
     (c: any) => c.isAiHandled === true
   ).length;
@@ -1303,90 +1239,90 @@ useEffect(() => {
   };
 
   const getStatusBadge = (conversation: any) => {
-    const temperature = conversation.lead?.temperature;
-    const status = conversation.lead?.status;
-    const tags = conversation.lead?.tags || [];
-    const isAiHandled = conversation.isAiHandled;
-    const score = parseFloat(
-      conversation.lead?.manualScore ||
-        conversation.lead?.qualificationScore ||
-        conversation.qualificationScore ||
-        "0"
-    );
+  const temperature = conversation.lead?.temperature;
+  const status = conversation.lead?.status;
+  const tags = conversation.lead?.tags || [];
+  const isAiHandled = conversation.isAiHandled;
+  const score = parseFloat(
+    conversation.lead?.manualScore ||
+      conversation.lead?.qualificationScore ||
+      conversation.qualificationScore ||
+      "0"
+  );
 
-    const isReopened = tags.includes("reopened");
-    const wasTerminated = tags.includes("terminated");
+  const isReopened = tags.includes("reopened");
+  const wasTerminated = tags.includes("terminated");
 
-    // PRIORITY 1: Reopened conversations
-    if (isReopened && !isAiHandled) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 text-xs">
-          🔄 Reopened
-        </Badge>
-      );
-    }
-
-    // PRIORITY 2: Terminated/Spam
-    if (status === "spam" || wasTerminated) {
-      return (
-        <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-xs">
-          🚫 Terminated
-        </Badge>
-      );
-    }
-
-    // PRIORITY 3: Not a lead
-    if (status === "not-a-lead") {
-      return (
-        <Badge className="bg-gray-100 text-gray-800 text-xs">
-          🚫 Not a Lead
-        </Badge>
-      );
-    }
-
-    // PRIORITY 4: VERY HOT (0.8+)
-    if (temperature === "hot" && score >= 0.8) {
-      return (
-        <Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white border-0 text-xs font-bold shadow-sm">
-          🔥🔥 Very Hot
-        </Badge>
-      );
-    }
-
-    // PRIORITY 5: HOT (0.6-0.79)
-    if (temperature === "hot" || score >= 0.6) {
-      return (
-        <Badge className="bg-red-100 text-red-800 border border-red-200 text-xs font-semibold">
-          🔥 Hot
-        </Badge>
-      );
-    }
-
-    // PRIORITY 6: WARM (0.4-0.59)
-    if (temperature === "warm" || score >= 0.4) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 text-xs">😐 Warm</Badge>
-      );
-    }
-
-    // 🆕 PRIORITY 7: Show handling mode for all other states
-    if (!isAiHandled) {
-      return (
-        <Badge className="bg-green-100 text-green-800 border border-green-200 text-xs flex items-center gap-1">
-          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-          You
-        </Badge>
-      );
-    }
-
-    // DEFAULT: AI handling
+  // PRIORITY 1: Reopened conversations
+  if (isReopened && !isAiHandled) {
     return (
-      <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-xs flex items-center gap-1">
-        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-        AI
+      <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 text-xs">
+        🔄 Reopened
       </Badge>
     );
-  };
+  }
+
+  // PRIORITY 2: Terminated/Spam
+  if (status === "spam" || wasTerminated) {
+    return (
+      <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-xs">
+        🚫 Terminated
+      </Badge>
+    );
+  }
+
+  // PRIORITY 3: Not a lead
+  if (status === "not-a-lead") {
+    return (
+      <Badge className="bg-gray-100 text-gray-800 text-xs">
+        🚫 Not a Lead
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 4: VERY HOT (0.8+) - NEW TIER
+  if (temperature === "hot" && score >= 0.8) {
+    return (
+      <Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white border-0 text-xs font-bold shadow-sm">
+        🔥🔥 Very Hot
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 5: HOT (0.6-0.79) - LOWERED THRESHOLD
+  if (temperature === "hot" || score >= 0.6) {
+    return (
+      <Badge className="bg-red-100 text-red-800 border border-red-200 text-xs font-semibold">
+        🔥 Hot
+      </Badge>
+    );
+  }
+
+  // PRIORITY 6: WARM (0.4-0.59)
+  if (temperature === "warm" || score >= 0.4) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 text-xs">😐 Warm</Badge>
+    );
+  }
+
+  // PRIORITY 7: Show handling mode for all other states
+  if (!isAiHandled) {
+    return (
+      <Badge className="bg-green-100 text-green-800 border border-green-200 text-xs flex items-center gap-1">
+        <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+        You
+      </Badge>
+    );
+  }
+
+  // DEFAULT: AI handling
+  return (
+    <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-xs flex items-center gap-1">
+      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+      AI
+    </Badge>
+  );
+};
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], {
@@ -1800,192 +1736,9 @@ useEffect(() => {
                     </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Manual Controls */}
-                  <div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowManualControls(!showManualControls)}
-                      className="w-full justify-between p-2 h-auto hover:bg-slate-50 touch-target"
-                    >
-                      <span className="text-xs font-semibold text-slate-700">
-                        Manual Controls
-                      </span>
-                      <Target
-                        className={`w-3 h-3 transition-transform ${
-                          showManualControls ? "rotate-90" : ""
-                        }`}
-                      />
-                    </Button>
-                    {showManualControls && (
-                      <div className="mt-3 space-y-3">
-                        {/* Score Slider */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-slate-500">
-                              Override Score
-                            </span>
-                            <span className="text-xs font-semibold text-slate-900">
-                              {(
-                                parseFloat(
-                                  selectedConversation.lead?.manualScore ||
-                                    selectedConversation.qualificationScore ||
-                                    "0"
-                                ) * 100
-                              ).toFixed(0)}
-                              %
-                            </span>
-                          </div>
-                          <Slider
-                            value={[
-                              parseFloat(
-                                selectedConversation.lead?.manualScore ||
-                                  selectedConversation.qualificationScore ||
-                                  "0"
-                              ) * 100,
-                            ]}
-                            onValueChange={(value) => updateScore(value[0])}
-                            max={100}
-                            step={1}
-                            className="w-full touch-target"
-                          />
-                        </div>
-
-                        {/* Temperature */}
-                        <div>
-                          <span className="text-xs text-slate-500 block mb-1">
-                            Temperature
-                          </span>
-                          <Select
-                            value={
-                              selectedConversation.lead?.temperature || "cold"
-                            }
-                            onValueChange={(temp) =>
-                              updateLeadMutation.mutate({ temperature: temp })
-                            }
-                          >
-                            <SelectTrigger className="w-full h-11 text-sm touch-target">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="cold">❄️ Cold</SelectItem>
-                              <SelectItem value="warm">😐 Warm</SelectItem>
-                              <SelectItem value="hot">🔥 Hot</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Status */}
-                        <div>
-                          <span className="text-xs text-slate-500 block mb-1">
-                            Sales Stage
-                          </span>
-                          <Select
-                            value={selectedConversation.lead?.status || "new"}
-                            onValueChange={updateStatus}
-                          >
-                            <SelectTrigger className="w-full h-11 text-sm touch-target">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="new">🆕 New</SelectItem>
-                              <SelectItem value="contacted">
-                                📞 Contacted
-                              </SelectItem>
-                              <SelectItem value="qualified">
-                                ✅ Qualified
-                              </SelectItem>
-                              <SelectItem value="proposal-sent">
-                                📄 Proposal Sent
-                              </SelectItem>
-                              <SelectItem value="negotiation">
-                                🤝 Negotiation
-                              </SelectItem>
-                              <SelectItem value="converted">
-                                💰 Converted
-                              </SelectItem>
-                              <SelectItem value="lost">❌ Lost</SelectItem>
-                              <SelectItem value="on-hold">
-                                ⏸️ On Hold
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Tags */}
-                        <div>
-                          <span className="text-xs text-slate-500 block mb-1">
-                            Tags
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            {availableTags?.slice(0, 6).map((tag: any) => {
-                              const isSelected =
-                                selectedConversation.lead?.tags?.includes(
-                                  tag.name
-                                );
-                              return (
-                                <button
-                                  key={tag.id}
-                                  onClick={() => toggleTag(tag.name)}
-                                  className={`px-3 py-2 rounded-full text-xs font-medium transition-all touch-target ${
-                                    isSelected
-                                      ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                  }`}
-                                >
-                                  {tag.name}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <Separator />       
 
                   <Separator />
-
-                  {/* Quick Actions */}
-                  <div className="space-y-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start h-11 text-sm touch-target"
-                      onClick={() => {
-                        updateLeadMutation.mutate({
-                          tags: [
-                            ...(selectedConversation.lead?.tags || []),
-                            "Hot Lead",
-                          ],
-                          manualScore: "0.9",
-                          isManualOverride: true,
-                        });
-                      }}
-                    >
-                      <Star className="w-4 h-4 mr-2" />
-                      Mark Hot Lead
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start h-11 text-sm touch-target"
-                      onClick={() => updateStatus("converted")}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Mark Converted
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start h-11 text-sm text-red-600 touch-target"
-                      onClick={() => updateStatus("lost")}
-                    >
-                      <AlertTriangle className="w-4 h-4 mr-2" />
-                      Mark Lost
-                    </Button>
-                  </div>
                 </div>
               </SheetContent>
             </Sheet>
@@ -3735,414 +3488,156 @@ useEffect(() => {
           )}
         </div>
 
+       
         {/* Right: Desktop Lead Detail Sidebar */}
-        {selectedConversation && showLeadDetails && (
-          <div className="hidden lg:block w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-            {/* ... Same content as mobile Sheet ... */}
-            {/* Copy the entire lead details content from the mobile Sheet above */}
-            <div className="p-4 border-b border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Lead Details
-              </h3>
-              {parseFloat(
+{selectedConversation && showLeadDetails && (
+  <div className="hidden lg:block w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+    <div className="p-4 border-b border-slate-200">
+      <h3 className="text-sm font-semibold text-slate-900">
+        Lead Details
+      </h3>
+      {parseFloat(
+        selectedConversation.lead?.manualScore ||
+          selectedConversation.lead?.qualificationScore ||
+          selectedConversation.qualificationScore ||
+          "0"
+      ) >= 0.6 && (
+        <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          <span className="text-xs font-semibold text-red-800">
+            {parseFloat(
+              selectedConversation.lead?.manualScore ||
+                selectedConversation.lead?.qualificationScore ||
+                selectedConversation.qualificationScore ||
+                "0"
+            ) >= 0.8
+              ? "🔥🔥 VERY HOT LEAD"
+              : "🔥 HOT LEAD"}
+          </span>
+        </div>
+      )}
+    </div>
+
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Contact Info */}
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Phone</span>
+          <span className="text-slate-900 font-medium">
+            {selectedConversation.lead?.phone || "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Email</span>
+          <span className="text-slate-900 text-xs truncate ml-2">
+            {selectedConversation.lead?.email || "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Company</span>
+          <span className="text-slate-900 font-medium">
+            {selectedConversation.lead?.company || "—"}
+          </span>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Lead Metrics */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Temperature</span>
+          <Badge
+            className={`text-xs ${
+              selectedConversation.lead?.temperature === "hot"
+                ? "bg-red-100 text-red-800"
+                : selectedConversation.lead?.temperature === "warm"
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-blue-100 text-blue-800"
+            }`}
+          >
+            {selectedConversation.lead?.temperature === "hot" && "🔥 Hot"}
+            {selectedConversation.lead?.temperature === "warm" && "😐 Warm"}
+            {selectedConversation.lead?.temperature === "cold" && "❄️ Cold"}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Status</span>
+          <Badge variant="outline" className="text-xs capitalize">
+            {selectedConversation.lead?.status || "new"}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Score</span>
+          <Badge
+            className={`text-xs ${
+              parseFloat(
                 selectedConversation.lead?.manualScore ||
                   selectedConversation.lead?.qualificationScore ||
                   selectedConversation.qualificationScore ||
                   "0"
-              ) >= 0.7 && (
-                <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs font-semibold text-red-800">
-                    🔥 HOT LEAD
-                  </span>
-                </div>
-              )}
-            </div>
+              ) >= 0.8
+                ? "bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold"
+                : parseFloat(
+                    selectedConversation.lead?.manualScore ||
+                      selectedConversation.lead?.qualificationScore ||
+                      selectedConversation.qualificationScore ||
+                      "0"
+                  ) >= 0.6
+                ? "bg-red-100 text-red-800 font-semibold"
+                : parseFloat(
+                    selectedConversation.lead?.manualScore ||
+                      selectedConversation.lead?.qualificationScore ||
+                      selectedConversation.qualificationScore ||
+                      "0"
+                  ) >= 0.4
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-blue-100 text-blue-800"
+            }`}
+          >
+            {(
+              parseFloat(
+                selectedConversation.lead?.manualScore ||
+                  selectedConversation.lead?.qualificationScore ||
+                  selectedConversation.qualificationScore ||
+                  "0"
+              ) * 100
+            ).toFixed(0)}
+            %
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Source</span>
+          <span className="text-xs text-slate-600">
+            {selectedConversation.lead?.source || "unknown"}
+          </span>
+        </div>
+      </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Phone</span>
-                  <span className="text-slate-900 font-medium">
-                    {selectedConversation.lead?.phone || "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Email</span>
-                  <span className="text-slate-900 text-xs truncate ml-2">
-                    {selectedConversation.lead?.email || "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Company</span>
-                  <span className="text-slate-900 font-medium">
-                    {selectedConversation.lead?.company || "—"}
-                  </span>
-                </div>
-              </div>
+      <Separator />
 
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Temperature</span>
-                  <Badge
-                    className={`text-xs ${
-                      selectedConversation.lead?.temperature === "hot"
-                        ? "bg-red-100 text-red-800"
-                        : selectedConversation.lead?.temperature === "warm"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {selectedConversation.lead?.temperature === "hot" &&
-                      "🔥 Hot"}
-                    {selectedConversation.lead?.temperature === "warm" &&
-                      "😐 Warm"}
-                    {selectedConversation.lead?.temperature === "cold" &&
-                      "❄️ Cold"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Status</span>
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {selectedConversation.lead?.status || "new"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Score</span>
-                  <Badge
-                    className={`text-xs ${
-                      parseFloat(
-                        selectedConversation.lead?.manualScore ||
-                          selectedConversation.lead?.qualificationScore ||
-                          selectedConversation.qualificationScore ||
-                          "0"
-                      ) >= 0.7
-                        ? "bg-red-100 text-red-800"
-                        : parseFloat(
-                            selectedConversation.lead?.manualScore ||
-                              selectedConversation.lead?.qualificationScore ||
-                              selectedConversation.qualificationScore ||
-                              "0"
-                          ) >= 0.4
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-green-100 text-green-800"
-                    }`}
-                  >
-                    {(
-                      parseFloat(
-                        selectedConversation.lead?.manualScore ||
-                          selectedConversation.lead?.qualificationScore ||
-                          selectedConversation.qualificationScore ||
-                          "0"
-                      ) * 100
-                    ).toFixed(0)}
-                    %
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Source</span>
-                  <span className="text-xs text-slate-600">
-                    {selectedConversation.lead?.source || "unknown"}
-                  </span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Manual Controls */}
-              <div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowManualControls(!showManualControls)}
-                  className="w-full justify-between p-2 h-auto hover:bg-slate-50"
-                >
-                  <span className="text-xs font-semibold text-slate-700">
-                    Manual Controls
-                  </span>
-                  <Target
-                    className={`w-3 h-3 transition-transform ${
-                      showManualControls ? "rotate-90" : ""
-                    }`}
-                  />
-                </Button>
-                {showManualControls && (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-500">
-                          Override Score
-                        </span>
-                        <span className="text-xs font-semibold text-slate-900">
-                          {(
-                            parseFloat(
-                              selectedConversation.lead?.manualScore ||
-                                selectedConversation.qualificationScore ||
-                                "0"
-                            ) * 100
-                          ).toFixed(0)}
-                          %
-                        </span>
-                      </div>
-                      <Slider
-                        value={[
-                          parseFloat(
-                            selectedConversation.lead?.manualScore ||
-                              selectedConversation.qualificationScore ||
-                              "0"
-                          ) * 100,
-                        ]}
-                        onValueChange={(value) => updateScore(value[0])}
-                        max={100}
-                        step={1}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1">
-                        Temperature Override
-                      </span>
-                      <Select
-                        value={selectedConversation.lead?.temperature || "cold"}
-                        onValueChange={(temp) =>
-                          updateLeadMutation.mutate({ temperature: temp })
-                        }
-                      >
-                        <SelectTrigger className="w-full h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cold">❄️ Cold</SelectItem>
-                          <SelectItem value="warm">😐 Warm</SelectItem>
-                          <SelectItem value="hot">🔥 Hot</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1">
-                        Sales Stage
-                      </span>
-                      <Select
-                        value={selectedConversation.lead?.status || "new"}
-                        onValueChange={updateStatus}
-                      >
-                        <SelectTrigger className="w-full h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="new">🆕 New</SelectItem>
-                          <SelectItem value="contacted">
-                            📞 Contacted
-                          </SelectItem>
-                          <SelectItem value="qualified">
-                            ✅ Qualified
-                          </SelectItem>
-                          <SelectItem value="proposal-sent">
-                            📄 Proposal Sent
-                          </SelectItem>
-                          <SelectItem value="negotiation">
-                            🤝 Negotiation
-                          </SelectItem>
-                          <SelectItem value="converted">
-                            💰 Converted
-                          </SelectItem>
-                          <SelectItem value="lost">❌ Lost</SelectItem>
-                          <SelectItem value="on-hold">⏸️ On Hold</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1">
-                        Tags
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {availableTags?.slice(0, 6).map((tag: any) => {
-                          const isSelected =
-                            selectedConversation.lead?.tags?.includes(tag.name);
-                          return (
-                            <button
-                              key={tag.id}
-                              onClick={() => toggleTag(tag.name)}
-                              className={`px-2 py-1 rounded-full text-xs font-medium transition-all ${
-                                isSelected
-                                  ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-300"
-                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                              }`}
-                            >
-                              {tag.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1">
-                        Internal Note
-                      </span>
-                      {selectedConversation.lead?.internalNotes && (
-                        <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                          {selectedConversation.lead.internalNotes}
-                        </div>
-                      )}
-                      <div className="flex gap-1">
-                        <Input
-                          placeholder="Add note..."
-                          value={internalNote}
-                          onChange={(e) => setInternalNote(e.target.value)}
-                          className="text-xs h-8"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={saveNote}
-                          disabled={!internalNote.trim()}
-                          className="h-8 px-2"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-xs text-slate-500 block mb-1">
-                        Follow-up
-                      </span>
-                      <div className="grid grid-cols-3 gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFollowUpReminder(1)}
-                          className="h-7 text-xs"
-                        >
-                          1d
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFollowUpReminder(3)}
-                          className="h-7 text-xs"
-                        >
-                          3d
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setFollowUpReminder(7)}
-                          className="h-7 text-xs"
-                        >
-                          7d
-                        </Button>
-                      </div>
-                      {selectedConversation.lead?.nextFollowUpAt && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          📅{" "}
-                          {new Date(
-                            selectedConversation.lead.nextFollowUpAt
-                          ).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-8 text-xs"
-                  onClick={() => {
-                    updateLeadMutation.mutate({
-                      tags: [
-                        ...(selectedConversation.lead?.tags || []),
-                        "Hot Lead",
-                      ],
-                      manualScore: "0.9",
-                      isManualOverride: true,
-                    });
-                  }}
-                >
-                  <Star className="w-3 h-3 mr-1" />
-                  Mark Hot Lead
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-8 text-xs"
-                  onClick={() => updateStatus("converted")}
-                >
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  Mark Converted
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start h-8 text-xs text-red-600"
-                  onClick={() => updateStatus("lost")}
-                >
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  Mark Lost
-                </Button>
-              </div>
-
-              <Separator />
-
-              {showManualControls && activityLog && activityLog.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-slate-700">
-                      Activity Log
-                    </span>
-                    <History className="w-3 h-3 text-slate-400" />
-                  </div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {activityLog.slice(0, 5).map((log: any) => (
-                      <div
-                        key={log.id}
-                        className="text-xs p-2 bg-slate-50 rounded"
-                      >
-                        <div className="flex justify-between items-start">
-                          <span className="font-medium text-slate-900 text-xs">
-                            {log.action.replace(/_/g, " ")}
-                          </span>
-                          <span className="text-slate-400 text-xs">
-                            {new Date(log.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {log.oldValue && log.newValue && (
-                          <div className="text-slate-600 text-xs mt-0.5">
-                            {log.oldValue} → {log.newValue}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-2 border-t border-slate-200">
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Created</span>
-                  <span>
-                    {new Date(
-                      selectedConversation.lead?.createdAt
-                    ).toLocaleDateString()}
-                  </span>
-                </div>
-                {selectedConversation.lead?.responseTimeSeconds && (
-                  <div className="flex justify-between text-xs text-slate-500 mt-1">
-                    <span>Response</span>
-                    <span className="font-semibold text-green-600">
-                      {selectedConversation.lead.responseTimeSeconds}s
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Lead Timeline */}
+      <div className="pt-2 border-t border-slate-200">
+        <div className="flex justify-between text-xs text-slate-500">
+          <span>Created</span>
+          <span>
+            {new Date(
+              selectedConversation.lead?.createdAt
+            ).toLocaleDateString()}
+          </span>
+        </div>
+        {selectedConversation.lead?.responseTimeSeconds && (
+          <div className="flex justify-between text-xs text-slate-500 mt-1">
+            <span>Response</span>
+            <span className="font-semibold text-green-600">
+              {selectedConversation.lead.responseTimeSeconds}s
+            </span>
           </div>
         )}
+      </div>
+    </div>
+  </div>
+)}
       </div>
 
       {/* Book Meeting Modal */}

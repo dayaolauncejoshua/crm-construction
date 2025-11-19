@@ -1029,8 +1029,26 @@ export default function Dashboard() {
                               <div className="font-medium text-slate-900 text-sm">
                                 {lead.lead?.firstName} {lead.lead?.lastName}
                               </div>
-                              <Badge className="bg-construction/10 text-construction border border-construction/20 text-xs">
-                                🔥 Hot
+                              <Badge
+                                className={`text-xs ${
+                                  parseFloat(
+                                    lead.lead?.manualScore ||
+                                      lead.lead?.qualificationScore ||
+                                      lead.qualificationScore ||
+                                      "0"
+                                  ) >= 0.8
+                                    ? "bg-gradient-to-r from-red-500 to-orange-500 text-white border-0 font-bold"
+                                    : "bg-construction/10 text-construction border border-construction/20"
+                                }`}
+                              >
+                                {parseFloat(
+                                  lead.lead?.manualScore ||
+                                    lead.lead?.qualificationScore ||
+                                    lead.qualificationScore ||
+                                    "0"
+                                ) >= 0.8
+                                  ? "🔥🔥 Very Hot"
+                                  : "🔥 Hot"}
                               </Badge>
                             </div>
                             <div className="text-xs text-slate-600">
