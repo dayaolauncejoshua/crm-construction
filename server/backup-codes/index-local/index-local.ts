@@ -1,4 +1,5 @@
 // server/index.ts
+import { videoSOPs } from "./../shared/advanced-schema";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
@@ -10,25 +11,28 @@ import stripeWebhookRouter from "./routes/stripe-webhook";
 import voice_AI_CallRouter from "./routes/twilio-call.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
+// 🛑 REMOVED: import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
-import browserTestRouter from "./routes/browser-test.route";
-import cors from "cors";
 
-// Import pool from db.ts
+import { WebSocketServer } from "ws";
+import { leadQualificationService } from "./services/leadQualification";
+import browserTestRouter from "./routes/browser-test.route";
+// ⭐ 1. Import the pool from your db.ts file
+// (Assuming your db.ts file is at 'server/db.ts')
 import { pool } from "./db";
 
+// ⭐ 2. Re-export the pool so other files don't break
+export { pool };
+
+// 🛑 REMOVED: const { Pool } = pg;
 config();
+config({ override: false });
 
-// ✅ SMART ENVIRONMENT DETECTION
-const isNgrok = process.env.NGROK_MODE === "true";
-const isProduction = process.env.NODE_ENV === "production";
-const mode = isNgrok ? "NGROK" : isProduction ? "PRODUCTION" : "DEVELOPMENT";
+// 🛑 3. REMOVED the duplicate pool creation block that was here
 
-console.log(`🚀 Starting server in ${mode} mode`);
-
-// Database connection monitoring
+// ✅ These listeners will now attach to the *imported* pool
 pool.on("error", (err) => {
   console.error("❌ Unexpected database error:", err);
   if (err.message?.includes("ENOTFOUND")) {
@@ -43,6 +47,9 @@ pool.query("SELECT NOW()", (err, res) => {
     if (err.message?.includes("ENOTFOUND")) {
       console.error("💡 Cannot resolve database hostname");
       console.error("💡 Check your DATABASE_URL in .env");
+      console.error(
+        "💡 If using Neon, visit https://console.neon.tech to wake up database"
+      );
     }
   } else {
     console.log("✅ Database connected successfully");
@@ -51,60 +58,44 @@ pool.query("SELECT NOW()", (err, res) => {
 
 const app = express();
 
-// ✅ SMART PROXY CONFIGURATION
-// Always trust proxy for ngrok and production (Render)
+// ✅ CHANGE: Always trust proxy for ngrok (even in dev)
 app.set("trust proxy", 1);
 
-// ✅ SMART CORS CONFIGURATION
-app.use(
-  cors({
-    origin: isNgrok
-      ? true // Allow all origins for ngrok testing
-      : isProduction
-      ? process.env.FRONTEND_URL || false // Specific origin in production
-      : "http://localhost:5000", // Local dev
-    credentials: true,
-  })
-);
-
-// Stripe webhook (raw body)
 app.use(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   stripeWebhookRouter
 );
 
-// Twilio webhook (raw body)
 app.use("/api/twilioCall_webhook", express.raw({ type: "application/json" }));
-
-// Standard middleware
 app.use(express.json());
+
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ SMART SESSION CONFIGURATION
 const PgSession = connectPgSimple(session);
+const isProduction = process.env.NODE_ENV === "production";
 
 app.use("/api/twilioCall_webhook", voice_AI_CallRouter);
 
 app.use(
   session({
     store: new PgSession({
-  pool: pool as any, // Cast to any to satisfy type checker
-  tableName: "sessions",
-  createTableIfMissing: true,
-}),
+      pool: pool, // ✅ 4. This now uses the one, correct, imported pool
+      tableName: "sessions",
+      createTableIfMissing: true,
+    }),
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
     resave: false,
     saveUninitialized: false,
     rolling: true,
     name: "sessionId",
-    proxy: true, // Always true for both ngrok and production
+    proxy: true, // ✅ CHANGE: Always true for ngrok
     cookie: {
-      secure: isProduction || isNgrok, // ✅ HTTPS for production and ngrok
+      secure: false, // ✅ CHANGE: False for local testing (ngrok uses HTTPS but forwards to HTTP)
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: isProduction || isNgrok ? "none" : "lax", // ✅ Cross-origin for production/ngrok
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: "lax",
       path: "/",
     },
   })
@@ -112,14 +103,12 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(loadUser);
 
-// Routes
+app.use(loadUser);
 app.use("/api/browser-test", browserTestRouter);
 app.use(authRouter);
 app.use(twoFactorRoutes);
 
-// Request logging
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -162,19 +151,19 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
-  // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+
     res.status(status).json({ message });
     throw err;
   });
 
-  // Setup Vite in development, serve static in production
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
+
     app.get("*", (req: Request, res: Response) => {
       res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
     });
@@ -183,23 +172,15 @@ app.use((req, res, next) => {
   const PORT = parseInt(process.env.PORT || "5000", 10);
   server.listen(PORT, "0.0.0.0", () => {
     log(`🚀 Server running on port ${PORT}`);
-    log(`📱 Environment: ${mode}`);
-    log(`🔐 Session store: PostgreSQL`);
+    log(`📱 Environment: ${app.get("env")}`);
+    log(`🔐 Session store: PostgreSQL (using shared db.ts pool)`); // Updated log
     log(`🧠 AI Pattern Learning: Active`);
     log(`🔌 WebSocket server: Initialized`);
-    
-    // ✅ Mode-specific logs
-    if (isNgrok) {
-      log(`🌐 NGROK MODE - Ready for WhatsApp webhook testing`);
-      log(`🔗 Set webhook to: https://YOUR-NGROK-URL.ngrok-free.app/api/whatsapp/webhook`);
-    } else if (isProduction) {
-      log(`🌍 PRODUCTION MODE - CORS: ${process.env.FRONTEND_URL}`);
-    } else {
-      log(`🛠️ DEVELOPMENT MODE - Local testing only`);
-    }
+    log(
+      `🌐 Ngrok-ready: Set webhook to https://YOUR-NGROK-URL.ngrok-free.app/api/whatsapp/webhook`
+    );
   });
 
-  // Graceful shutdown
   process.on("SIGTERM", () => {
     console.log("⚠️ SIGTERM signal received: closing HTTP server");
     server.close(() => {
