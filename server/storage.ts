@@ -263,6 +263,97 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async deleteClient(clientId: string): Promise<void> {
+  console.log(`🗑️ [DELETE CLIENT] Starting cascade deletion for: ${clientId}`);
+
+  try {
+    // Get all leads for this client
+    const clientLeads = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .where(eq(leads.clientId, clientId));
+
+    const leadIds = clientLeads.map((l) => l.id);
+    console.log(`📋 Found ${leadIds.length} leads to delete`);
+
+    // Get all conversations for this client
+    const clientConversations = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.clientId, clientId));
+
+    const conversationIds = clientConversations.map((c) => c.id);
+    console.log(`💬 Found ${conversationIds.length} conversations`);
+
+    // Delete messages for all conversations
+    for (const conversationId of conversationIds) {
+      await db
+        .delete(messages)
+        .where(eq(messages.conversationId, conversationId));
+    }
+    console.log(`✅ Deleted messages`);
+
+    // Delete conversations
+    await db.delete(conversations).where(eq(conversations.clientId, clientId));
+    console.log(`✅ Deleted conversations`);
+
+    // Delete bookings
+    await db.delete(bookings).where(eq(bookings.clientId, clientId));
+    console.log(`✅ Deleted bookings`);
+
+    // Delete follow-ups
+    await db.delete(followUps).where(eq(followUps.clientId, clientId));
+    console.log(`✅ Deleted follow-ups`);
+
+    // Delete follow-up sequences and steps
+    const sequences = await db
+      .select({ id: followUpSequences.id })
+      .from(followUpSequences)
+      .where(eq(followUpSequences.clientId, clientId));
+
+    for (const seq of sequences) {
+      await db.delete(followUpSteps).where(eq(followUpSteps.sequenceId, seq.id));
+    }
+    await db.delete(followUpSequences).where(eq(followUpSequences.clientId, clientId));
+    console.log(`✅ Deleted follow-up sequences`);
+
+    // Delete lead activity logs
+    for (const leadId of leadIds) {
+      await db.delete(leadActivityLog).where(eq(leadActivityLog.leadId, leadId));
+    }
+    console.log(`✅ Deleted lead activity logs`);
+
+    // Delete leads
+    await db.delete(leads).where(eq(leads.clientId, clientId));
+    console.log(`✅ Deleted leads`);
+
+    // Delete VSLs
+    await db.delete(vsls).where(eq(vsls.clientId, clientId));
+    console.log(`✅ Deleted VSLs`);
+
+    // Delete quick reply templates
+    await db.delete(quickReplyTemplates).where(eq(quickReplyTemplates.clientId, clientId));
+    console.log(`✅ Deleted quick reply templates`);
+
+    // Delete lead tags
+    await db.delete(leadTags).where(eq(leadTags.clientId, clientId));
+    console.log(`✅ Deleted lead tags`);
+
+    // Delete analytics
+    await db.delete(analytics).where(eq(analytics.clientId, clientId));
+    console.log(`✅ Deleted analytics`);
+
+    // Finally, delete the client
+    await db.delete(clients).where(eq(clients.id, clientId));
+    console.log(`✅ Deleted client`);
+
+    console.log(`🎯 [DELETE CLIENT] Cascade deletion completed: ${clientId}`);
+  } catch (error) {
+    console.error(`❌ [DELETE CLIENT] Error:`, error);
+    throw new Error("Failed to delete client. Please contact support.");
+  }
+}
+
   // Lead operations
   async getLeads(clientId: string, limit = 50): Promise<Lead[]> {
     return await db

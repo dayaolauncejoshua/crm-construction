@@ -946,6 +946,110 @@ app.get("/api/leads/:clientId/export", requireAuth, async (req, res) => {
     }
   });
 
+  // Export clients to CSV
+app.get("/api/clients/export", requireAuth, async (req, res) => {
+  try {
+    const userId = req.query.userId as string;
+    const requestUser = req.user!;
+
+    // Verify ownership
+    let clients;
+    if (requestUser.role === "super_admin") {
+      clients = await storage.getAllClientsWithUsers();
+    } else {
+      if (!userId || userId !== requestUser.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      clients = await storage.getClients(userId);
+    }
+
+    // Build CSV
+    const csvHeaders = [
+      "Company Name",
+      "Industry",
+      "Website",
+      "Email",
+      "Phone",
+      "WhatsApp Number",
+      "Status",
+      "Created Date",
+    ].join(",");
+
+    const csvRows = clients.map((client: any) => {
+      const created = client.createdAt ? new Date(client.createdAt).toLocaleDateString() : "";
+      
+      return [
+        `"${client.name || ""}"`,
+        `"${client.industry || ""}"`,
+        `"${client.website || ""}"`,
+        `"${client.email || ""}"`,
+        `"${client.phone || ""}"`,
+        `"${client.whatsappNumber || ""}"`,
+        `"${client.isActive ? "Active" : "Inactive"}"`,
+        `"${created}"`,
+      ].join(",");
+    });
+
+    const csv = [csvHeaders, ...csvRows].join("\n");
+
+    // Set headers for download
+    const filename = `clients-export-${new Date().toISOString().split("T")[0]}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    res.send(csv);
+  } catch (error) {
+    console.error("Error exporting clients:", error);
+    res.status(500).json({ message: "Failed to export clients" });
+  }
+});
+
+// Delete client
+app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const requestUser = req.user!;
+
+    // Get client to verify ownership
+    const client = await storage.getClient(clientId);
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // Verify ownership (super admin cannot delete)
+    if (requestUser.role === "super_admin") {
+      return res.status(403).json({
+        message: "Super admins cannot delete clients.",
+      });
+    }
+
+    if (client.userId !== requestUser.id) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // Delete client (cascade)
+    await storage.deleteClient(clientId);
+
+    // Log activity
+    await storage.logUserActivity(
+      requestUser.id,
+      "client_deleted",
+      "client",
+      {
+        clientId,
+        clientName: client.name,
+      }
+    );
+
+    res.json({ success: true, message: "Client deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting client:", error);
+    res.status(500).json({
+      message: error.message || "Failed to delete client",
+    });
+  }
+});
+
   // ============================ DASHBOARD ROUTES  ==============================
 
   // Dashboard data
