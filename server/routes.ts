@@ -205,83 +205,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================= LEADS ROUTE ======================================
 
   // Landing page lead capture
-app.post("/api/leads", async (req, res) => {
-  try {
-    const leadData = insertLeadSchema.parse(req.body);
+  app.post("/api/leads", async (req, res) => {
+    try {
+      const leadData = insertLeadSchema.parse(req.body);
 
-    // Normalize phone and email BEFORE creating lead
-    if (leadData.phone) {
-      leadData.phone = normalizePhone(leadData.phone);
-    }
-    if (leadData.email) {
-      leadData.email = normalizeEmail(leadData.email);
-    }
+      // Normalize phone and email BEFORE creating lead
+      if (leadData.phone) {
+        leadData.phone = normalizePhone(leadData.phone);
+      }
+      if (leadData.email) {
+        leadData.email = normalizeEmail(leadData.email);
+      }
 
-    const auditInputs = req.body.auditInputs || {};
-    const auditType = req.body.auditType || "construction";
+      const auditInputs = req.body.auditInputs || {};
+      const auditType = req.body.auditType || "construction";
 
-    const firstName =
-      req.body.firstName ||
-      auditInputs.contactName?.split(" ")[0] ||
-      "Unknown";
-    const lastName =
-      req.body.lastName ||
-      auditInputs.contactName?.split(" ").slice(1).join(" ") ||
-      "";
+      const firstName =
+        req.body.firstName ||
+        auditInputs.contactName?.split(" ")[0] ||
+        "Unknown";
+      const lastName =
+        req.body.lastName ||
+        auditInputs.contactName?.split(" ").slice(1).join(" ") ||
+        "";
 
-    // Audit results
-    const auditResults = {
-      type: auditType,
-      source: "landing_page",
-      projectType: auditInputs.projectType || "Unknown",
-      timestamp: new Date().toISOString(),
-      topFinding: "Construction inquiry received",
-      wins: ["Lead captured from landing page"],
-      risks: [],
-      score: 15,
-      timeline: "To be discussed",
-      estimatedROI: "TBD",
-    };
+      // Audit results
+      const auditResults = {
+        type: auditType,
+        source: "landing_page",
+        projectType: auditInputs.projectType || "Unknown",
+        timestamp: new Date().toISOString(),
+        topFinding: "Construction inquiry received",
+        wins: ["Lead captured from landing page"],
+        risks: [],
+        score: 15,
+        timeline: "To be discussed",
+        estimatedROI: "TBD",
+      };
 
-    // Calculate temperature
-    const qualificationScore = 0.15;
-    let temperature: "hot" | "warm" | "cold";
+      // Calculate temperature
+      const qualificationScore = 0.15;
+      let temperature: "hot" | "warm" | "cold";
 
-    if (qualificationScore >= 0.7) {
-      temperature = "hot";
-    } else if (qualificationScore >= 0.4) {
-      temperature = "warm";
-    } else {
-      temperature = "cold";
-    }
+      if (qualificationScore >= 0.7) {
+        temperature = "hot";
+      } else if (qualificationScore >= 0.4) {
+        temperature = "warm";
+      } else {
+        temperature = "cold";
+      }
 
-    // ✅ UPSERT: Create or update lead
-    const lead = await storage.createLead({
-      ...leadData,
-      firstName,
-      lastName,
-      auditResults: auditResults,
-      status: "new",
-      qualificationScore: "0.15",
-      temperature: temperature,
-    });
+      // ✅ UPSERT: Create or update lead
+      const lead = await storage.createLead({
+        ...leadData,
+        firstName,
+        lastName,
+        auditResults: auditResults,
+        status: "new",
+        qualificationScore: "0.15",
+        temperature: temperature,
+      });
 
-    // ✅ Check if this is a re-submission
-    const isResubmission = (lead.submissionCount || 1) > 1;
+      // ✅ Check if this is a re-submission
+      const isResubmission = (lead.submissionCount || 1) > 1;
 
-    if (isResubmission) {
-      console.log(`♻️ [LEAD] Re-submission detected (count: ${lead.submissionCount})`);
-    }
+      if (isResubmission) {
+        console.log(
+          `♻️ [LEAD] Re-submission detected (count: ${lead.submissionCount})`
+        );
+      }
 
-    // ✅ Send WhatsApp message (only if new OR first time in 24hrs)
-    if (lead.phone) {
-      // Check if we should send intro message
-      const shouldSendIntro = !isResubmission || 
-        !lead.lastSubmittedAt || 
-        (new Date().getTime() - new Date(lead.lastSubmittedAt).getTime()) > 24 * 60 * 60 * 1000;
+      // ✅ Send WhatsApp message (only if new OR first time in 24hrs)
+      if (lead.phone) {
+        // Check if we should send intro message
+        const shouldSendIntro =
+          !isResubmission ||
+          !lead.lastSubmittedAt ||
+          new Date().getTime() - new Date(lead.lastSubmittedAt).getTime() >
+            24 * 60 * 60 * 1000;
 
-      if (shouldSendIntro) {
-        const introMessage = `Hi ${firstName}! 👋
+        if (shouldSendIntro) {
+          const introMessage = `Hi ${firstName}! 👋
 
 Thanks for reaching out about your construction project!
 
@@ -293,115 +297,128 @@ I'm here to help you get started. To provide the best assistance, could you tell
 
 Reply with the details and I'll connect you with our team right away! 🏗️`;
 
-        await whatsappService.sendTextMessage(lead.phone, introMessage);
+          await whatsappService.sendTextMessage(lead.phone, introMessage);
 
-        // Create or get conversation
-        let conversations = await storage.getConversations(
-          leadData.clientId,
-          100
-        );
-        let conversation = conversations.find((c) => c.leadId === lead.id);
-
-        if (!conversation) {
-          const newConv = await storage.createConversation({
-            leadId: lead.id,
-            clientId: lead.clientId,
-            channel: "whatsapp",
-            status: "active",
-            isAiHandled: true,
-            qualificationScore: "0.0",
-          });
-
-          conversations = await storage.getConversations(
+          // Create or get conversation
+          let conversations = await storage.getConversations(
             leadData.clientId,
             100
           );
-          conversation = conversations.find((c) => c.leadId === lead.id);
+          let conversation = conversations.find((c) => c.leadId === lead.id);
+
+          if (!conversation) {
+            const newConv = await storage.createConversation({
+              leadId: lead.id,
+              clientId: lead.clientId,
+              channel: "whatsapp",
+              status: "active",
+              isAiHandled: true,
+              qualificationScore: "0.0",
+            });
+
+            conversations = await storage.getConversations(
+              leadData.clientId,
+              100
+            );
+            conversation = conversations.find((c) => c.leadId === lead.id);
+          }
+
+          if (conversation) {
+            await storage.createMessage({
+              conversationId: conversation.id,
+              content: introMessage,
+              sender: "ai",
+              channel: "whatsapp",
+              sentAt: new Date(),
+              deliveredAt: new Date(),
+              isStatusMessage: true,
+            });
+
+            console.log(
+              "✅ Intro message sent and recorded for lead:",
+              lead.id
+            );
+
+            broadcastUpdate({
+              type: "new_conversation",
+              conversation: {
+                ...conversation,
+                lead: lead,
+              },
+              leadId: lead.id,
+            });
+          }
+        } else {
+          console.log(`ℹ️ [LEAD] Skipping intro message (sent recently)`);
         }
-
-        if (conversation) {
-          await storage.createMessage({
-            conversationId: conversation.id,
-            content: introMessage,
-            sender: "ai",
-            channel: "whatsapp",
-            sentAt: new Date(),
-            deliveredAt: new Date(),
-            isStatusMessage: true,
-          });
-
-          console.log("✅ Intro message sent and recorded for lead:", lead.id);
-
-          broadcastUpdate({
-            type: "new_conversation",
-            conversation: {
-              ...conversation,
-              lead: lead,
-            },
-            leadId: lead.id,
-          });
-        }
-      } else {
-        console.log(`ℹ️ [LEAD] Skipping intro message (sent recently)`);
       }
-    }
 
-    // Schedule follow-ups (only for new leads)
-    if (!isResubmission) {
-      try {
-        console.log(`📅 Scheduling follow-ups for new lead: ${lead.id}`);
+      // Schedule follow-ups (only for new leads)
+      if (!isResubmission) {
+        try {
+          console.log(`📅 Scheduling follow-ups for new lead: ${lead.id}`);
 
-        const sequences = await storage.getFollowUpSequences(leadData.clientId);
-        const defaultSequence = sequences.find(
-          (s) => s.isDefault && s.status === "active"
-        );
-
-        if (defaultSequence) {
-          const conversations = await storage.getConversations(
-            leadData.clientId,
-            100
+          const sequences = await storage.getFollowUpSequences(
+            leadData.clientId
           );
-          const conversation = conversations.find((c) => c.leadId === lead.id);
-
-          await storage.scheduleFollowUpSequence(
-            lead.id,
-            defaultSequence.id,
-            conversation?.id
+          const defaultSequence = sequences.find(
+            (s) => s.isDefault && s.status === "active"
           );
 
-          console.log(`✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`);
+          if (defaultSequence) {
+            const conversations = await storage.getConversations(
+              leadData.clientId,
+              100
+            );
+            const conversation = conversations.find(
+              (c) => c.leadId === lead.id
+            );
+
+            await storage.scheduleFollowUpSequence(
+              lead.id,
+              defaultSequence.id,
+              conversation?.id
+            );
+
+            console.log(
+              `✅ Scheduled ${defaultSequence.name} for lead: ${lead.id}`
+            );
+          }
+        } catch (error) {
+          console.error("❌ Error scheduling follow-ups:", error);
         }
-      } catch (error) {
-        console.error("❌ Error scheduling follow-ups:", error);
       }
-    }
 
-    // ✅ Return appropriate message
-    res.json({
-      success: true,
-      leadId: lead.id,
-      auditResults: lead.auditResults,
-      isResubmission,
-      submissionCount: lead.submissionCount,
-      message: isResubmission
-        ? "Thanks for the update! We'll be in touch soon."
-        : "Thanks! Check your WhatsApp for next steps.",
-    });
-  } catch (error) {
-    console.error("Error creating lead:", error);
-    
-    // ✅ Handle unique constraint violations gracefully
-    if (error instanceof Error && error.message.includes("unique constraint")) {
-      return res.status(409).json({
-        message: "This contact information is already in our system. We'll be in touch soon!",
+      // ✅ Return appropriate message
+      res.json({
+        success: true,
+        leadId: lead.id,
+        auditResults: lead.auditResults,
+        isResubmission,
+        submissionCount: lead.submissionCount,
+        message: isResubmission
+          ? "Thanks for the update! We'll be in touch soon."
+          : "Thanks! Check your WhatsApp for next steps.",
+      });
+    } catch (error) {
+      console.error("Error creating lead:", error);
+
+      // ✅ Handle unique constraint violations gracefully
+      if (
+        error instanceof Error &&
+        error.message.includes("unique constraint")
+      ) {
+        return res.status(409).json({
+          message:
+            "This contact information is already in our system. We'll be in touch soon!",
+        });
+      }
+
+      res.status(400).json({
+        message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-    
-    res.status(400).json({
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-});
+  });
   // Update lead with manual overrides
   app.patch("/api/leads/:leadId/manual", async (req, res) => {
     try {
@@ -524,71 +541,82 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
   });
 
   // Export leads to CSV
-app.get("/api/leads/:clientId/export", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const requestUser = req.user!;
+  app.get("/api/leads/:clientId/export", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
 
-    // Verify ownership
-    if (requestUser.role !== "super_admin") {
-      const client = await storage.getClient(clientId);
-      if (!client || client.userId !== requestUser.id) {
-        return res.status(403).json({ message: "Access denied" });
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
       }
-    }
 
-    const leads = await storage.getLeads(clientId, 10000); // Get all leads
+      const leads = await storage.getLeads(clientId, 10000); // Get all leads
 
-    // Build CSV
-    const csvHeaders = [
-      "Name",
-      "Email",
-      "Phone",
-      "Company",
-      "Score",
-      "Status",
-      "Temperature",
-      "Source",
-      "Created",
-      "Last Contact",
-      "Tags",
-    ].join(",");
-
-    const csvRows = leads.map((lead) => {
-      const name = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
-      const score = ((parseFloat(lead.manualScore || lead.qualificationScore || "0") * 100).toFixed(0));
-      const created = lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "";
-      const lastContact = lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : "Never";
-      const tags = Array.isArray(lead.tags) ? lead.tags.join("; ") : "";
-
-      return [
-        `"${name}"`,
-        `"${lead.email || ""}"`,
-        `"${lead.phone || ""}"`,
-        `"${lead.company || ""}"`,
-        `"${score}%"`,
-        `"${lead.status || "new"}"`,
-        `"${lead.temperature || "cold"}"`,
-        `"${lead.source || ""}"`,
-        `"${created}"`,
-        `"${lastContact}"`,
-        `"${tags}"`,
+      // Build CSV
+      const csvHeaders = [
+        "Name",
+        "Email",
+        "Phone",
+        "Company",
+        "Score",
+        "Status",
+        "Temperature",
+        "Source",
+        "Created",
+        "Last Contact",
+        "Tags",
       ].join(",");
-    });
 
-    const csv = [csvHeaders, ...csvRows].join("\n");
+      const csvRows = leads.map((lead) => {
+        const name = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+        const score = (
+          parseFloat(lead.manualScore || lead.qualificationScore || "0") * 100
+        ).toFixed(0);
+        const created = lead.createdAt
+          ? new Date(lead.createdAt).toLocaleDateString()
+          : "";
+        const lastContact = lead.lastContactedAt
+          ? new Date(lead.lastContactedAt).toLocaleDateString()
+          : "Never";
+        const tags = Array.isArray(lead.tags) ? lead.tags.join("; ") : "";
 
-    // Set headers for download
-    const filename = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return [
+          `"${name}"`,
+          `"${lead.email || ""}"`,
+          `"${lead.phone || ""}"`,
+          `"${lead.company || ""}"`,
+          `"${score}%"`,
+          `"${lead.status || "new"}"`,
+          `"${lead.temperature || "cold"}"`,
+          `"${lead.source || ""}"`,
+          `"${created}"`,
+          `"${lastContact}"`,
+          `"${tags}"`,
+        ].join(",");
+      });
 
-    res.send(csv);
-  } catch (error) {
-    console.error("Error exporting leads:", error);
-    res.status(500).json({ message: "Failed to export leads" });
-  }
-});
+      const csv = [csvHeaders, ...csvRows].join("\n");
+
+      // Set headers for download
+      const filename = `leads-export-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting leads:", error);
+      res.status(500).json({ message: "Failed to export leads" });
+    }
+  });
 
   // ============================ WHATSAPP WEBHOOK ROUTES  ==================================
 
@@ -947,108 +975,115 @@ app.get("/api/leads/:clientId/export", requireAuth, async (req, res) => {
   });
 
   // Export clients to CSV
-app.get("/api/clients/export", requireAuth, async (req, res) => {
-  try {
-    const userId = req.query.userId as string;
-    const requestUser = req.user!;
+  app.get("/api/clients/export", requireAuth, async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const requestUser = req.user!;
 
-    // Verify ownership
-    let clients;
-    if (requestUser.role === "super_admin") {
-      clients = await storage.getAllClientsWithUsers();
-    } else {
-      if (!userId || userId !== requestUser.id) {
+      // Verify ownership
+      let clients;
+      if (requestUser.role === "super_admin") {
+        clients = await storage.getAllClientsWithUsers();
+      } else {
+        if (!userId || userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+        clients = await storage.getClients(userId);
+      }
+
+      // Build CSV
+      const csvHeaders = [
+        "Company Name",
+        "Industry",
+        "Website",
+        "Email",
+        "Phone",
+        "WhatsApp Number",
+        "Status",
+        "Created Date",
+      ].join(",");
+
+      const csvRows = clients.map((client: any) => {
+        const created = client.createdAt
+          ? new Date(client.createdAt).toLocaleDateString()
+          : "";
+
+        return [
+          `"${client.name || ""}"`,
+          `"${client.industry || ""}"`,
+          `"${client.website || ""}"`,
+          `"${client.email || ""}"`,
+          `"${client.phone || ""}"`,
+          `"${client.whatsappNumber || ""}"`,
+          `"${client.isActive ? "Active" : "Inactive"}"`,
+          `"${created}"`,
+        ].join(",");
+      });
+
+      const csv = [csvHeaders, ...csvRows].join("\n");
+
+      // Set headers for download
+      const filename = `clients-export-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting clients:", error);
+      res.status(500).json({ message: "Failed to export clients" });
+    }
+  });
+
+  // Delete client
+  app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      // Get client to verify ownership
+      const client = await storage.getClient(clientId);
+      if (!client) {
+        return res.status(404).json({ message: "Client not found" });
+      }
+
+      // Verify ownership (super admin cannot delete)
+      if (requestUser.role === "super_admin") {
+        return res.status(403).json({
+          message: "Super admins cannot delete clients.",
+        });
+      }
+
+      if (client.userId !== requestUser.id) {
         return res.status(403).json({ message: "Access denied" });
       }
-      clients = await storage.getClients(userId);
-    }
 
-    // Build CSV
-    const csvHeaders = [
-      "Company Name",
-      "Industry",
-      "Website",
-      "Email",
-      "Phone",
-      "WhatsApp Number",
-      "Status",
-      "Created Date",
-    ].join(",");
+      // Delete client (cascade)
+      await storage.deleteClient(clientId);
 
-    const csvRows = clients.map((client: any) => {
-      const created = client.createdAt ? new Date(client.createdAt).toLocaleDateString() : "";
-      
-      return [
-        `"${client.name || ""}"`,
-        `"${client.industry || ""}"`,
-        `"${client.website || ""}"`,
-        `"${client.email || ""}"`,
-        `"${client.phone || ""}"`,
-        `"${client.whatsappNumber || ""}"`,
-        `"${client.isActive ? "Active" : "Inactive"}"`,
-        `"${created}"`,
-      ].join(",");
-    });
+      // Log activity
+      await storage.logUserActivity(
+        requestUser.id,
+        "client_deleted",
+        "client",
+        {
+          clientId,
+          clientName: client.name,
+        }
+      );
 
-    const csv = [csvHeaders, ...csvRows].join("\n");
-
-    // Set headers for download
-    const filename = `clients-export-${new Date().toISOString().split("T")[0]}.csv`;
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-    res.send(csv);
-  } catch (error) {
-    console.error("Error exporting clients:", error);
-    res.status(500).json({ message: "Failed to export clients" });
-  }
-});
-
-// Delete client
-app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const requestUser = req.user!;
-
-    // Get client to verify ownership
-    const client = await storage.getClient(clientId);
-    if (!client) {
-      return res.status(404).json({ message: "Client not found" });
-    }
-
-    // Verify ownership (super admin cannot delete)
-    if (requestUser.role === "super_admin") {
-      return res.status(403).json({
-        message: "Super admins cannot delete clients.",
+      res.json({ success: true, message: "Client deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting client:", error);
+      res.status(500).json({
+        message: error.message || "Failed to delete client",
       });
     }
-
-    if (client.userId !== requestUser.id) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    // Delete client (cascade)
-    await storage.deleteClient(clientId);
-
-    // Log activity
-    await storage.logUserActivity(
-      requestUser.id,
-      "client_deleted",
-      "client",
-      {
-        clientId,
-        clientName: client.name,
-      }
-    );
-
-    res.json({ success: true, message: "Client deleted successfully" });
-  } catch (error: any) {
-    console.error("Error deleting client:", error);
-    res.status(500).json({
-      message: error.message || "Failed to delete client",
-    });
-  }
-});
+  });
 
   // ============================ DASHBOARD ROUTES  ==============================
 
@@ -1330,21 +1365,40 @@ app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
           : 0;
 
       // Calculate Human average response (time from lead creation to human takeover)
+      // ✅ FIX: Calculate Human average response (time from takeover to FIRST human message)
       let humanAvgResponse = 0;
       if (humanLeads.length > 0) {
         let totalHumanTime = 0;
-        humanLeads.forEach((lead) => {
+        let validCount = 0;
+
+        for (const lead of humanLeads) {
           const conv = filteredConversations.find((c) => c.leadId === lead.id);
-          if (conv?.humanTakeoverAt && lead.createdAt) {
-            const leadCreated = new Date(lead.createdAt).getTime();
-            const humanTookOver = new Date(conv.humanTakeoverAt).getTime();
-            const timeInSeconds = (humanTookOver - leadCreated) / 1000;
+          if (!conv?.humanTakeoverAt) continue;
+
+          // Get all messages for this conversation
+          const convMessages = await storage.getMessages(conv.id);
+
+          // Find first human message AFTER takeover
+          const firstHumanMsg = convMessages.find(
+            (m) =>
+              m.sender === "human" &&
+              m.sentAt &&
+              new Date(m.sentAt) > new Date(conv.humanTakeoverAt!)
+          );
+
+          if (firstHumanMsg && firstHumanMsg.sentAt) {
+            const takeoverTime = new Date(conv.humanTakeoverAt).getTime();
+            const firstResponseTime = new Date(firstHumanMsg.sentAt).getTime();
+            const timeInSeconds = (firstResponseTime - takeoverTime) / 1000;
+
             if (timeInSeconds > 0) {
               totalHumanTime += timeInSeconds;
+              validCount++;
             }
           }
-        });
-        humanAvgResponse = totalHumanTime / humanLeads.length;
+        }
+
+        humanAvgResponse = validCount > 0 ? totalHumanTime / validCount : 0;
       }
 
       // AI Qualification Rate (leads with score >= 0.4)
@@ -1507,6 +1561,41 @@ app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ✅ NEW: Per-day analytics endpoint
+app.get("/api/analytics/per-day/:clientId", async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const timezone = req.query.timezone as string || 'America/Vancouver';
+
+    console.log(`📊 [API] Fetching per-day analytics for client: ${clientId}, timezone: ${timezone}`);
+
+    // Verify client exists and user has access
+    const client = await storage.getClient(clientId);
+    if (!client) {
+      return res.status(404).send("Client not found");
+    }
+
+    // For non-super-admin users, verify they own this client
+    if (req.user?.role !== 'super_admin' && client.userId !== req.user?.id) {
+      return res.status(403).send("Access denied");
+    }
+
+    const perDayData = await storage.getPerDayResponseTimes(clientId, timezone);
+
+    res.json({
+      success: true,
+      data: perDayData,
+      timezone,
+    });
+  } catch (error: any) {
+    console.error("❌ [API] Error fetching per-day analytics:", error);
+    res.status(500).json({
+      error: "Failed to fetch per-day analytics",
+      message: error.message,
+    });
+  }
+});
 
   // =========================== CONVERSATION ROUTES  =====================================
 
@@ -1754,97 +1843,114 @@ app.delete("/api/clients/:clientId", requireAuth, async (req, res) => {
   });
 
   // ✅ Rate limiting cache
-const markAsReadCache = new Map<string, number>(); // conversationId -> lastMarkedTimestamp
+  const markAsReadCache = new Map<string, number>(); // conversationId -> lastMarkedTimestamp
 
-// Cleanup old cache entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  markAsReadCache.forEach((timestamp, key) => {
-    if (now - timestamp > 300000) {
-      markAsReadCache.delete(key);
-    }
-  });
-}, 300000);
-
- // Mark messages as read
-app.post(
-  "/api/conversations/:conversationId/messages/read",
-  async (req, res) => {
-    try {
-      const { conversationId } = req.params;
-      const { messageIds } = req.body;
-      const now = Date.now();
-
-      // ✅ Rate limit: Don't allow marking same conversation within 2 seconds
-      const lastMarked = markAsReadCache.get(conversationId);
-      if (lastMarked && now - lastMarked < 2000) {
-        console.log(`⏭️ [RATE LIMIT] Skipping mark-as-read for ${conversationId} (last marked ${now - lastMarked}ms ago)`);
-        return res.json({ 
-          success: true, 
-          message: "Already marked recently",
-          skipped: true 
-        });
+  // Cleanup old cache entries every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    markAsReadCache.forEach((timestamp, key) => {
+      if (now - timestamp > 300000) {
+        markAsReadCache.delete(key);
       }
+    });
+  }, 300000);
 
-      if (!messageIds || !Array.isArray(messageIds)) {
-        return res.status(400).json({ error: "messageIds array required" });
-      }
+  // Mark messages as read
+  app.post(
+    "/api/conversations/:conversationId/messages/read",
+    async (req, res) => {
+      try {
+        const { conversationId } = req.params;
+        const { messageIds } = req.body;
+        const now = Date.now();
 
-      console.log(`📖 Marking ${messageIds.length} messages as read in conversation ${conversationId}`);
+        // ✅ Rate limit: Don't allow marking same conversation within 2 seconds
+        const lastMarked = markAsReadCache.get(conversationId);
+        if (lastMarked && now - lastMarked < 2000) {
+          console.log(
+            `⏭️ [RATE LIMIT] Skipping mark-as-read for ${conversationId} (last marked ${
+              now - lastMarked
+            }ms ago)`
+          );
+          return res.json({
+            success: true,
+            message: "Already marked recently",
+            skipped: true,
+          });
+        }
 
-      // Update cache BEFORE processing (prevent race conditions)
-      markAsReadCache.set(conversationId, now);
+        if (!messageIds || !Array.isArray(messageIds)) {
+          return res.status(400).json({ error: "messageIds array required" });
+        }
 
-      // Mark messages as read in database
-      await storage.markMessagesAsRead(messageIds);
+        console.log(
+          `📖 Marking ${messageIds.length} messages as read in conversation ${conversationId}`
+        );
 
-      // ✅ Mark on WhatsApp (with deduplication)
-      const markedWhatsAppIds = new Set<string>();
+        // Update cache BEFORE processing (prevent race conditions)
+        markAsReadCache.set(conversationId, now);
 
-      for (const messageId of messageIds) {
-        const message = await storage.getMessage(messageId);
-        
-        if (message && message.sender === "lead") {
-          const metadata = message.metadata as {
-            whatsappMessageId?: string;
-          } | null;
+        // Mark messages as read in database
+        await storage.markMessagesAsRead(messageIds);
 
-          if (metadata?.whatsappMessageId) {
-            // ✅ Deduplicate: Don't mark same WhatsApp ID multiple times
-            if (markedWhatsAppIds.has(metadata.whatsappMessageId)) {
-              console.log(`⏭️ WhatsApp message already marked: ${metadata.whatsappMessageId}`);
-              continue;
-            }
+        // ✅ Mark on WhatsApp (with deduplication)
+        const markedWhatsAppIds = new Set<string>();
 
-            console.log(`📬 Marking WhatsApp message as read: ${metadata.whatsappMessageId}`);
-            
-            try {
-              await whatsappService.markMessageAsRead(metadata.whatsappMessageId);
-              markedWhatsAppIds.add(metadata.whatsappMessageId);
-            } catch (whatsappError) {
-              console.error(`❌ Failed to mark WhatsApp message as read:`, whatsappError);
-              // Don't fail the whole request if WhatsApp marking fails
+        for (const messageId of messageIds) {
+          const message = await storage.getMessage(messageId);
+
+          if (message && message.sender === "lead") {
+            const metadata = message.metadata as {
+              whatsappMessageId?: string;
+            } | null;
+
+            if (metadata?.whatsappMessageId) {
+              // ✅ Deduplicate: Don't mark same WhatsApp ID multiple times
+              if (markedWhatsAppIds.has(metadata.whatsappMessageId)) {
+                console.log(
+                  `⏭️ WhatsApp message already marked: ${metadata.whatsappMessageId}`
+                );
+                continue;
+              }
+
+              console.log(
+                `📬 Marking WhatsApp message as read: ${metadata.whatsappMessageId}`
+              );
+
+              try {
+                await whatsappService.markMessageAsRead(
+                  metadata.whatsappMessageId
+                );
+                markedWhatsAppIds.add(metadata.whatsappMessageId);
+              } catch (whatsappError) {
+                console.error(
+                  `❌ Failed to mark WhatsApp message as read:`,
+                  whatsappError
+                );
+                // Don't fail the whole request if WhatsApp marking fails
+              }
             }
           }
         }
+
+        // Mark conversation as read
+        await storage.markConversationAsRead(conversationId);
+
+        console.log(
+          `✅ Marked ${messageIds.length} messages as read (${markedWhatsAppIds.size} WhatsApp)`
+        );
+
+        res.json({
+          success: true,
+          markedCount: messageIds.length,
+          whatsappMarkedCount: markedWhatsAppIds.size,
+        });
+      } catch (error: any) {
+        console.error("❌ Error marking messages as read:", error);
+        res.status(500).json({ error: error.message });
       }
-
-      // Mark conversation as read
-      await storage.markConversationAsRead(conversationId);
-
-      console.log(`✅ Marked ${messageIds.length} messages as read (${markedWhatsAppIds.size} WhatsApp)`);
-
-      res.json({ 
-        success: true, 
-        markedCount: messageIds.length,
-        whatsappMarkedCount: markedWhatsAppIds.size 
-      });
-    } catch (error: any) {
-      console.error("❌ Error marking messages as read:", error);
-      res.status(500).json({ error: error.message });
     }
-  }
-);
+  );
 
   // Typing indicator endpoint - Internal only (WebSocket broadcast)
   app.post("/api/conversations/:conversationId/typing", async (req, res) => {
@@ -3835,80 +3941,85 @@ Could you suggest some alternative times that work for you? We'd love to find a 
   });
 
   // Export bookings to CSV
-app.get("/api/bookings/:clientId/export", requireAuth, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const requestUser = req.user!;
+  app.get("/api/bookings/:clientId/export", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
 
-    // Verify ownership
-    if (requestUser.role !== "super_admin") {
-      const client = await storage.getClient(clientId);
-      if (!client || client.userId !== requestUser.id) {
-        return res.status(403).json({ message: "Access denied" });
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
       }
-    }
 
-    const bookings = await storage.getBookings(clientId);
+      const bookings = await storage.getBookings(clientId);
 
-    // Build CSV
-    const csvHeaders = [
-      "Title",
-      "Attendee Name",
-      "Email",
-      "Phone",
-      "Date",
-      "Time",
-      "Duration (min)",
-      "Location",
-      "Meeting Type",
-      "Status",
-      "Notes",
-      "Created Date",
-    ].join(",");
-
-    const csvRows = bookings.map((booking) => {
-      const scheduledDate = new Date(booking.scheduledFor);
-      const dateStr = scheduledDate.toLocaleDateString("en-US", {
-        timeZone: "America/Vancouver",
-      });
-      const timeStr = scheduledDate.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "America/Vancouver",
-      });
-      const createdDate = booking.createdAt
-        ? new Date(booking.createdAt).toLocaleDateString()
-        : "";
-
-      return [
-        `"${booking.title || ""}"`,
-        `"${booking.attendeeName || ""}"`,
-        `"${booking.attendeeEmail || ""}"`,
-        `"${booking.attendeePhone || ""}"`,
-        `"${dateStr}"`,
-        `"${timeStr}"`,
-        `"${booking.duration || 60}"`,
-        `"${booking.location || ""}"`,
-        `"${booking.meetingType || "consultation"}"`,
-        `"${booking.status || "scheduled"}"`,
-        `"${(booking.notes || "").replace(/"/g, '""')}"`,
-        `"${createdDate}"`,
+      // Build CSV
+      const csvHeaders = [
+        "Title",
+        "Attendee Name",
+        "Email",
+        "Phone",
+        "Date",
+        "Time",
+        "Duration (min)",
+        "Location",
+        "Meeting Type",
+        "Status",
+        "Notes",
+        "Created Date",
       ].join(",");
-    });
 
-    const csv = [csvHeaders, ...csvRows].join("\n");
+      const csvRows = bookings.map((booking) => {
+        const scheduledDate = new Date(booking.scheduledFor);
+        const dateStr = scheduledDate.toLocaleDateString("en-US", {
+          timeZone: "America/Vancouver",
+        });
+        const timeStr = scheduledDate.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "America/Vancouver",
+        });
+        const createdDate = booking.createdAt
+          ? new Date(booking.createdAt).toLocaleDateString()
+          : "";
 
-    // Set headers for download
-    const filename = `bookings-export-${new Date().toISOString().split("T")[0]}.csv`;
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return [
+          `"${booking.title || ""}"`,
+          `"${booking.attendeeName || ""}"`,
+          `"${booking.attendeeEmail || ""}"`,
+          `"${booking.attendeePhone || ""}"`,
+          `"${dateStr}"`,
+          `"${timeStr}"`,
+          `"${booking.duration || 60}"`,
+          `"${booking.location || ""}"`,
+          `"${booking.meetingType || "consultation"}"`,
+          `"${booking.status || "scheduled"}"`,
+          `"${(booking.notes || "").replace(/"/g, '""')}"`,
+          `"${createdDate}"`,
+        ].join(",");
+      });
 
-    res.send(csv);
-  } catch (error) {
-    console.error("Error exporting bookings:", error);
-    res.status(500).json({ message: "Failed to export bookings" });
-  }
-});
+      const csv = [csvHeaders, ...csvRows].join("\n");
+
+      // Set headers for download
+      const filename = `bookings-export-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting bookings:", error);
+      res.status(500).json({ message: "Failed to export bookings" });
+    }
+  });
 
   // =========================== USER TRIAL MANAGEMENT ROUTES  ====================================
 
@@ -4887,8 +4998,6 @@ app.get("/api/bookings/:clientId/export", requireAuth, async (req, res) => {
     }
   });
 
-  
-
   // ==================== SENDGRID TEST (TEMPORARY - Remove after testing) ====================
   app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
     try {
@@ -4953,8 +5062,6 @@ app.get("/api/bookings/:clientId/export", requireAuth, async (req, res) => {
       });
     }
   });
-
-  
 
   // ========================= START FOLLOW-UP CRON  =============================
 

@@ -44,6 +44,7 @@ import {
   ArrowRight,
   HardHat,
   BarChart3,
+  User,
 } from "lucide-react";
 import {
   Tooltip as Tooltip1,
@@ -156,13 +157,14 @@ export default function Dashboard() {
   const leads = dashboardData?.leads || [];
   const hasData = kpis.totalLeads > 0 || conversations.length > 0;
 
-  // Lead Trend Data
-  // ✅ NEW: Lead Trend Data with REAL DATE RANGES + WORKING CONVERSIONS
+  // ✅ Check if we have human response data
+  const hasHumanData = kpis.humanAvgResponseTime && kpis.humanAvgResponseTime > 0;
+
+  // ✅ TIMEZONE APPLIED: Lead Trend Data
   const leadTrendData = React.useMemo(() => {
     const bookings = dashboardData?.bookings || [];
 
     if (!leads || leads.length === 0) {
-      // Get current date range even with no data
       const now = new Date();
       const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
 
@@ -205,18 +207,15 @@ export default function Dashboard() {
     const now = new Date();
     const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
 
-    // Helper function to format date range
     function formatWeekRange(start: Date, end: Date): string {
       const startMonth = start.toLocaleDateString("en-US", { month: "short" });
       const endMonth = end.toLocaleDateString("en-US", { month: "short" });
       const startDay = start.getDate();
       const endDay = end.getDate();
 
-      // If same month: "Oct 18-24"
       if (startMonth === endMonth) {
         return `${startMonth} ${startDay}-${endDay}`;
       }
-      // If different months: "Oct 28-Nov 3"
       return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
     }
 
@@ -263,18 +262,16 @@ export default function Dashboard() {
       },
     ];
 
-    // ✅ FIX: Count leads AND conversions properly
+    // ✅ TIMEZONE FIX: Use local date for grouping
     leads.forEach((lead: any) => {
-      const createdAt = new Date(lead.createdAt);
+      const localDate = new Date(lead.createdAt); // Already in local timezone
       const weekIndex = weeklyData.findIndex(
-        (w) => createdAt >= w.start && createdAt < w.end
+        (w) => localDate >= w.start && localDate < w.end
       );
 
       if (weekIndex !== -1) {
-        // Count all leads
         weeklyData[weekIndex].leads++;
 
-        // ✅ NEW: Check if this lead has a booking (conversion)
         const hasConfirmedBooking = bookings.some(
           (b: any) =>
             b.leadId === lead.id &&
@@ -293,7 +290,6 @@ export default function Dashboard() {
     }));
   }, [leads, dashboardData?.bookings]);
 
-  // ✅ NEW: Calculate date range for subtitle
   const dateRangeText = React.useMemo(() => {
     const now = new Date();
     const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
@@ -330,62 +326,51 @@ export default function Dashboard() {
     },
   ];
 
-  // ✅ NEW: Response Time Data with AI vs Human
-  const responseTimeData = React.useMemo(() => {
+  // ✅ PROFESSIONAL: AI Response Time with proper timezone handling
+  const aiResponseTimeData = React.useMemo(() => {
     if (!conversations || conversations.length === 0) {
       return [
-        { day: "Mon", aiTime: 0, humanTime: 0 },
-        { day: "Tue", aiTime: 0, humanTime: 0 },
-        { day: "Wed", aiTime: 0, humanTime: 0 },
-        { day: "Thu", aiTime: 0, humanTime: 0 },
-        { day: "Fri", aiTime: 0, humanTime: 0 },
-        { day: "Sat", aiTime: 0, humanTime: 0 },
-        { day: "Sun", aiTime: 0, humanTime: 0 },
+        { day: "Mon", time: 0 },
+        { day: "Tue", time: 0 },
+        { day: "Wed", time: 0 },
+        { day: "Thu", time: 0 },
+        { day: "Fri", time: 0 },
+        { day: "Sat", time: 0 },
+        { day: "Sun", time: 0 },
       ];
     }
 
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const weekData = dayNames.map((day) => ({
       day,
-      aiTime: 0,
-      aiCount: 0,
-      humanTime: 0,
-      humanCount: 0,
+      time: 0,
+      count: 0,
     }));
 
     conversations.forEach((conv: any) => {
-      const createdAt = new Date(conv.createdAt);
-      const dayIndex = createdAt.getDay();
+      // ✅ FIX: Use local timezone (browser's timezone)
+      const localDate = new Date(conv.createdAt);
+      const dayIndex = localDate.getDay();
 
-      // ✅ FIX: AI response time = initial responseTimeSeconds (AI ALWAYS responds first)
       if (conv.lead?.responseTimeSeconds) {
-        const aiTimeInMinutes = conv.lead.responseTimeSeconds / 60;
-        weekData[dayIndex].aiTime += aiTimeInMinutes;
-        weekData[dayIndex].aiCount++;
-      }
-
-      // ✅ FIX: Human response time = time from lead creation to human takeover
-      if (conv.humanTakeoverAt && conv.lead?.createdAt) {
-        const leadCreated = new Date(conv.lead.createdAt).getTime();
-        const humanTookOver = new Date(conv.humanTakeoverAt).getTime();
-        const humanTimeInMinutes = (humanTookOver - leadCreated) / (1000 * 60);
-
-        if (humanTimeInMinutes > 0) {
-          weekData[dayIndex].humanTime += humanTimeInMinutes;
-          weekData[dayIndex].humanCount++;
-        }
+        const timeInMinutes = conv.lead.responseTimeSeconds / 60;
+        weekData[dayIndex].time += timeInMinutes;
+        weekData[dayIndex].count++;
       }
     });
 
-    return weekData.map((day) => ({
-      day: day.day,
-      aiTime:
-        day.aiCount > 0 ? Number((day.aiTime / day.aiCount).toFixed(1)) : 0,
-      humanTime:
-        day.humanCount > 0
-          ? Number((day.humanTime / day.humanCount).toFixed(1))
+    // Reorder to start with Monday and calculate averages
+    return weekData
+      .map((day, index) => ({
+        day: dayNames[(index + 1) % 7],
+        time: weekData[(index + 1) % 7].count > 0 
+          ? Number((weekData[(index + 1) % 7].time / weekData[(index + 1) % 7].count).toFixed(1)) 
           : 0,
-    }));
+      }))
+      .sort((a, b) => {
+        const dayOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        return dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day);
+      });
   }, [conversations]);
 
   useEffect(() => {
@@ -896,49 +881,37 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* ✅ NEW: DUAL-AXIS RESPONSE TIME CHART */}
+                  {/* ✅ PROFESSIONAL: AI Response Time Chart */}
                   <Card className="border-2">
                     <CardHeader>
                       <CardTitle className="text-base flex items-center justify-between">
-                        <span>Response Time</span>
-                        <div className="flex items-center gap-3 text-xs">
-                          <div className="flex items-center gap-1">
-                            <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
-                            <span className="text-slate-600">AI</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <div className="w-2.5 h-2.5 rounded-full bg-construction"></div>
-                            <span className="text-slate-600">Human</span>
-                          </div>
+                        <span>AI Response Time</span>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                          <span className="text-xs text-slate-600">By Day</span>
                         </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={170}>
-                        <LineChart data={responseTimeData}>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="#e2e8f0"
-                          />
+                      <ResponsiveContainer width="100%" height={140}>
+                        <AreaChart data={aiResponseTimeData}>
+                          <defs>
+                            <linearGradient id="aiResponseGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis
                             dataKey="day"
                             stroke="#64748b"
                             style={{ fontSize: "11px" }}
                           />
-                          {/* LEFT Y-AXIS: AI */}
                           <YAxis
-                            yAxisId="left"
                             stroke="#2563eb"
                             width={35}
                             style={{ fontSize: "11px" }}
-                          />
-                          {/* RIGHT Y-AXIS: Human */}
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            stroke="#ea580c"
-                            width={35}
-                            style={{ fontSize: "11px" }}
+                            label={{ value: 'min', angle: -90, position: 'insideLeft', style: { fontSize: '10px' } }}
                           />
                           <Tooltip
                             contentStyle={{
@@ -948,56 +921,44 @@ export default function Dashboard() {
                               padding: "6px 10px",
                               fontSize: "12px",
                             }}
-                            formatter={(value: number, name: string) => [
-                              `${value} min`,
-                              name === "aiTime" ? "AI" : "Human",
-                            ]}
+                            formatter={(value: number) => [`${value} min`, "AI Response"]}
                           />
-                          {/* AI LINE */}
-                          <Line
-                            yAxisId="left"
+                          <Area
                             type="monotone"
-                            dataKey="aiTime"
+                            dataKey="time"
                             stroke="#2563eb"
                             strokeWidth={2}
-                            dot={{ fill: "#2563eb", r: 3 }}
-                            activeDot={{ r: 5 }}
+                            fillOpacity={1}
+                            fill="url(#aiResponseGradient)"
                           />
-                          {/* HUMAN LINE */}
-                          <Line
-                            yAxisId="right"
-                            type="monotone"
-                            dataKey="humanTime"
-                            stroke="#ea580c"
-                            strokeWidth={2}
-                            dot={{ fill: "#ea580c", r: 3 }}
-                            activeDot={{ r: 5 }}
-                          />
-                        </LineChart>
+                        </AreaChart>
                       </ResponsiveContainer>
 
-                      {/* Summary Stats */}
-                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-200">
+                      {/* ✅ PROFESSIONAL: Summary Stats with Human Badge */}
+                      <div className={`grid ${hasHumanData ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mt-3 pt-3 border-t border-slate-200`}>
                         <div className="text-center">
                           <div className="text-lg font-bold text-primary">
                             {kpis.aiAvgResponseTime
                               ? `${(kpis.aiAvgResponseTime / 60).toFixed(1)}m`
                               : "N/A"}
                           </div>
-                          <div className="text-xs text-slate-500">Avg AI</div>
+                          <div className="text-xs text-slate-500">Avg AI Response</div>
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-construction">
-                            {kpis.humanAvgResponseTime
-                              ? `${(kpis.humanAvgResponseTime / 60).toFixed(
-                                  1
-                                )}m`
-                              : "N/A"}
+                        
+                        {/* ✅ PROFESSIONAL: Human Response as Badge/Stat (not a line) */}
+                        {hasHumanData && (
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-construction">
+                              {kpis.humanAvgResponseTime
+                                ? `${(kpis.humanAvgResponseTime / 60).toFixed(1)}m`
+                                : "N/A"}
+                            </div>
+                            <div className="text-xs text-slate-500 flex items-center justify-center gap-1">
+                              <User className="w-3 h-3" />
+                              Avg Human Response
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-500">
-                            Avg Human
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1134,6 +1095,12 @@ export default function Dashboard() {
                                   minute: "2-digit",
                                 })}
                               </p>
+                              {/* ✅ NEW: Show inquiry if available */}
+                              {activity.inquiry && (
+                                <p className="text-xs text-slate-600 mt-1 italic line-clamp-2">
+                                  💬 "{activity.inquiry}"
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}

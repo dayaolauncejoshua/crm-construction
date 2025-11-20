@@ -142,14 +142,14 @@ export function Sidebar({
           <Palette className="w-5 h-5" />
           <span>White Label</span>
         </Link>
-
+{/* 
         <Link
           href="/sops"
           className="flex items-center space-x-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <BookOpen className="w-5 h-5" />
           <span>SOPs</span>
-        </Link>
+        </Link> */}
 
         <Link
           href="/settings"

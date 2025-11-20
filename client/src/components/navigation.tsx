@@ -149,7 +149,7 @@ export default function Navigation({
       label: "Follow-ups",
       icon: <Zap className="w-4 h-4" />,
     },
-    { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
+    // { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
     {
       path: "/subscription",
       label: "Subscription",

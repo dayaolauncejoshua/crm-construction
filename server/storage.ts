@@ -264,95 +264,107 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteClient(clientId: string): Promise<void> {
-  console.log(`🗑️ [DELETE CLIENT] Starting cascade deletion for: ${clientId}`);
+    console.log(
+      `🗑️ [DELETE CLIENT] Starting cascade deletion for: ${clientId}`
+    );
 
-  try {
-    // Get all leads for this client
-    const clientLeads = await db
-      .select({ id: leads.id })
-      .from(leads)
-      .where(eq(leads.clientId, clientId));
+    try {
+      // Get all leads for this client
+      const clientLeads = await db
+        .select({ id: leads.id })
+        .from(leads)
+        .where(eq(leads.clientId, clientId));
 
-    const leadIds = clientLeads.map((l) => l.id);
-    console.log(`📋 Found ${leadIds.length} leads to delete`);
+      const leadIds = clientLeads.map((l) => l.id);
+      console.log(`📋 Found ${leadIds.length} leads to delete`);
 
-    // Get all conversations for this client
-    const clientConversations = await db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(eq(conversations.clientId, clientId));
+      // Get all conversations for this client
+      const clientConversations = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.clientId, clientId));
 
-    const conversationIds = clientConversations.map((c) => c.id);
-    console.log(`💬 Found ${conversationIds.length} conversations`);
+      const conversationIds = clientConversations.map((c) => c.id);
+      console.log(`💬 Found ${conversationIds.length} conversations`);
 
-    // Delete messages for all conversations
-    for (const conversationId of conversationIds) {
+      // Delete messages for all conversations
+      for (const conversationId of conversationIds) {
+        await db
+          .delete(messages)
+          .where(eq(messages.conversationId, conversationId));
+      }
+      console.log(`✅ Deleted messages`);
+
+      // Delete conversations
       await db
-        .delete(messages)
-        .where(eq(messages.conversationId, conversationId));
+        .delete(conversations)
+        .where(eq(conversations.clientId, clientId));
+      console.log(`✅ Deleted conversations`);
+
+      // Delete bookings
+      await db.delete(bookings).where(eq(bookings.clientId, clientId));
+      console.log(`✅ Deleted bookings`);
+
+      // Delete follow-ups
+      await db.delete(followUps).where(eq(followUps.clientId, clientId));
+      console.log(`✅ Deleted follow-ups`);
+
+      // Delete follow-up sequences and steps
+      const sequences = await db
+        .select({ id: followUpSequences.id })
+        .from(followUpSequences)
+        .where(eq(followUpSequences.clientId, clientId));
+
+      for (const seq of sequences) {
+        await db
+          .delete(followUpSteps)
+          .where(eq(followUpSteps.sequenceId, seq.id));
+      }
+      await db
+        .delete(followUpSequences)
+        .where(eq(followUpSequences.clientId, clientId));
+      console.log(`✅ Deleted follow-up sequences`);
+
+      // Delete lead activity logs
+      for (const leadId of leadIds) {
+        await db
+          .delete(leadActivityLog)
+          .where(eq(leadActivityLog.leadId, leadId));
+      }
+      console.log(`✅ Deleted lead activity logs`);
+
+      // Delete leads
+      await db.delete(leads).where(eq(leads.clientId, clientId));
+      console.log(`✅ Deleted leads`);
+
+      // Delete VSLs
+      await db.delete(vsls).where(eq(vsls.clientId, clientId));
+      console.log(`✅ Deleted VSLs`);
+
+      // Delete quick reply templates
+      await db
+        .delete(quickReplyTemplates)
+        .where(eq(quickReplyTemplates.clientId, clientId));
+      console.log(`✅ Deleted quick reply templates`);
+
+      // Delete lead tags
+      await db.delete(leadTags).where(eq(leadTags.clientId, clientId));
+      console.log(`✅ Deleted lead tags`);
+
+      // Delete analytics
+      await db.delete(analytics).where(eq(analytics.clientId, clientId));
+      console.log(`✅ Deleted analytics`);
+
+      // Finally, delete the client
+      await db.delete(clients).where(eq(clients.id, clientId));
+      console.log(`✅ Deleted client`);
+
+      console.log(`🎯 [DELETE CLIENT] Cascade deletion completed: ${clientId}`);
+    } catch (error) {
+      console.error(`❌ [DELETE CLIENT] Error:`, error);
+      throw new Error("Failed to delete client. Please contact support.");
     }
-    console.log(`✅ Deleted messages`);
-
-    // Delete conversations
-    await db.delete(conversations).where(eq(conversations.clientId, clientId));
-    console.log(`✅ Deleted conversations`);
-
-    // Delete bookings
-    await db.delete(bookings).where(eq(bookings.clientId, clientId));
-    console.log(`✅ Deleted bookings`);
-
-    // Delete follow-ups
-    await db.delete(followUps).where(eq(followUps.clientId, clientId));
-    console.log(`✅ Deleted follow-ups`);
-
-    // Delete follow-up sequences and steps
-    const sequences = await db
-      .select({ id: followUpSequences.id })
-      .from(followUpSequences)
-      .where(eq(followUpSequences.clientId, clientId));
-
-    for (const seq of sequences) {
-      await db.delete(followUpSteps).where(eq(followUpSteps.sequenceId, seq.id));
-    }
-    await db.delete(followUpSequences).where(eq(followUpSequences.clientId, clientId));
-    console.log(`✅ Deleted follow-up sequences`);
-
-    // Delete lead activity logs
-    for (const leadId of leadIds) {
-      await db.delete(leadActivityLog).where(eq(leadActivityLog.leadId, leadId));
-    }
-    console.log(`✅ Deleted lead activity logs`);
-
-    // Delete leads
-    await db.delete(leads).where(eq(leads.clientId, clientId));
-    console.log(`✅ Deleted leads`);
-
-    // Delete VSLs
-    await db.delete(vsls).where(eq(vsls.clientId, clientId));
-    console.log(`✅ Deleted VSLs`);
-
-    // Delete quick reply templates
-    await db.delete(quickReplyTemplates).where(eq(quickReplyTemplates.clientId, clientId));
-    console.log(`✅ Deleted quick reply templates`);
-
-    // Delete lead tags
-    await db.delete(leadTags).where(eq(leadTags.clientId, clientId));
-    console.log(`✅ Deleted lead tags`);
-
-    // Delete analytics
-    await db.delete(analytics).where(eq(analytics.clientId, clientId));
-    console.log(`✅ Deleted analytics`);
-
-    // Finally, delete the client
-    await db.delete(clients).where(eq(clients.id, clientId));
-    console.log(`✅ Deleted client`);
-
-    console.log(`🎯 [DELETE CLIENT] Cascade deletion completed: ${clientId}`);
-  } catch (error) {
-    console.error(`❌ [DELETE CLIENT] Error:`, error);
-    throw new Error("Failed to delete client. Please contact support.");
   }
-}
 
   // Lead operations
   async getLeads(clientId: string, limit = 50): Promise<Lead[]> {
@@ -369,9 +381,9 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
-async createLead(lead: InsertLead): Promise<Lead> {
+  async createLead(lead: InsertLead): Promise<Lead> {
     console.log("📝 [UPSERT LEAD] Checking for existing lead...");
-    
+
     // Normalize phone and email for comparison
     const normalizedPhone = lead.phone ? normalizePhone(lead.phone) : null;
     const normalizedEmail = lead.email ? normalizeEmail(lead.email) : null;
@@ -392,14 +404,16 @@ async createLead(lead: InsertLead): Promise<Lead> {
         .from(leads)
         .where(sql`LOWER(${leads.email}) = ${normalizedEmail}`)
         .limit(1);
-      
+
       existingLead = leadByEmail;
     }
 
     // ✅ UPSERT: Update existing lead
     if (existingLead) {
       console.log(`♻️ [UPSERT] Found existing lead: ${existingLead.id}`);
-      console.log(`   Previous submissions: ${existingLead.submissionCount || 1}`);
+      console.log(
+        `   Previous submissions: ${existingLead.submissionCount || 1}`
+      );
 
       const [updatedLead] = await db
         .update(leads)
@@ -408,34 +422,37 @@ async createLead(lead: InsertLead): Promise<Lead> {
           firstName: lead.firstName || existingLead.firstName,
           lastName: lead.lastName || existingLead.lastName,
           company: lead.company || existingLead.company,
-          
+
           // ✅ Refresh audit results with new data
           auditResults: lead.auditResults || existingLead.auditResults,
-          
+
           // ✅ Increment submission count
           submissionCount: (existingLead.submissionCount || 1) + 1,
           lastSubmittedAt: new Date(),
-          
+
           // Update temperature based on new qualification
           temperature: lead.temperature || existingLead.temperature,
-          qualificationScore: lead.qualificationScore || existingLead.qualificationScore,
-          
+          qualificationScore:
+            lead.qualificationScore || existingLead.qualificationScore,
+
           // Keep status as-is (don't reset to 'new' if already qualified)
           // status remains unchanged
-          
+
           updatedAt: new Date(),
         })
         .where(eq(leads.id, existingLead.id))
         .returning();
 
-      console.log(`✅ [UPSERT] Updated existing lead (submission #${updatedLead.submissionCount})`);
-      
+      console.log(
+        `✅ [UPSERT] Updated existing lead (submission #${updatedLead.submissionCount})`
+      );
+
       return updatedLead;
     }
 
     // ✅ INSERT: Create new lead
     console.log("🆕 [UPSERT] Creating new lead...");
-    
+
     const [newLead] = await db
       .insert(leads)
       .values({
@@ -448,7 +465,7 @@ async createLead(lead: InsertLead): Promise<Lead> {
       .returning();
 
     console.log(`✅ [UPSERT] Created new lead: ${newLead.id}`);
-    
+
     return newLead;
   }
 
@@ -469,20 +486,23 @@ async createLead(lead: InsertLead): Promise<Lead> {
       .orderBy(desc(leads.createdAt));
   }
 
-async getLeadByPhone(phone: string): Promise<Lead | undefined> {
+  async getLeadByPhone(phone: string): Promise<Lead | undefined> {
     const normalizedPhone = normalizePhone(phone);
-    
+
     // Try exact match first
     const [exactMatch] = await db
       .select()
       .from(leads)
       .where(eq(leads.phone, normalizedPhone))
       .limit(1);
-    
+
     if (exactMatch) return exactMatch;
 
     // Fallback: search all leads and normalize (for backward compatibility)
-    const allLeads = await db.select().from(leads).where(sql`${leads.phone} IS NOT NULL`);
+    const allLeads = await db
+      .select()
+      .from(leads)
+      .where(sql`${leads.phone} IS NOT NULL`);
     return allLeads.find((l) => normalizePhone(l.phone!) === normalizedPhone);
   }
 
@@ -862,19 +882,19 @@ async getLeadByPhone(phone: string): Promise<Lead | undefined> {
       .orderBy(desc(conversations.qualificationScore));
   }
 
-async markConversationAsRead(conversationId: string): Promise<void> {
-  console.log(`📖 [DB] Marking conversation ${conversationId} as read`);
+  async markConversationAsRead(conversationId: string): Promise<void> {
+    console.log(`📖 [DB] Marking conversation ${conversationId} as read`);
 
-  await db
-    .update(conversations)
-    .set({
-      unreadCount: 0,
-      lastReadAt: new Date(),
-    })
-    .where(eq(conversations.id, conversationId));
+    await db
+      .update(conversations)
+      .set({
+        unreadCount: 0,
+        lastReadAt: new Date(),
+      })
+      .where(eq(conversations.id, conversationId));
 
-  console.log(`✅ [DB] Conversation ${conversationId} marked as read`);
-}
+    console.log(`✅ [DB] Conversation ${conversationId} marked as read`);
+  }
 
   async incrementUnreadCount(conversationId: string): Promise<void> {
     const [conversation] = await db
@@ -908,52 +928,60 @@ async markConversationAsRead(conversationId: string): Promise<void> {
   }
 
   // Mark messages as read
-async markMessagesAsRead(messageIds: string[]): Promise<void> {
-  if (messageIds.length === 0) return;
+  async markMessagesAsRead(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
 
-  console.log(`💾 [DB] Marking ${messageIds.length} messages as read in database`);
-
-  // ✅ Use a single query with proper SQL
-  await db
-    .update(messages)
-    .set({
-      readAt: new Date(),
-    })
-    .where(
-      sql`${messages.id} = ANY(ARRAY[${sql.join(
-        messageIds.map((id) => sql`${id}`),
-        sql`, `
-      )}]::text[])`
+    console.log(
+      `💾 [DB] Marking ${messageIds.length} messages as read in database`
     );
 
-  console.log(`✅ [DB] Successfully marked ${messageIds.length} messages as read`);
-}
+    // ✅ Use a single query with proper SQL
+    await db
+      .update(messages)
+      .set({
+        readAt: new Date(),
+      })
+      .where(
+        sql`${messages.id} = ANY(ARRAY[${sql.join(
+          messageIds.map((id) => sql`${id}`),
+          sql`, `
+        )}]::text[])`
+      );
+
+    console.log(
+      `✅ [DB] Successfully marked ${messageIds.length} messages as read`
+    );
+  }
 
   // Mark previous outgoing messages as read when lead responds
   async markPreviousMessagesAsRead(conversationId: string): Promise<void> {
-  console.log(`📖 [DB] Marking previous outgoing messages as read for conversation ${conversationId}`);
-
-  // Get all messages from this conversation that aren't from the lead
-  // and don't have readAt set yet
-  const unreadOutgoingMessages = await db
-    .select()
-    .from(messages)
-    .where(
-      and(
-        eq(messages.conversationId, conversationId),
-        sql`${messages.sender} != 'lead'`,
-        sql`${messages.readAt} IS NULL`
-      )
+    console.log(
+      `📖 [DB] Marking previous outgoing messages as read for conversation ${conversationId}`
     );
 
-  if (unreadOutgoingMessages.length > 0) {
-    console.log(`   Found ${unreadOutgoingMessages.length} unread outgoing messages`);
-    const messageIds = unreadOutgoingMessages.map((m) => m.id);
-    await this.markMessagesAsRead(messageIds);
-  } else {
-    console.log(`   No unread outgoing messages found`);
+    // Get all messages from this conversation that aren't from the lead
+    // and don't have readAt set yet
+    const unreadOutgoingMessages = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          sql`${messages.sender} != 'lead'`,
+          sql`${messages.readAt} IS NULL`
+        )
+      );
+
+    if (unreadOutgoingMessages.length > 0) {
+      console.log(
+        `   Found ${unreadOutgoingMessages.length} unread outgoing messages`
+      );
+      const messageIds = unreadOutgoingMessages.map((m) => m.id);
+      await this.markMessagesAsRead(messageIds);
+    } else {
+      console.log(`   No unread outgoing messages found`);
+    }
   }
-}
 
   // ==================== MESSAGE REACTION METHODS ====================
 
@@ -1923,60 +1951,60 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
   }
 
   // Delete lead
- async deleteLeadAndAssociations(leadId: string): Promise<void> {
-  console.log(`🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`);
-  try {
-    // 5. Delete all follow-ups for this lead FIRST (before conversations)
-    await db.delete(followUps).where(eq(followUps.leadId, leadId));
-    console.log(`  ✅ Deleted follow-ups.`);
+  async deleteLeadAndAssociations(leadId: string): Promise<void> {
+    console.log(`🗑️ [Cascade Delete] Starting deletion for lead: ${leadId}`);
+    try {
+      // 5. Delete all follow-ups for this lead FIRST (before conversations)
+      await db.delete(followUps).where(eq(followUps.leadId, leadId));
+      console.log(`  ✅ Deleted follow-ups.`);
 
-    // 6. Find all conversations for this lead
-    const leadConversations = await db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(eq(conversations.leadId, leadId));
+      // 6. Find all conversations for this lead
+      const leadConversations = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.leadId, leadId));
 
-    const conversationIds = leadConversations.map((c) => c.id);
-    if (conversationIds.length > 0) {
-      console.log(`  Deleting ${conversationIds.length} conversations...`);
-      
-      // 7. Delete all messages for those conversations
-      await db.delete(messages).where(
-        sql`${messages.conversationId} = ANY(ARRAY[${sql.join(
-          conversationIds.map((id) => sql`${id}`),
-          sql`, `
-        )}])`
+      const conversationIds = leadConversations.map((c) => c.id);
+      if (conversationIds.length > 0) {
+        console.log(`  Deleting ${conversationIds.length} conversations...`);
+
+        // 7. Delete all messages for those conversations
+        await db.delete(messages).where(
+          sql`${messages.conversationId} = ANY(ARRAY[${sql.join(
+            conversationIds.map((id) => sql`${id}`),
+            sql`, `
+          )}])`
+        );
+        console.log(`  ✅ Deleted messages.`);
+
+        // 8. Delete the conversations (now safe after follow-ups deleted)
+        await db.delete(conversations).where(eq(conversations.leadId, leadId));
+        console.log(`  ✅ Deleted conversations.`);
+      }
+
+      // 9. Delete all bookings for this lead
+      await db.delete(bookings).where(eq(bookings.leadId, leadId));
+      console.log(`  ✅ Deleted bookings.`);
+
+      // 10. Delete all lead activity logs for this lead
+      await db
+        .delete(leadActivityLog)
+        .where(eq(leadActivityLog.leadId, leadId));
+      console.log(`  ✅ Deleted lead activity logs.`);
+
+      // 11. Finally, delete the lead
+      await db.delete(leads).where(eq(leads.id, leadId));
+      console.log(`  ✅ Deleted lead.`);
+
+      console.log(`🎯 [Cascade Delete] Successfully deleted lead: ${leadId}`);
+    } catch (error) {
+      console.error(
+        `❌ [Cascade Delete] Error deleting lead ${leadId}:`,
+        error
       );
-      console.log(`  ✅ Deleted messages.`);
-
-      // 8. Delete the conversations (now safe after follow-ups deleted)
-      await db.delete(conversations).where(eq(conversations.leadId, leadId));
-      console.log(`  ✅ Deleted conversations.`);
+      throw error; // Re-throw so the API can return proper error
     }
-
-    // 9. Delete all bookings for this lead
-    await db.delete(bookings).where(eq(bookings.leadId, leadId));
-    console.log(`  ✅ Deleted bookings.`);
-
-    // 10. Delete all lead activity logs for this lead
-    await db
-      .delete(leadActivityLog)
-      .where(eq(leadActivityLog.leadId, leadId));
-    console.log(`  ✅ Deleted lead activity logs.`);
-
-    // 11. Finally, delete the lead
-    await db.delete(leads).where(eq(leads.id, leadId));
-    console.log(`  ✅ Deleted lead.`);
-    
-    console.log(`🎯 [Cascade Delete] Successfully deleted lead: ${leadId}`);
-  } catch (error) {
-    console.error(
-      `❌ [Cascade Delete] Error deleting lead ${leadId}:`,
-      error
-    );
-    throw error; // Re-throw so the API can return proper error
   }
-}
 
   // Analytics operations
   async getKPIs(clientId: string): Promise<{
@@ -2254,15 +2282,34 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
       // Get Human response times (from conversations where human took over immediately)
       const [humanResponseResult] = await db
         .select({
-          avg: sql<number>`AVG(EXTRACT(EPOCH FROM (${conversations.humanTakeoverAt} - ${leads.createdAt})))`,
+          avg: sql<number>`
+      AVG(
+        EXTRACT(EPOCH FROM (
+          (
+            SELECT MIN(m.sent_at)
+            FROM messages m
+            WHERE m.conversation_id = ${conversations.id}
+            AND m.sender = 'human'
+            AND m.sent_at > ${conversations.humanTakeoverAt}
+          ) - ${conversations.humanTakeoverAt}
+        ))
+      )
+    `,
         })
-        .from(leads)
-        .innerJoin(conversations, eq(leads.id, conversations.leadId))
+        .from(conversations)
+        .innerJoin(leads, eq(conversations.leadId, leads.id))
         .where(
           and(
             eq(leads.clientId, clientId),
             gte(leads.createdAt, thirtyDaysAgo),
-            sql`${conversations.humanTakeoverAt} IS NOT NULL`
+            sql`${conversations.humanTakeoverAt} IS NOT NULL`,
+            // ✅ Only count if there's actually a human message after takeover
+            sql`EXISTS (
+        SELECT 1 FROM messages m 
+        WHERE m.conversation_id = ${conversations.id}
+        AND m.sender = 'human'
+        AND m.sent_at > ${conversations.humanTakeoverAt}
+      )`
           )
         );
 
@@ -2327,8 +2374,110 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
     }
   }
 
-  async getRecentActivity(clientId: string): Promise<any[]> {
-    // Get recent bookings, new leads, and VSL generations
+  // ==================== PER-DAY ANALYTICS METHOD ====================
+
+async getPerDayResponseTimes(clientId: string, timezone: string = 'America/Vancouver'): Promise<any> {
+  console.log(`📊 [ANALYTICS] Calculating per-day response times for client: ${clientId}`);
+  
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get all conversations from last 30 days
+    const recentConversations = await db
+      .select({
+        id: conversations.id,
+        leadId: conversations.leadId,
+        createdAt: conversations.createdAt,
+        humanTakeoverAt: conversations.humanTakeoverAt,
+        leadResponseTime: leads.responseTimeSeconds,
+      })
+      .from(conversations)
+      .innerJoin(leads, eq(conversations.leadId, leads.id))
+      .where(
+        and(
+          eq(conversations.clientId, clientId),
+          gte(conversations.createdAt, thirtyDaysAgo)
+        )
+      );
+
+    console.log(`   Found ${recentConversations.length} conversations`);
+
+    // Initialize weekly data
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const weekData = dayNames.map((day) => ({
+      day,
+      aiTime: 0,
+      aiCount: 0,
+      humanTime: 0,
+      humanCount: 0,
+    }));
+
+    // Calculate per-day AI response times
+    for (const conv of recentConversations) {
+      // Convert to specified timezone
+      const localDate = new Date(conv.createdAt!.toLocaleString("en-US", {
+        timeZone: timezone
+      }));
+      const dayIndex = localDate.getDay();
+
+      // ✅ AI response time (always available from lead data)
+      if (conv.leadResponseTime) {
+        const aiTimeInMinutes = conv.leadResponseTime / 60;
+        weekData[dayIndex].aiTime += aiTimeInMinutes;
+        weekData[dayIndex].aiCount++;
+      }
+
+      // ✅ Human response time (calculate from messages)
+      if (conv.humanTakeoverAt) {
+        // Get all messages for this conversation
+        const convMessages = await db
+          .select()
+          .from(messages)
+          .where(eq(messages.conversationId, conv.id))
+          .orderBy(messages.sentAt);
+
+        // Find first human message AFTER takeover
+        const firstHumanMsg = convMessages.find(
+          (m) => m.sender === 'human' && 
+                 m.sentAt && 
+                 new Date(m.sentAt) > new Date(conv.humanTakeoverAt!)
+        );
+
+        if (firstHumanMsg && firstHumanMsg.sentAt) {
+          const takeoverTime = new Date(conv.humanTakeoverAt).getTime();
+          const firstResponseTime = new Date(firstHumanMsg.sentAt).getTime();
+          const humanTimeSeconds = (firstResponseTime - takeoverTime) / 1000;
+          
+          if (humanTimeSeconds > 0) {
+            const humanTimeMinutes = humanTimeSeconds / 60;
+            weekData[dayIndex].humanTime += humanTimeMinutes;
+            weekData[dayIndex].humanCount++;
+          }
+        }
+      }
+    }
+
+    // Calculate averages
+    const result = weekData.map((day) => ({
+      day: day.day,
+      aiTime: day.aiCount > 0 ? Number((day.aiTime / day.aiCount).toFixed(1)) : 0,
+      humanTime: day.humanCount > 0 ? Number((day.humanTime / day.humanCount).toFixed(1)) : 0,
+      aiCount: day.aiCount,
+      humanCount: day.humanCount,
+    }));
+
+    console.log(`✅ [ANALYTICS] Per-day response times calculated`);
+    return result;
+  } catch (error) {
+    console.error(`❌ [ANALYTICS] Error calculating per-day response times:`, error);
+    return [];
+  }
+}
+
+async getRecentActivity(clientId: string): Promise<any[]> {
+  try {
+    // ✅ Get recent bookings with inquiry
     const recentBookings = await db
       .select({
         type: sql<string>`'booking'`,
@@ -2336,18 +2485,22 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
         leadName: sql<string>`${leads.firstName} || ' ' || ${leads.lastName}`,
         company: leads.company,
         createdAt: bookings.createdAt,
+        leadId: leads.id,
+        conversationId: conversations.id,
       })
       .from(bookings)
       .innerJoin(leads, eq(bookings.leadId, leads.id))
+      .leftJoin(conversations, eq(conversations.leadId, leads.id))
       .where(
         and(
           eq(leads.clientId, clientId),
-          sql`${bookings.status} IN ('scheduled', 'confirmed')` // ✅ Only confirmed bookings
+          sql`${bookings.status} IN ('scheduled', 'confirmed')`
         )
       )
       .orderBy(desc(bookings.createdAt))
       .limit(5);
 
+    // ✅ Get recent leads with inquiry
     const recentLeads = await db
       .select({
         type: sql<string>`'lead'`,
@@ -2355,12 +2508,16 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
         leadName: sql<string>`${leads.firstName} || ' ' || ${leads.lastName}`,
         company: leads.company,
         createdAt: leads.createdAt,
+        leadId: leads.id,
+        conversationId: conversations.id,
       })
       .from(leads)
+      .leftJoin(conversations, eq(conversations.leadId, leads.id))
       .where(eq(leads.clientId, clientId))
       .orderBy(desc(leads.createdAt))
       .limit(5);
 
+    // VSLs (no inquiry needed)
     const recentVSLs = await db
       .select({
         type: sql<string>`'vsl'`,
@@ -2368,20 +2525,69 @@ async markMessagesAsRead(messageIds: string[]): Promise<void> {
         leadName: sql<string>`''`,
         company: vsls.title,
         createdAt: vsls.createdAt,
+        leadId: sql<string>`NULL`,
+        conversationId: sql<string>`NULL`,
       })
       .from(vsls)
       .where(eq(vsls.clientId, clientId))
       .orderBy(desc(vsls.createdAt))
       .limit(3);
 
-    return [...recentBookings, ...recentLeads, ...recentVSLs]
+    // ✅ Extract inquiry for each activity
+    const activitiesWithInquiry = await Promise.all(
+      [...recentBookings, ...recentLeads, ...recentVSLs].map(async (activity) => {
+        let inquiry = null;
+
+        // Get inquiry from first lead message in conversation
+        if (activity.conversationId) {
+          const firstLeadMessages = await db
+            .select({
+              content: messages.content,
+            })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.conversationId, activity.conversationId),
+                eq(messages.sender, "lead")
+              )
+            )
+            .orderBy(messages.sentAt)
+            .limit(3); // Get first 3 messages to find inquiry
+
+          if (firstLeadMessages.length > 0) {
+            // Combine first few messages as inquiry (in case of multi-message inquiry)
+            inquiry = firstLeadMessages
+              .map((m) => m.content)
+              .join(" ")
+              .substring(0, 100); // Limit to 100 chars
+            
+            // Trim to last complete word
+            if (inquiry.length === 100) {
+              inquiry = inquiry.substring(0, inquiry.lastIndexOf(" ")) + "...";
+            }
+          }
+        }
+
+        return {
+          ...activity,
+          inquiry,
+        };
+      })
+    );
+
+    // Sort by date and return top 10
+    return activitiesWithInquiry
       .sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
       })
       .slice(0, 10);
+  } catch (error) {
+    console.error("❌ Error getting recent activity:", error);
+    return [];
   }
+}
 
   // VSL operations
 
