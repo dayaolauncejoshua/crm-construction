@@ -818,6 +818,59 @@ export const followUps = pgTable("follow_ups", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// ==================== FAILED MESSAGES TABLE ====================
+// For handling Claude API 529 errors and retries
+export const failedMessages = pgTable("failed_messages", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  
+  // Message identification
+  messageId: varchar("message_id"), // Original WhatsApp message ID
+  conversationId: varchar("conversation_id").references(() => conversations.id),
+  leadId: varchar("lead_id").references(() => leads.id).notNull(),
+  clientId: varchar("client_id").references(() => clients.id).notNull(),
+  
+  // Message content
+  phoneNumber: varchar("phone_number").notNull(),
+  content: text("content").notNull(),
+  
+  // Failure tracking
+  failureReason: text("failure_reason").notNull(),
+  errorCode: varchar("error_code"), // e.g., "529", "500"
+  retryAfter: timestamp("retry_after").notNull(),
+  
+  // Retry management
+  retryCount: integer("retry_count").default(0).notNull(),
+  maxRetries: integer("max_retries").default(5).notNull(),
+  status: varchar("status").default("pending").notNull(), // pending, processing, completed, failed, escalated
+  
+  // Timestamps
+  lastRetryAt: timestamp("last_retry_at"),
+  processedAt: timestamp("processed_at"),
+  escalatedAt: timestamp("escalated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  
+  // Metadata
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+});
+
+// Relations
+export const failedMessagesRelations = relations(failedMessages, ({ one }) => ({
+  lead: one(leads, {
+    fields: [failedMessages.leadId],
+    references: [leads.id],
+  }),
+  client: one(clients, {
+    fields: [failedMessages.clientId],
+    references: [clients.id],
+  }),
+  conversation: one(conversations, {
+    fields: [failedMessages.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
 // Relations
 export const followUpSequencesRelations = relations(
   followUpSequences,
@@ -955,3 +1008,6 @@ export type Analytics = typeof analytics.$inferSelect;
 
 export type SpamPattern = typeof spamPatterns.$inferSelect;
 export type InsertSpamPattern = z.infer<typeof insertSpamPatternSchema>;
+
+export type FailedMessage = typeof failedMessages.$inferSelect;
+export type InsertFailedMessage = typeof failedMessages.$inferInsert;

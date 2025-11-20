@@ -278,14 +278,11 @@ class SpamPatternLearning {
       if (constructionTerms.some((term) => pattern.includes(term))) {
         this.patterns.delete(pattern);
         removedCount++;
-        console.log(`🧹 Removed construction pattern from spam: "${pattern}"`);
       }
     }
 
     if (removedCount > 0) {
-      console.log(
-        `🧹 Cleaned ${removedCount} construction patterns from spam database`
-      );
+    
       await this.savePatterns();
     }
 

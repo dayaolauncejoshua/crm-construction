@@ -160,8 +160,27 @@ app.use((req, res, next) => {
     console.error("❌ Failed to initialize spam pattern learning:", error);
   }
 
+  // ✅ NEW: Initialize AI health monitor
+  try {
+    const { aiHealthMonitor } = await import("./services/ai-health-monitor");
+    aiHealthMonitor.start();
+    console.log("✅ AI health monitor initialized");
+  } catch (error) {
+    console.error("❌ Failed to initialize AI health monitor:", error);
+  }
+
+  // ✅ NEW: Initialize AI retry worker
+  try {
+    const { aiRetryWorker } = await import("./services/ai-retry-worker");
+    aiRetryWorker.start();
+    console.log("✅ AI retry worker initialized");
+  } catch (error) {
+    console.error("❌ Failed to initialize AI retry worker:", error);
+  }
+
   const server = await registerRoutes(app);
 
+  
   // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

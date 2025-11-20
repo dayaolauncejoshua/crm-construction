@@ -163,9 +163,9 @@ class NotificationService {
   }
 }
 
-  /**
-   * Send booking alert notifications
-   */
+  
+  //  Send booking alert notifications
+   
   async sendBookingAlert(data: BookingNotification): Promise<void> {
     try {
       console.log(`\n📅 ========== BOOKING ALERT ==========`);
@@ -250,6 +250,175 @@ class NotificationService {
       console.error(`   Stack:`, error.stack);
     }
   }
+  // Send urgent alert when Claude API is down and high-value lead detected
+  async sendUrgentLeadAlert(data: {
+  userId: string;
+  phoneNumber: string;
+  message: string;
+  reason: string;
+}): Promise<void> {
+  try {
+    console.log(`\n🚨 ========== URGENT LEAD ALERT (API FAILURE) ==========`);
+    console.log(`   User ID: ${data.userId}`);
+    console.log(`   Phone: ${data.phoneNumber}`);
+    console.log(`   Reason: ${data.reason}`);
+
+    // Get user
+    const user = await storage.getUserById(data.userId);
+
+    if (!user) {
+      console.error(`❌ User ${data.userId} not found - CANNOT SEND URGENT ALERT`);
+      return;
+    }
+
+    console.log(`✅ User found: ${user.email}`);
+
+    // Check notification preferences
+    const emailNotificationsEnabled = user.emailNotifications !== false;
+    const whatsappNotificationsEnabled = user.whatsappNotifications !== false;
+    const leadNotificationsEnabled = user.leadNotifications !== false;
+
+    if (!leadNotificationsEnabled) {
+      console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
+      return;
+    }
+
+    // ============================================
+    // EMAIL NOTIFICATION
+    // ============================================
+    if (emailNotificationsEnabled && user.email) {
+      try {
+        console.log(`📧 Sending urgent email to: ${user.email}`);
+
+        const emailSubject = `🚨 URGENT: High-Value Lead - AI Unavailable`;
+        const emailBody = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 28px;">🚨 URGENT: Manual Response Required</h1>
+            </div>
+            
+            <div style="background: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+              <p style="font-size: 16px; color: #374151; margin-bottom: 20px;">
+                Hi ${user.firstName},
+              </p>
+              
+              <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 4px;">
+                <p style="font-size: 16px; color: #7f1d1d; margin: 0; font-weight: 600;">
+                  ⚠️ AI Processing Unavailable - Immediate Action Required
+                </p>
+              </div>
+              
+              <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                A <strong>high-value lead</strong> just contacted us, but our AI system is currently unavailable. This lead requires <strong>immediate manual response</strong>.
+              </p>
+              
+              <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin: 30px 0; border-radius: 4px;">
+                <h3 style="color: #7f1d1d; margin-top: 0; font-size: 18px;">Lead Information:</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📱 Phone:</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${data.phoneNumber}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">💬 Message:</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${data.message}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🚨 Reason:</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${data.reason}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                  Respond Now →
+                </a>
+              </div>
+              
+              <p style="font-size: 14px; color: #dc2626; text-align: center; margin-top: 30px; font-weight: 600;">
+                ⏱️ RESPOND IMMEDIATELY - High-value lead detected
+              </p>
+            </div>
+          </div>
+        `;
+
+        const textBody = `
+🚨 URGENT: Manual Response Required
+
+Hi ${user.firstName},
+
+A HIGH-VALUE LEAD just contacted us, but our AI system is currently unavailable. This lead requires IMMEDIATE manual response.
+
+Lead Information:
+━━━━━━━━━━━━━━━━━━━━━━━━
+📱 Phone: ${data.phoneNumber}
+💬 Message: ${data.message}
+🚨 Reason: ${data.reason}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️ RESPOND IMMEDIATELY
+
+View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations
+
+Best regards,
+LeadFlow CRM
+        `;
+
+        await emailService.sendEmail({
+          to: user.email,
+          toName: `${user.firstName} ${user.lastName}`,
+          subject: emailSubject,
+          htmlBody: emailBody,
+          textBody: textBody,
+        });
+
+        console.log(`✅ Urgent email SENT to: ${user.email}`);
+      } catch (emailError: any) {
+        console.error(`❌ Failed to send urgent email:`, emailError.message);
+      }
+    }
+
+    // ============================================
+    // WHATSAPP NOTIFICATION
+    // ============================================
+    if (whatsappNotificationsEnabled && user.phone) {
+      try {
+        console.log(`📱 Sending urgent WhatsApp to: ${user.phone}`);
+
+        const whatsappMessage = `🚨 *URGENT: Manual Response Required*
+
+A *high-value lead* just contacted us, but AI is unavailable.
+
+📱 Phone: ${data.phoneNumber}
+💬 Message: ${data.message.substring(0, 100)}...
+
+⚠️ *${data.reason}*
+
+⏱️ RESPOND IMMEDIATELY
+
+View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
+
+        const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
+
+        if (result.success) {
+          console.log(`✅ Urgent WhatsApp SENT to: ${user.phone}`);
+        } else {
+          console.error(`❌ Urgent WhatsApp FAILED for: ${user.phone}`);
+        }
+      } catch (whatsappError: any) {
+        console.error(`❌ Failed to send urgent WhatsApp:`, whatsappError.message);
+      }
+    }
+
+    console.log(`✅ Urgent lead alert complete for user ${data.userId}`);
+    console.log(`==========================================\n`);
+  } catch (error: any) {
+    console.error(`❌ CRITICAL ERROR in sendUrgentLeadAlert:`, error.message);
+    console.error(`   Stack:`, error.stack);
+  }
+}
 
   // ============================================
   // EMAIL TEMPLATE GENERATORS

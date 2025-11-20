@@ -1,4 +1,7 @@
 // server/services/messageQueue.ts
+import { storage } from "../storage";
+import type { InsertFailedMessage } from "@shared/schema";
+
 
 interface QueuedMessage {
   from: string;
@@ -24,6 +27,141 @@ export class MessageQueueService {
     totalQueued: 0,
     duplicatesPrevented: 0,
   };
+
+  private isHighValueLead(message: string): boolean {
+  const highValueIndicators = [
+    // Urgency
+    /\b(asap|urgent|immediately|right away|emergency|critical)\b/i,
+    // Large budget
+    /\b(\$[1-9]\d{5,}|million|[5-9]\d{2}k)\b/i,
+    // Decision maker
+    /\b(i'm the|i am the|ceo|owner|president|director|founder)\b/i,
+    // Ready to start
+    /\b(ready to start|when can we|let's begin|sign contract)\b/i,
+    // Multiple projects
+    /\b(multiple|several|few) (projects|properties|buildings)\b/i,
+  ];
+  
+  return highValueIndicators.some(pattern => pattern.test(message));
+}
+
+/**
+ * Send immediate holding message to lead
+ */
+private async sendHoldingMessage(
+  from: string,
+  isHighValue: boolean
+): Promise<void> {
+  try {
+    const { whatsappService } = await import("./whatsapp");
+    
+    const message = isHighValue
+      ? "Thank you for contacting us! We've received your message and a senior team member will respond within 5 minutes. Your inquiry is important to us. 🏗️"
+      : "Thanks for reaching out! We're experiencing high volume right now. A team member will respond shortly (typically within 30 minutes). 📱";
+    
+    await whatsappService.sendTextMessage(from, message);
+    console.log(`✅ [QUEUE] Sent holding message to ${from}`);
+  } catch (error) {
+    console.error(`❌ [QUEUE] Failed to send holding message:`, error);
+  }
+}
+
+/**
+ * Escalate to human immediately (for high-value leads)
+ */
+async escalateToHumanNow(
+  from: string,
+  message: string,
+  leadId?: string
+): Promise<void> {
+  try {
+    console.log(`🚨 [QUEUE] ESCALATING to human: ${from}`);
+    
+    // Send urgent notification to team
+    const onCallUser = await storage.getOnCallTeamMember();
+    
+    if (onCallUser) {
+      const { notificationService } = await import("./notification-sevice");
+      
+      await notificationService.sendUrgentLeadAlert({
+        userId: onCallUser.id,
+        phoneNumber: from,
+        message: message.substring(0, 100),
+        reason: "Claude API unavailable - high-value lead detected",
+      });
+      
+      console.log(`✅ [QUEUE] Urgent alert sent to ${onCallUser.email}`);
+    }
+    
+    // If we have the lead, mark conversation for human takeover
+    if (leadId) {
+      const lead = await storage.getLead(leadId);  // ✅ FIX: Get lead first
+      if (lead) {
+        const conversations = await storage.getAllConversations(lead.clientId);  // ✅ FIX: Use clientId
+        const conversation = conversations.find(c => c.leadId === leadId);
+        
+        if (conversation) {
+          await storage.updateConversation(conversation.id, {
+            isAiHandled: false,
+            humanTakeoverAt: new Date(),
+          });
+          
+          console.log(`✅ [QUEUE] Conversation ${conversation.id} flagged for human`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`❌ [QUEUE] Escalation failed:`, error);
+  }
+}
+/**
+ * Queue message for retry (store in database)
+ */
+async queueForRetry(
+  from: string,
+  message: string,
+  error: any,
+  conversationId?: string,
+  leadId?: string,
+  clientId?: string
+): Promise<void> {
+  try {
+    console.log(`💾 [QUEUE] Storing message for retry: ${from}`);
+    
+    // Calculate retry time based on error type
+    const retryAfter = new Date();
+    if (error.status === 529) {
+      retryAfter.setMinutes(retryAfter.getMinutes() + 3); // 3 minutes for 529
+    } else {
+      retryAfter.setMinutes(retryAfter.getMinutes() + 1); // 1 minute for other errors
+    }
+    
+    const failedMessageData: InsertFailedMessage = {
+      messageId: undefined,
+      conversationId,
+      leadId: leadId!,
+      clientId: clientId!,
+      phoneNumber: from,
+      content: message,
+      failureReason: error.message || "Unknown error",
+      errorCode: error.status?.toString() || "UNKNOWN",
+      retryAfter,
+      retryCount: 0,
+      maxRetries: 5,
+      status: "pending",
+      metadata: {
+        errorType: error.error?.type,
+        originalTimestamp: new Date().toISOString(),
+      },
+    };
+    
+    await storage.createFailedMessage(failedMessageData);
+    
+    console.log(`✅ [QUEUE] Message queued for retry at ${retryAfter.toISOString()}`);
+  } catch (storageError) {
+    console.error(`❌ [QUEUE] Failed to store for retry:`, storageError);
+  }
+}
 
   /**
    * Add message to queue for a specific phone number

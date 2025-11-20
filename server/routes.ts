@@ -1563,39 +1563,44 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
   });
 
   // ✅ NEW: Per-day analytics endpoint
-app.get("/api/analytics/per-day/:clientId", async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const timezone = req.query.timezone as string || 'America/Vancouver';
+  app.get("/api/analytics/per-day/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const timezone = (req.query.timezone as string) || "America/Vancouver";
 
-    console.log(`📊 [API] Fetching per-day analytics for client: ${clientId}, timezone: ${timezone}`);
+      console.log(
+        `📊 [API] Fetching per-day analytics for client: ${clientId}, timezone: ${timezone}`
+      );
 
-    // Verify client exists and user has access
-    const client = await storage.getClient(clientId);
-    if (!client) {
-      return res.status(404).send("Client not found");
+      // Verify client exists and user has access
+      const client = await storage.getClient(clientId);
+      if (!client) {
+        return res.status(404).send("Client not found");
+      }
+
+      // For non-super-admin users, verify they own this client
+      if (req.user?.role !== "super_admin" && client.userId !== req.user?.id) {
+        return res.status(403).send("Access denied");
+      }
+
+      const perDayData = await storage.getPerDayResponseTimes(
+        clientId,
+        timezone
+      );
+
+      res.json({
+        success: true,
+        data: perDayData,
+        timezone,
+      });
+    } catch (error: any) {
+      console.error("❌ [API] Error fetching per-day analytics:", error);
+      res.status(500).json({
+        error: "Failed to fetch per-day analytics",
+        message: error.message,
+      });
     }
-
-    // For non-super-admin users, verify they own this client
-    if (req.user?.role !== 'super_admin' && client.userId !== req.user?.id) {
-      return res.status(403).send("Access denied");
-    }
-
-    const perDayData = await storage.getPerDayResponseTimes(clientId, timezone);
-
-    res.json({
-      success: true,
-      data: perDayData,
-      timezone,
-    });
-  } catch (error: any) {
-    console.error("❌ [API] Error fetching per-day analytics:", error);
-    res.status(500).json({
-      error: "Failed to fetch per-day analytics",
-      message: error.message,
-    });
-  }
-});
+  });
 
   // =========================== CONVERSATION ROUTES  =====================================
 
@@ -4998,6 +5003,117 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     }
   });
 
+  // ==================== AI HEALTH & RETRY ROUTES ====================
+
+  // Get AI health status
+  app.get("/api/ai/health", requireAuth, async (req, res) => {
+    try {
+      const { getClaudeAPIHealth } = await import("./services/claude");
+      const { aiHealthMonitor } = await import("./services/ai-health-monitor");
+
+      const health = getClaudeAPIHealth();
+      const metrics = aiHealthMonitor.getMetrics();
+      const successRate = aiHealthMonitor.getSuccessRate();
+
+      res.json({
+        status: health.status,
+        isHealthy: health.isHealthy,
+        consecutive529Errors: health.consecutive529Errors,
+        metrics: {
+          totalRequests: metrics.totalRequests,
+          successfulRequests: metrics.successfulRequests,
+          failedRequests: metrics.failedRequests,
+          successRate: successRate.toFixed(2) + "%",
+          avgResponseTime: Math.round(metrics.avgResponseTime) + "ms",
+        },
+        lastChecked: metrics.timestamp,
+      });
+    } catch (error: any) {
+      console.error("Error fetching AI health:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get failed messages stats for a client
+  app.get(
+    "/api/ai/failed-messages/:clientId",
+    requireAuth,
+    async (req, res) => {
+      try {
+        const { clientId } = req.params;
+        const requestUser = req.user!;
+
+        // Verify ownership
+        if (requestUser.role !== "super_admin") {
+          const client = await storage.getClient(clientId);
+          if (!client || client.userId !== requestUser.id) {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        const stats = await storage.getFailedMessagesStats(clientId);
+        res.json(stats);
+      } catch (error: any) {
+        console.error("Error fetching failed messages stats:", error);
+        res.status(500).json({ error: error.message });
+      }
+    }
+  );
+
+  // Manually retry a failed message
+  app.post("/api/ai/retry/:messageId", requireAuth, async (req, res) => {
+    try {
+      const { messageId } = req.params;
+
+      console.log(`🔄 Manual retry requested for message: ${messageId}`);
+
+      // Get the failed message
+      const failedMessages = await storage.getPendingFailedMessages(1000);
+      const failedMessage = failedMessages.find((m) => m.id === messageId);
+
+      if (!failedMessage) {
+        return res.status(404).json({ message: "Failed message not found" });
+      }
+
+      // Verify user owns this client
+      const requestUser = req.user!;
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(failedMessage.clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Queue for immediate retry
+      await storage.updateFailedMessage(messageId, {
+        retryAfter: new Date(), // Now
+        status: "pending",
+      });
+
+      console.log(`✅ Message ${messageId} queued for immediate retry`);
+
+      res.json({
+        success: true,
+        message: "Message queued for retry",
+      });
+    } catch (error: any) {
+      console.error("Error manually retrying message:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get retry worker stats
+  app.get("/api/ai/retry-stats", requireSuperAdmin, async (req, res) => {
+    try {
+      const { aiRetryWorker } = await import("./services/ai-retry-worker");
+      const stats = await aiRetryWorker.getStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error fetching retry stats:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== SENDGRID TEST (TEMPORARY - Remove after testing) ====================
   app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
     try {
@@ -5065,6 +5181,7 @@ Could you suggest some alternative times that work for you? We'd love to find a 
 
   // ========================= START FOLLOW-UP CRON  =============================
 
+  
   // Start follow-up worker
   const { startFollowUpCron, setBroadcastFunction: setFollowUpBroadcast } =
     await import("./services/follow-up-worker");
@@ -5073,6 +5190,16 @@ Could you suggest some alternative times that work for you? We'd love to find a 
   startFollowUpCron();
 
   console.log("🚀 Follow-up cron job started");
+
+  // ✅ NEW: Start AI retry worker
+  const { aiRetryWorker } = await import("./services/ai-retry-worker");
+  aiRetryWorker.setBroadcastFunction(broadcastUpdate);
+
+  // ✅ NEW: Start AI health monitor
+  const { aiHealthMonitor } = await import("./services/ai-health-monitor");
+  aiHealthMonitor.setBroadcastFunction(broadcastUpdate);
+
+  console.log("✅ AI retry worker and health monitor connected to WebSocket");
 
   // ========================= START REMINDER CRON  ============================
   setBroadcastFunction(broadcastUpdate);

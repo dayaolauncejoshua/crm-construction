@@ -10,6 +10,15 @@ const anthropic = new Anthropic({
 
 const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 
+// ✅ ENHANCED: Increased retries and delays for 529 errors
+const MAX_RETRIES = 5; // Up from 3
+const BASE_DELAY = 2000; // Up from 1000ms (2 seconds)
+const MAX_DELAY = 30000; // Up from 10000ms (30 seconds)
+
+// ✅ NEW: Track consecutive 529 errors globally
+let consecutive529Errors = 0;
+const MAX_CONSECUTIVE_529 = 3; // Alert after 3 consecutive 529s
+
 // ============================================
 // TYPES & INTERFACES
 // ============================================
@@ -67,34 +76,66 @@ export interface AuditResult {
 
 async function callClaudeWithRetry<T>(
   apiCall: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000
+  maxRetries: number = MAX_RETRIES,
+  initialDelay: number = BASE_DELAY
 ): Promise<T> {
   let lastError: any;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await apiCall();
+      const result = await apiCall();
+      
+      // ✅ SUCCESS: Reset consecutive error counter
+      consecutive529Errors = 0;
+      
+      return result;
     } catch (error: any) {
       lastError = error;
 
-      const isRetryable =
-        error.status === 529 ||
-        error.status === 429 ||
-        error.error?.type === "overloaded_error" ||
-        error.error?.type === "rate_limit_error";
+      const is529Error = error.status === 529 || error.error?.type === "overloaded_error";
+      const is429Error = error.status === 429 || error.error?.type === "rate_limit_error";
+      const isRetryable = is529Error || is429Error;
+
+      // ✅ Track 529 errors
+      if (is529Error) {
+        consecutive529Errors++;
+        console.error(
+          `🚨 [CLAUDE] 529 ERROR (consecutive: ${consecutive529Errors}/${MAX_CONSECUTIVE_529})`
+        );
+        
+        // ✅ Log severe outage
+        if (consecutive529Errors >= MAX_CONSECUTIVE_529) {
+          console.error(
+            `🚨🚨🚨 [CLAUDE] SEVERE: ${consecutive529Errors} consecutive 529 errors! API may be down.`
+          );
+        }
+      }
 
       if (!isRetryable || attempt === maxRetries) {
+        // ✅ Log final failure with context
+        console.error(
+          `❌ [CLAUDE] Final failure after ${attempt} attempts:`,
+          {
+            status: error.status,
+            type: error.error?.type,
+            message: error.message,
+            consecutive529s: consecutive529Errors,
+          }
+        );
         throw error;
       }
 
-      const delay = initialDelay * Math.pow(2, attempt - 1);
-      const jitter = Math.random() * 1000;
-      const totalDelay = delay + jitter;
+      // ✅ ENHANCED: Exponential backoff with jitter and cap
+      const exponentialDelay = Math.min(
+        initialDelay * Math.pow(2, attempt - 1),
+        MAX_DELAY
+      );
+      const jitter = Math.random() * 2000; // 0-2 seconds
+      const totalDelay = exponentialDelay + jitter;
 
       console.warn(
-        `⚠️ Claude API ${error.status} error (attempt ${attempt}/${maxRetries}). ` +
-          `Retrying in ${(totalDelay / 1000).toFixed(1)}s...`
+        `⚠️ [CLAUDE] ${error.status} error (attempt ${attempt}/${maxRetries}). ` +
+        `Retrying in ${(totalDelay / 1000).toFixed(1)}s...`
       );
 
       await new Promise((resolve) => setTimeout(resolve, totalDelay));
@@ -102,6 +143,29 @@ async function callClaudeWithRetry<T>(
   }
 
   throw lastError;
+}
+
+// ✅ NEW: Export function to check API health
+export function getClaudeAPIHealth(): {
+  isHealthy: boolean;
+  consecutive529Errors: number;
+  status: 'healthy' | 'degraded' | 'down';
+} {
+  let status: 'healthy' | 'degraded' | 'down';
+  
+  if (consecutive529Errors === 0) {
+    status = 'healthy';
+  } else if (consecutive529Errors < MAX_CONSECUTIVE_529) {
+    status = 'degraded';
+  } else {
+    status = 'down';
+  }
+  
+  return {
+    isHealthy: consecutive529Errors < MAX_CONSECUTIVE_529,
+    consecutive529Errors,
+    status,
+  };
 }
 
 function parseClaudeJSON(text: string): any {

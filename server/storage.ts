@@ -37,6 +37,9 @@ import {
   type InsertFollowUpStep,
   type InsertFollowUp,
   callRecordings,
+  failedMessages,
+  type FailedMessage,
+  type InsertFailedMessage,
 } from "@shared/schema";
 import {
   leadScoring,
@@ -2832,6 +2835,100 @@ async getRecentActivity(clientId: string): Promise<any[]> {
       })
       .where(eq(followUps.id, id));
   }
+
+  /**
+ * Store a failed message for retry
+ */
+async createFailedMessage(data: InsertFailedMessage): Promise<FailedMessage> {
+  console.log(`💾 [STORAGE] Storing failed message for lead: ${data.leadId}`);
+  
+  const [failedMessage] = await db
+    .insert(failedMessages)
+    .values(data)
+    .returning();
+  
+  console.log(`✅ [STORAGE] Failed message stored: ${failedMessage.id}`);
+  return failedMessage;
+}
+
+/**
+ * Get pending failed messages ready for retry
+ */
+async getPendingFailedMessages(limit: number = 50): Promise<FailedMessage[]> {
+  const now = new Date();
+  
+  return await db
+    .select()
+    .from(failedMessages)
+    .where(
+      and(
+        eq(failedMessages.status, "pending"),
+        sql`${failedMessages.retryAfter} <= ${now}`,
+        sql`${failedMessages.retryCount} < ${failedMessages.maxRetries}`
+      )
+    )
+    .orderBy(failedMessages.retryAfter)
+    .limit(limit);
+}
+
+/**
+ * Update failed message status
+ */
+async updateFailedMessage(
+  id: string,
+  updates: Partial<InsertFailedMessage>
+): Promise<void> {
+  await db
+    .update(failedMessages)
+    .set(updates)
+    .where(eq(failedMessages.id, id));
+}
+
+/**
+ * Get on-call team member (user with notifications enabled)
+ */
+async getOnCallTeamMember(): Promise<User | null> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.isActive, true),
+        eq(users.role, "user"), // Not super_admin
+        eq(users.emailNotifications, true)
+      )
+    )
+    .orderBy(desc(users.lastLoginAt))
+    .limit(1);
+  
+  return user || null;
+}
+
+/**
+ * Get failed messages statistics
+ */
+async getFailedMessagesStats(clientId: string): Promise<{
+  total: number;
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  escalated: number;
+}> {
+  const allMessages = await db
+    .select()
+    .from(failedMessages)
+    .where(eq(failedMessages.clientId, clientId));
+  
+  return {
+    total: allMessages.length,
+    pending: allMessages.filter(m => m.status === 'pending').length,
+    processing: allMessages.filter(m => m.status === 'processing').length,
+    completed: allMessages.filter(m => m.status === 'completed').length,
+    failed: allMessages.filter(m => m.status === 'failed').length,
+    escalated: allMessages.filter(m => m.status === 'escalated').length,
+  };
+}
 }
 
 export const storage = new DatabaseStorage();
