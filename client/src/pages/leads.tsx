@@ -220,26 +220,32 @@ const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   }, [wsData, selectedClientId, queryClient, toast]);
 
   // Fetch leads
-  const { data: leads, isLoading } = useQuery({
-    queryKey: ["/api/leads", selectedClientId],
-    queryFn: async () => {
-      const response = await fetch(`/api/leads/${selectedClientId}`);
-      return response.json();
-    },
-    enabled: !!selectedClientId,
-    refetchInterval: 30000,
-  });
+const { data: leads, isLoading } = useQuery({
+  queryKey: ["/api/leads", selectedClientId],
+  queryFn: async () => {
+    const response = await fetch(`/api/leads/${selectedClientId}`);
+    return response.json();
+  },
+  enabled: !!selectedClientId,
+  refetchInterval: 30000,
+  refetchOnMount: "always", // ✅ ADD THIS
+  refetchOnWindowFocus: true, // ✅ ADD THIS
+  staleTime: 0, // ✅ ADD THIS - Always consider data stale
+});
 
-  // ✅ NEW: Fetch bookings to get real deal values
+  // Fetch bookings to get real deal values
   const { data: bookingsData } = useQuery({
-    queryKey: [`/api/bookings/${selectedClientId}`],
-    queryFn: async () => {
-      const response = await fetch(`/api/bookings/${selectedClientId}`);
-      return response.json();
-    },
-    enabled: !!selectedClientId,
-    refetchInterval: 30000,
-  });
+  queryKey: [`/api/bookings/${selectedClientId}`],
+  queryFn: async () => {
+    const response = await fetch(`/api/bookings/${selectedClientId}`);
+    return response.json();
+  },
+  enabled: !!selectedClientId,
+  refetchInterval: 30000,
+  refetchOnMount: "always", 
+  refetchOnWindowFocus: true, 
+  staleTime: 0, 
+});
 
   const handleExportLeads = async () => {
   try {
@@ -313,9 +319,12 @@ const [showAddLeadModal, setShowAddLeadModal] = useState(false);
 
   // Fetch conversations
   const { data: dashboardData } = useQuery({
-    queryKey: [`/api/dashboard/${selectedClientId}`],
-    enabled: !!selectedClientId,
-  });
+  queryKey: [`/api/dashboard/${selectedClientId}`],
+  enabled: !!selectedClientId,
+  refetchOnMount: "always", 
+  refetchOnWindowFocus: true, 
+  staleTime: 0, 
+});
 
   const allLeads = leads || [];
   const conversations = (dashboardData as any)?.conversations || [];
@@ -684,7 +693,7 @@ const [showAddLeadModal, setShowAddLeadModal] = useState(false);
           {/* Tab Navigation with Underline Style */}
           <div className="flex items-center justify-between mb-6">
             <div className="border-b border-slate-200 pb-0 flex-1">
-              <div className="flex gap-6 overflow-x-auto">
+              <div className="flex gap-6 overflow-x-auto scrollbar-hide">
                 <button
                   onClick={() => setActiveTab("all")}
                   className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${

@@ -158,7 +158,8 @@ export default function Dashboard() {
   const hasData = kpis.totalLeads > 0 || conversations.length > 0;
 
   // ✅ Check if we have human response data
-  const hasHumanData = kpis.humanAvgResponseTime && kpis.humanAvgResponseTime > 0;
+  const hasHumanData =
+    kpis.humanAvgResponseTime && kpis.humanAvgResponseTime > 0;
 
   // ✅ TIMEZONE APPLIED: Lead Trend Data
   const leadTrendData = React.useMemo(() => {
@@ -363,9 +364,15 @@ export default function Dashboard() {
     return weekData
       .map((day, index) => ({
         day: dayNames[(index + 1) % 7],
-        time: weekData[(index + 1) % 7].count > 0 
-          ? Number((weekData[(index + 1) % 7].time / weekData[(index + 1) % 7].count).toFixed(1)) 
-          : 0,
+        time:
+          weekData[(index + 1) % 7].count > 0
+            ? Number(
+                (
+                  weekData[(index + 1) % 7].time /
+                  weekData[(index + 1) % 7].count
+                ).toFixed(1)
+              )
+            : 0,
       }))
       .sort((a, b) => {
         const dayOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -605,38 +612,39 @@ export default function Dashboard() {
 
       <main className="flex-1 overflow-hidden">
         {!hasData ? (
-          <div className="h-full flex items-center justify-center p-4">
-            <Card className="max-w-2xl w-full border-2">
-              <CardContent className="p-12 text-center">
-                <div className="w-20 h-20 bg-gradient-construction rounded-full flex items-center justify-center mx-auto mb-6">
-                  <HardHat className="w-10 h-10 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-3">
-                  No Data Yet
-                </h3>
-                <p className="text-slate-600 mb-8 max-w-md mx-auto">
-                  Start generating leads to see your dashboard come to life with
-                  insights and analytics
-                </p>
-                <div className="flex gap-3 justify-center">
-                  <Button
-                    onClick={() => setLocation("/clients")}
-                    className="bg-gradient-construction hover:opacity-90 text-white"
-                  >
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Setup WhatsApp
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setLocation("/conversations")}
-                    className="border-2 hover:border-construction/30"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    View Conversations
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <div
+            className="flex items-center justify-center"
+            style={{ minHeight: "calc(100vh - 250px)" }}
+          >
+            <div className="text-center max-w-md px-4">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <HardHat className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                No Data Yet
+              </h3>
+              <p className="text-slate-600 mb-4">
+                Start generating leads to see your dashboard come to life with
+                insights and analytics.
+              </p>
+              <div className="flex gap-3 justify-center flex-wrap">
+                <Button
+                  onClick={() => setLocation("/clients")}
+                  className="gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Setup WhatsApp
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation("/conversations")}
+                  className="gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  View Conversations
+                </Button>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="p-4 flex flex-col h-full">
@@ -896,12 +904,29 @@ export default function Dashboard() {
                       <ResponsiveContainer width="100%" height={140}>
                         <AreaChart data={aiResponseTimeData}>
                           <defs>
-                            <linearGradient id="aiResponseGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                            <linearGradient
+                              id="aiResponseGradient"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="5%"
+                                stopColor="#2563eb"
+                                stopOpacity={0.3}
+                              />
+                              <stop
+                                offset="95%"
+                                stopColor="#2563eb"
+                                stopOpacity={0}
+                              />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#e2e8f0"
+                          />
                           <XAxis
                             dataKey="day"
                             stroke="#64748b"
@@ -911,7 +936,12 @@ export default function Dashboard() {
                             stroke="#2563eb"
                             width={35}
                             style={{ fontSize: "11px" }}
-                            label={{ value: 'min', angle: -90, position: 'insideLeft', style: { fontSize: '10px' } }}
+                            label={{
+                              value: "min",
+                              angle: -90,
+                              position: "insideLeft",
+                              style: { fontSize: "10px" },
+                            }}
                           />
                           <Tooltip
                             contentStyle={{
@@ -921,7 +951,10 @@ export default function Dashboard() {
                               padding: "6px 10px",
                               fontSize: "12px",
                             }}
-                            formatter={(value: number) => [`${value} min`, "AI Response"]}
+                            formatter={(value: number) => [
+                              `${value} min`,
+                              "AI Response",
+                            ]}
                           />
                           <Area
                             type="monotone"
@@ -935,22 +968,30 @@ export default function Dashboard() {
                       </ResponsiveContainer>
 
                       {/* ✅ PROFESSIONAL: Summary Stats with Human Badge */}
-                      <div className={`grid ${hasHumanData ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mt-3 pt-3 border-t border-slate-200`}>
+                      <div
+                        className={`grid ${
+                          hasHumanData ? "grid-cols-2" : "grid-cols-1"
+                        } gap-2 mt-3 pt-3 border-t border-slate-200`}
+                      >
                         <div className="text-center">
                           <div className="text-lg font-bold text-primary">
                             {kpis.aiAvgResponseTime
                               ? `${(kpis.aiAvgResponseTime / 60).toFixed(1)}m`
                               : "N/A"}
                           </div>
-                          <div className="text-xs text-slate-500">Avg AI Response</div>
+                          <div className="text-xs text-slate-500">
+                            Avg AI Response
+                          </div>
                         </div>
-                        
+
                         {/* ✅ PROFESSIONAL: Human Response as Badge/Stat (not a line) */}
                         {hasHumanData && (
                           <div className="text-center">
                             <div className="text-lg font-bold text-construction">
                               {kpis.humanAvgResponseTime
-                                ? `${(kpis.humanAvgResponseTime / 60).toFixed(1)}m`
+                                ? `${(kpis.humanAvgResponseTime / 60).toFixed(
+                                    1
+                                  )}m`
                                 : "N/A"}
                             </div>
                             <div className="text-xs text-slate-500 flex items-center justify-center gap-1">
