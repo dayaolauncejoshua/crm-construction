@@ -57,8 +57,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     console.log("❌ Auth required but not authenticated:", req.path);
     return res.status(401).json({ message: "Authentication required" });
   }
-
-  console.log("✅ Auth passed:", req.user.email);
   next();
 }
 

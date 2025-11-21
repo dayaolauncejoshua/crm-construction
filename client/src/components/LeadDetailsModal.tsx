@@ -254,16 +254,7 @@ export default function LeadDetailsModal({
                   <Edit className="w-4 h-4" />
                 </Button>
               )}
-              {onDelete && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onDelete}
-                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+              
             </div>
           </div>
 
