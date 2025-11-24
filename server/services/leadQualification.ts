@@ -2141,211 +2141,241 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
 
           const backupRefusalCheck = detectRefusal(freshMessages);
 
-          if (
-            backupRefusalCheck.hasRefusal &&
-            backupRefusalCheck.refusalCount >= 2
-          ) {
+          if (backupRefusalCheck.hasRefusal) {
             console.log(
-              `🚫 BACKUP REFUSAL CHECK: ${backupRefusalCheck.refusalCount} refusals detected`
+              `🚫 BACKUP REFUSAL CHECK: ${backupRefusalCheck.refusalCount} refusal(s) detected`
             );
-            console.log(`⛔ Handing off to human (backup safety net)`);
 
-            // ✅ NEW: Extract correct date/time from booking state
-            const context = extractConversationContext(freshMessages);
-            const bookingState = detectBookingState(freshMessages, context);
-
-            console.log(`📅 Extracting date/time from booking state:`);
-            console.log(
-              `   Date: ${bookingState.collectedInfo.date || "NOT FOUND"}`
-            );
-            console.log(
-              `   Time: ${bookingState.collectedInfo.time || "NOT FOUND"}`
+            // ✅ Extract date/time from booking state for ALL refusal paths
+            const contextForRefusal = extractConversationContext(freshMessages);
+            const bookingStateForRefusal = detectBookingState(
+              freshMessages,
+              contextForRefusal
             );
 
             const confirmedDate =
-              bookingState.collectedInfo.date ||
+              bookingStateForRefusal.collectedInfo.date ||
               bookingIntent.proposedDateTime?.date ||
-              "your";
+              "your scheduled";
             const confirmedTime =
-              bookingState.collectedInfo.time ||
+              bookingStateForRefusal.collectedInfo.time ||
               bookingIntent.proposedDateTime?.time ||
               "";
             const timeText = confirmedTime ? ` at ${confirmedTime}` : "";
 
-            console.log(
-              `✅ Using date: "${confirmedDate}", time: "${confirmedTime}"`
-            );
+            console.log(`📅 Booking info: ${confirmedDate}${timeText}`);
 
-            // ✅ NEW: UPGRADE SCORE TO 0.85 (ULTRA-HOT)
-            const ultraHotScore = 0.85;
-            console.log(
-              `🔥 UPGRADING LEAD TO ULTRA-HOT (${ultraHotScore}) - CUSTOMER REFUSED TWICE`
-            );
-
-            await storage.updateLead(lead.id, {
-              qualificationScore: ultraHotScore.toString(),
-              temperature: "hot",
-              status: "qualified",
-              tags: [
-                ...(Array.isArray(lead.tags) ? lead.tags : []),
-                "requires-phone-followup",
-              ],
-            });
-
-            await storage.updateConversation(conversation.id, {
-              isAiHandled: false,
-              humanTakeoverAt: new Date(),
-              qualificationScore: ultraHotScore.toString(),
-            });
-
-            console.log(
-              `✅ Lead upgraded to ${ultraHotScore} and conversation handed off`
-            );
-
-            // ✅ Get FRESH updated lead
-            const updatedLead = await storage.getLead(lead.id);
-
-            // ✅ NEW: SEND HOT LEAD NOTIFICATION
-            const client = await storage.getClient(lead.clientId);
-
-            if (client && client.userId) {
+            if (backupRefusalCheck.refusalCount >= 2) {
+              // ============================================
+              // SECOND+ REFUSAL - GRACEFUL HANDOFF
+              // ============================================
               console.log(
-                `\n📧 ========== SENDING HOT LEAD NOTIFICATION ==========`
-              );
-              console.log(`   User: ${client.userId}`);
-              console.log(`   Lead: ${lead.firstName} ${lead.lastName}`);
-              console.log(
-                `   Reason: Customer refused to provide details twice`
+                `⛔ MAX REFUSALS REACHED (${backupRefusalCheck.refusalCount}) - Handing off to human`
               );
 
-              try {
-                // Extract project details
-                const leadText = freshMessages
-                  .filter((m: any) => m.sender === "lead")
-                  .map((m: any) => m.content)
-                  .join(" ");
+              // ✅ UPGRADE SCORE TO 0.85 (ULTRA-HOT)
+              const ultraHotScore = 0.85;
+              console.log(
+                `🔥 UPGRADING LEAD TO ULTRA-HOT (${ultraHotScore}) - CUSTOMER REFUSED TWICE`
+              );
 
-                let projectType = "Construction project";
-                if (/bathroom/i.test(leadText))
-                  projectType = "Bathroom renovation";
-                else if (/kitchen/i.test(leadText))
-                  projectType = "Kitchen renovation";
-                else if (/deck/i.test(leadText))
-                  projectType = "Deck construction";
-                else if (/basement/i.test(leadText))
-                  projectType = "Basement finishing";
-                else if (/warehouse/i.test(leadText))
-                  projectType = "Warehouse construction";
+              await storage.updateLead(lead.id, {
+                qualificationScore: ultraHotScore.toString(),
+                temperature: "hot",
+                status: "qualified",
+                tags: [
+                  ...(Array.isArray(lead.tags) ? lead.tags : []),
+                  "requires-phone-followup",
+                ],
+              });
 
-                const budgetMatch = leadText.match(
-                  /(\$?\d+[\d,]*)\s*(k|thousand|million|m)?\b/i
+              await storage.updateConversation(conversation.id, {
+                isAiHandled: false,
+                humanTakeoverAt: new Date(),
+                qualificationScore: ultraHotScore.toString(),
+              });
+
+              console.log(
+                `✅ Lead upgraded to ${ultraHotScore} and conversation handed off`
+              );
+
+              // ✅ Get FRESH updated lead
+              const updatedLead = await storage.getLead(lead.id);
+
+              // ✅ SEND HOT LEAD NOTIFICATION
+              const client = await storage.getClient(lead.clientId);
+
+              if (client && client.userId) {
+                console.log(
+                  `\n📧 ========== SENDING HOT LEAD NOTIFICATION (BACKUP) ==========`
                 );
-                const budget = budgetMatch ? budgetMatch[0] : "TBD";
 
-                const locationMatch = leadText.match(
-                  /\b(Surrey|Vancouver|Burnaby|Richmond|Coquitlam|New Westminster|North Vancouver|West Vancouver)\b/i
-                );
-                const location = locationMatch ? locationMatch[0] : "BC";
+                try {
+                  const leadText = freshMessages
+                    .filter((m: any) => m.sender === "lead")
+                    .map((m: any) => m.content)
+                    .join(" ");
 
-                await notificationService.sendHotLeadAlert({
-                  userId: client.userId,
-                  lead: {
-                    id: updatedLead?.id || lead.id,
-                    firstName: updatedLead?.firstName || lead.firstName || "",
-                    lastName: updatedLead?.lastName || lead.lastName || "",
-                    email: updatedLead?.email || lead.email || "",
-                    phone: updatedLead?.phone || lead.phone || "",
-                    company: updatedLead?.company || lead.company || "",
-                    qualificationScore: ultraHotScore.toString(),
-                    temperature: "hot",
-                  },
-                  conversation: {
-                    id: conversation.id,
-                    qualificationScore: ultraHotScore.toString(),
-                  },
-                  qualification: {
-                    score: ultraHotScore,
-                    reasoning: `🔥 ULTRA-HOT: ${projectType} in ${location}. Budget: ${budget}. Customer requested site visit for ${confirmedDate}${timeText} but prefers phone coordination. Immediate response required.`,
-                  },
-                });
+                  let projectType = "Construction project";
+                  if (/bathroom/i.test(leadText))
+                    projectType = "Bathroom renovation";
+                  else if (/kitchen/i.test(leadText))
+                    projectType = "Kitchen renovation";
+                  else if (/deck/i.test(leadText))
+                    projectType = "Deck construction";
+                  else if (/basement/i.test(leadText))
+                    projectType = "Basement finishing";
+                  else if (/warehouse/i.test(leadText))
+                    projectType = "Warehouse construction";
 
-                console.log(`✅ Hot lead notification sent successfully!`);
-              } catch (notificationError: any) {
-                console.error(
-                  `❌ NOTIFICATION FAILED:`,
-                  notificationError.message
+                  const budgetMatch = leadText.match(
+                    /(\$?\d+[\d,]*)\s*(k|thousand|million|m)?\b/i
+                  );
+                  const budget = budgetMatch ? budgetMatch[0] : "TBD";
+
+                  const locationMatch = leadText.match(
+                    /\b(Surrey|Vancouver|Burnaby|Richmond|Coquitlam|New Westminster|North Vancouver|West Vancouver)\b/i
+                  );
+                  const location = locationMatch ? locationMatch[0] : "BC";
+
+                  await notificationService.sendHotLeadAlert({
+                    userId: client.userId,
+                    lead: {
+                      id: updatedLead?.id || lead.id,
+                      firstName: updatedLead?.firstName || lead.firstName || "",
+                      lastName: updatedLead?.lastName || lead.lastName || "",
+                      email: updatedLead?.email || lead.email || "",
+                      phone: updatedLead?.phone || lead.phone || "",
+                      company: updatedLead?.company || lead.company || "",
+                      qualificationScore: ultraHotScore.toString(),
+                      temperature: "hot",
+                    },
+                    conversation: {
+                      id: conversation.id,
+                      qualificationScore: ultraHotScore.toString(),
+                    },
+                    qualification: {
+                      score: ultraHotScore,
+                      reasoning: `🔥 ULTRA-HOT: ${projectType} in ${location}. Budget: ${budget}. Customer requested site visit for ${confirmedDate}${timeText} but prefers phone coordination. Immediate response required.`,
+                    },
+                  });
+
+                  console.log(`✅ Hot lead notification sent successfully!`);
+                } catch (notificationError: any) {
+                  console.error(
+                    `❌ NOTIFICATION FAILED:`,
+                    notificationError.message
+                  );
+                }
+
+                console.log(
+                  `================================================\n`
                 );
               }
 
-              console.log(`================================================\n`);
-            }
+              // ✅ BROADCAST WEBSOCKET EVENTS
+              this.broadcastUpdate({
+                type: "hot_lead_alert",
+                conversationId: conversation.id,
+                conversation: {
+                  id: conversation.id,
+                  isAiHandled: false,
+                  humanTakeoverAt: new Date(),
+                  leadId: lead.id,
+                  clientId: lead.clientId,
+                  lead: updatedLead,
+                  qualificationScore: ultraHotScore.toString(),
+                },
+                qualification: {
+                  score: ultraHotScore,
+                  reasoning: `Customer refused to provide booking details twice - requires immediate phone follow-up`,
+                },
+              });
 
-            // ✅ BROADCAST WEBSOCKET EVENTS
-            this.broadcastUpdate({
-              type: "hot_lead_alert",
-              conversationId: conversation.id,
-              conversation: {
-                id: conversation.id,
-                isAiHandled: false,
-                humanTakeoverAt: new Date(),
-                leadId: lead.id,
-                clientId: lead.clientId,
+              this.broadcastUpdate({
+                type: "conversation_updated",
+                conversationId: conversation.id,
+                updates: {
+                  isAiHandled: false,
+                  humanTakeoverAt: new Date(),
+                  qualificationScore: ultraHotScore.toString(),
+                },
+              });
+
+              this.broadcastUpdate({
+                type: "lead_updated",
+                conversationId: conversation.id,
                 lead: updatedLead,
-                qualificationScore: ultraHotScore.toString(),
-              },
-              qualification: {
-                score: ultraHotScore,
-                reasoning: `Customer refused to provide booking details twice - requires immediate phone follow-up`,
-              },
-            });
+              });
 
-            this.broadcastUpdate({
-              type: "conversation_updated",
-              conversationId: conversation.id,
-              updates: {
-                isAiHandled: false,
-                humanTakeoverAt: new Date(),
-                qualificationScore: ultraHotScore.toString(),
-              },
-            });
+              // ✅ Send handoff message with CORRECT date/time
+              const handoffMessage = `No problem! I'll have our team reach out to you directly at this number to coordinate the details. They'll be in touch shortly to confirm your ${confirmedDate}${timeText} site visit. 📞`;
 
-            this.broadcastUpdate({
-              type: "lead_updated",
-              conversationId: conversation.id,
-              lead: updatedLead,
-            });
+              this.broadcastUpdate({
+                type: "typing_indicator",
+                conversationId: conversation.id,
+                isTyping: false,
+                sender: "ai",
+              });
 
-            // ✅ Send handoff message with CORRECT date/time
-            const handoffMessage = `No problem! I'll have our team reach out to you directly at this number to coordinate the details. They'll be in touch shortly to confirm your ${confirmedDate}${timeText} site visit. 📞`;
+              await whatsappService.sendTextMessage(from, handoffMessage);
 
-            this.broadcastUpdate({
-              type: "typing_indicator",
-              conversationId: conversation.id,
-              isTyping: false,
-              sender: "ai",
-            });
+              await storage.createMessage({
+                conversationId: conversation.id,
+                content: handoffMessage,
+                sender: "ai",
+                channel: "whatsapp",
+                sentAt: new Date(),
+                deliveredAt: new Date(),
+              });
 
-            await whatsappService.sendTextMessage(from, handoffMessage);
+              this.broadcastUpdate({
+                type: "new_message",
+                conversationId: conversation.id,
+                message: { content: handoffMessage, sender: "ai" },
+              });
 
-            await storage.createMessage({
-              conversationId: conversation.id,
-              content: handoffMessage,
-              sender: "ai",
-              channel: "whatsapp",
-              sentAt: new Date(),
-              deliveredAt: new Date(),
-            });
+              console.log(
+                "✅ Backup refusal handoff complete with notifications - AI stopped responding"
+              );
+              return; // ✅ STOP
+            } else if (backupRefusalCheck.refusalCount === 1) {
+              // ============================================
+              // 🆕 FIRST REFUSAL - GENTLE NUDGE (NEW!)
+              // ============================================
+              console.log(
+                `⚠️ First refusal detected in backup - sending gentle nudge`
+              );
 
-            this.broadcastUpdate({
-              type: "new_message",
-              conversationId: conversation.id,
-              message: { content: handoffMessage, sender: "ai" },
-            });
+              const gentleNudge = `I understand! However, we do need at least your name and email to send you the calendar invite for ${confirmedDate}${timeText}. The address can be confirmed when our team arrives. Could you share your name and email?`;
 
-            console.log(
-              "✅ Backup refusal handoff complete with notifications - AI stopped responding"
-            );
-            return; // ✅ STOP
+              this.broadcastUpdate({
+                type: "typing_indicator",
+                conversationId: conversation.id,
+                isTyping: false,
+                sender: "ai",
+              });
+
+              await whatsappService.sendTextMessage(from, gentleNudge);
+
+              await storage.createMessage({
+                conversationId: conversation.id,
+                content: gentleNudge,
+                sender: "ai",
+                channel: "whatsapp",
+                sentAt: new Date(),
+                deliveredAt: new Date(),
+              });
+
+              this.broadcastUpdate({
+                type: "new_message",
+                conversationId: conversation.id,
+                message: { content: gentleNudge, sender: "ai" },
+              });
+
+              console.log("✅ Backup gentle nudge sent - waiting for response");
+              return; // ✅ STOP - Wait for response
+            }
           }
 
           console.log(
