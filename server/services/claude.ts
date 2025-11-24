@@ -1374,73 +1374,116 @@ export function detectRefusal(conversationHistory: any[]): {
   refusalCount: number;
   lastRefusalMessage?: string;
 } {
-  const messages = conversationHistory.slice(-6); // Last 6 messages (3 exchanges)
+  console.log(`\n🔍 ========== REFUSAL DETECTION START ==========`);
+  console.log(`   Total messages in history: ${conversationHistory.length}`);
   
-  // Specific refusal patterns (high confidence)
+  const messages = conversationHistory.slice(-10); // Last 10 messages for better context
+  console.log(`   Analyzing last ${messages.length} messages`);
+  
+  // ✅ FIRST PASS: Check if AI recently asked for booking details
+  let aiAskedForDetails = false;
+  const aiMessages = messages.filter(m => m.sender === "ai");
+  
+  for (const aiMsg of aiMessages) {
+    const content = aiMsg.content.toLowerCase();
+    const asksForDetails = 
+      /\b(name|email|address|contact information|details)\b/i.test(content) &&
+      /\b(need|require|provide|share|give|confirm)\b/i.test(content);
+    
+    if (asksForDetails) {
+      aiAskedForDetails = true;
+      console.log(`   🤖 AI asked for details: "${aiMsg.content.substring(0, 80)}..."`);
+      break; // Found it, no need to check more
+    }
+  }
+  
+  console.log(`   AI asked for details: ${aiAskedForDetails}`);
+  
+  // ✅ SECOND PASS: Check lead messages for refusals
+  const leadMessages = messages.filter(m => m.sender === "lead");
+  console.log(`   Lead messages to check: ${leadMessages.length}`);
+  
+  // Explicit refusal patterns (high confidence - always count)
   const explicitRefusalPatterns = [
-    /\b(i'll provide|i will provide|i'll give|i will give)\s+(that|it|those|this|them)\s+(to|when|later)/i,
-    /\b(whoever|someone)\s+(comes|arrives|shows up|gets here)/i,
-    /\bjust call me\b/i,
-    /\bcall me at this number\b/i,
-    /\bwhen you (get here|arrive|come)/i,
-    /\bdon't have it right now\b/i,
-    /\blater\b.*\b(provide|give|share)/i,
-    /\b(not now|can't right now|unable to provide)\b/i,
+    // "I'll provide that to whoever comes"
+    /\b(i'll|i will|ill)\s+(provide|give|share)\s+(that|it|those|this|them)\s+(to|with|when)/i,
+    
+    // "whoever comes" / "when they arrive"
+    /\b(whoever|someone|the person)\s+(comes|arrives|shows up|gets here)/i,
+    
+   // "just call me" - more flexible matching
+/\bjust\s+call\s+(me|us)\b/i,
+/\bcall\s+(me|us)\s+at\s+(this\s+)?(number|phone)/i,
+/\bjust\s+call\b/i,
+    
+    // "when you get here"
+    /\bwhen\s+(you|they|someone)\s+(get here|arrive|come)/i,
+    
+    // Direct refusals
+    /\bdon'?t\s+have\s+it\s+(right\s+)?now\b/i,
+    /\b(not\s+now|can'?t\s+right\s+now|unable\s+to\s+provide)\b/i,
+    
+    // "I'll give it later"
+    /\b(later|after|then)\b.*\b(provide|give|share)\b/i,
+    /\b(provide|give|share)\b.*\b(later|after|then)\b/i,
   ];
   
-  // Simple refusal patterns (context-dependent)
+  // Simple refusal patterns (only count if AI asked for details)
   const simpleRefusalPatterns = [
-    /^no thanks?$/i,
+    /^no\s*thanks?$/i,
     /^nope?$/i,
     /^nah$/i,
-    /^not interested$/i,
-    /^i don't want to$/i,
-    /^no$/i, // Single "no"
+    /^not\s+interested$/i,
+    /^i\s+don'?t\s+want\s+to$/i,
+    /^no$/i,
   ];
 
   let refusalCount = 0;
   let lastRefusalMessage: string | undefined;
 
-  // Track if AI recently asked for booking details
-  let aiAskedForDetails = false;
-
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
+  for (const leadMsg of leadMessages) {
+    const content = leadMsg.content.trim();
+    const contentLower = content.toLowerCase().trim();
     
-    // Check if AI asked for name/email/address
-    if (message.sender === "ai") {
-      const content = message.content.toLowerCase();
-      if (
-        /\b(name|email|address|contact information|details)\b/i.test(content) &&
-        /\b(need|require|provide|share|give)\b/i.test(content)
-      ) {
-        aiAskedForDetails = true;
-        console.log(`🤖 AI asked for details: "${message.content.substring(0, 60)}..."`);
+    console.log(`\n   📝 Checking lead message: "${content}"`);
+    
+    // Check explicit refusals (always count, no AI context needed)
+    let isExplicitRefusal = false;
+    for (const pattern of explicitRefusalPatterns) {
+      if (pattern.test(contentLower)) {
+        isExplicitRefusal = true;
+        console.log(`      ✅ EXPLICIT REFUSAL MATCH: ${pattern}`);
+        break;
       }
     }
     
-    // Check lead messages for refusals
-    if (message.sender === "lead") {
-      const content = message.content.trim();
-      const contentLower = content.toLowerCase().trim();
-      
-      // Check explicit refusals (always count)
-      const isExplicitRefusal = explicitRefusalPatterns.some(pattern => 
-        pattern.test(contentLower)
-      );
-      
-      // Check simple refusals (only if AI asked for details)
-      const isSimpleRefusal = aiAskedForDetails && 
-        simpleRefusalPatterns.some(pattern => pattern.test(contentLower));
-      
-      if (isExplicitRefusal || isSimpleRefusal) {
-        refusalCount++;
-        lastRefusalMessage = content;
-        console.log(`🚫 Refusal detected (#${refusalCount}): "${content}"`);
-        console.log(`   Type: ${isExplicitRefusal ? "Explicit" : "Simple (context-aware)"}`);
+    // Check simple refusals (only if AI asked for details)
+    let isSimpleRefusal = false;
+    if (aiAskedForDetails) {
+      for (const pattern of simpleRefusalPatterns) {
+        if (pattern.test(contentLower)) {
+          isSimpleRefusal = true;
+          console.log(`      ✅ SIMPLE REFUSAL MATCH (context-aware): ${pattern}`);
+          break;
+        }
       }
+    }
+    
+    if (isExplicitRefusal || isSimpleRefusal) {
+      refusalCount++;
+      lastRefusalMessage = content;
+      console.log(`      🚫 REFUSAL #${refusalCount} DETECTED!`);
+      console.log(`      Type: ${isExplicitRefusal ? "EXPLICIT" : "SIMPLE (context-aware)"}`);
+    } else {
+      console.log(`      ⚪ No refusal detected in this message`);
     }
   }
+
+  console.log(`\n   📊 FINAL RESULT:`);
+  console.log(`      Has refusal: ${refusalCount > 0}`);
+  console.log(`      Refusal count: ${refusalCount}`);
+  console.log(`      Last refusal: "${lastRefusalMessage || 'N/A'}"`);
+  console.log(`==============================================\n`);
 
   return {
     hasRefusal: refusalCount > 0,
