@@ -1373,6 +1373,7 @@ export function detectRefusal(conversationHistory: any[]): {
   hasRefusal: boolean;
   refusalCount: number;
   lastRefusalMessage?: string;
+  lastMessageIsRefusal: boolean; // ✅ NEW: Track if LATEST message is a refusal
 } {
   console.log(`\n🔍 ========== REFUSAL DETECTION START ==========`);
   console.log(`   Total messages in history: ${conversationHistory.length}`);
@@ -1393,7 +1394,7 @@ export function detectRefusal(conversationHistory: any[]): {
     if (asksForDetails) {
       aiAskedForDetails = true;
       console.log(`   🤖 AI asked for details: "${aiMsg.content.substring(0, 80)}..."`);
-      break; // Found it, no need to check more
+      break;
     }
   }
   
@@ -1405,25 +1406,14 @@ export function detectRefusal(conversationHistory: any[]): {
   
   // Explicit refusal patterns (high confidence - always count)
   const explicitRefusalPatterns = [
-    // "I'll provide that to whoever comes"
     /\b(i'll|i will|ill)\s+(provide|give|share)\s+(that|it|those|this|them)\s+(to|with|when)/i,
-    
-    // "whoever comes" / "when they arrive"
     /\b(whoever|someone|the person)\s+(comes|arrives|shows up|gets here)/i,
-    
-   // "just call me" - more flexible matching
-/\bjust\s+call\s+(me|us)\b/i,
-/\bcall\s+(me|us)\s+at\s+(this\s+)?(number|phone)/i,
-/\bjust\s+call\b/i,
-    
-    // "when you get here"
+    /\bjust\s+call\s+(me|us)\b/i,
+    /\bcall\s+(me|us)\s+at\s+(this\s+)?(number|phone)/i,
+    /\bjust\s+call\b/i,
     /\bwhen\s+(you|they|someone)\s+(get here|arrive|come)/i,
-    
-    // Direct refusals
     /\bdon'?t\s+have\s+it\s+(right\s+)?now\b/i,
     /\b(not\s+now|can'?t\s+right\s+now|unable\s+to\s+provide)\b/i,
-    
-    // "I'll give it later"
     /\b(later|after|then)\b.*\b(provide|give|share)\b/i,
     /\b(provide|give|share)\b.*\b(later|after|then)\b/i,
   ];
@@ -1440,12 +1430,18 @@ export function detectRefusal(conversationHistory: any[]): {
 
   let refusalCount = 0;
   let lastRefusalMessage: string | undefined;
+  let lastMessageIsRefusal = false; // ✅ NEW
 
-  for (const leadMsg of leadMessages) {
+  for (let i = 0; i < leadMessages.length; i++) {
+    const leadMsg = leadMessages[i];
     const content = leadMsg.content.trim();
     const contentLower = content.toLowerCase().trim();
+    const isLastMessage = i === 0; // ✅ Check if this is the LAST lead message
     
-    console.log(`\n   📝 Checking lead message: "${content}"`);
+    console.log(`\n   📝 Checking lead message ${i + 1}/${leadMessages.length}: "${content}"`);
+    if (isLastMessage) {
+      console.log(`      ⭐ This is the MOST RECENT lead message`);
+    }
     
     // Check explicit refusals (always count, no AI context needed)
     let isExplicitRefusal = false;
@@ -1473,9 +1469,20 @@ export function detectRefusal(conversationHistory: any[]): {
       refusalCount++;
       lastRefusalMessage = content;
       console.log(`      🚫 REFUSAL #${refusalCount} DETECTED!`);
-      console.log(`      Type: ${isExplicitRefusal ? "EXPLICIT" : "SIMPLE (context-aware)"}`);
+      
+      // ✅ NEW: Track if the LAST message is a refusal
+      if (isLastMessage) {
+        lastMessageIsRefusal = true;
+        console.log(`      ⚠️ LAST MESSAGE IS A REFUSAL`);
+      }
     } else {
       console.log(`      ⚪ No refusal detected in this message`);
+      
+      // ✅ NEW: If last message is NOT a refusal, mark it
+      if (isLastMessage) {
+        lastMessageIsRefusal = false;
+        console.log(`      ✅ LAST MESSAGE IS NOT A REFUSAL (may contain details)`);
+      }
     }
   }
 
@@ -1483,11 +1490,13 @@ export function detectRefusal(conversationHistory: any[]): {
   console.log(`      Has refusal: ${refusalCount > 0}`);
   console.log(`      Refusal count: ${refusalCount}`);
   console.log(`      Last refusal: "${lastRefusalMessage || 'N/A'}"`);
+  console.log(`      Last message is refusal: ${lastMessageIsRefusal}`); // ✅ NEW
   console.log(`==============================================\n`);
 
   return {
     hasRefusal: refusalCount > 0,
     refusalCount,
     lastRefusalMessage,
+    lastMessageIsRefusal, 
   };
 }

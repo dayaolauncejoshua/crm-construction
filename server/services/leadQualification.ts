@@ -1484,12 +1484,16 @@ export class LeadQualificationService {
             const detailsCheck = validateBookingDetails(bookingIntent, lead);
             if (detailsCheck.missingDetails.length > 0) {
               const refusalCheck = detectRefusal(freshMessages);
-              if (refusalCheck.hasRefusal) {
+              // ✅ Only act on refusal if the LATEST message is a refusal
+              if (
+                refusalCheck.hasRefusal &&
+                refusalCheck.lastMessageIsRefusal
+              ) {
                 console.log(
                   `🚫 REFUSAL DETECTED: Count = ${refusalCheck.refusalCount}`
                 );
                 console.log(
-                  `   Last refusal: "${refusalCheck.lastRefusalMessage}"`
+                  `   Last message IS a refusal - triggering refusal handling`
                 );
 
                 if (refusalCheck.refusalCount >= 2) {
@@ -2141,9 +2145,15 @@ Our team will send you a calendar invite shortly. Looking forward to discussing 
 
           const backupRefusalCheck = detectRefusal(freshMessages);
 
-          if (backupRefusalCheck.hasRefusal) {
+          if (
+            backupRefusalCheck.hasRefusal &&
+            backupRefusalCheck.lastMessageIsRefusal
+          ) {
             console.log(
               `🚫 BACKUP REFUSAL CHECK: ${backupRefusalCheck.refusalCount} refusal(s) detected`
+            );
+            console.log(
+              `   Last message IS a refusal - triggering refusal handling`
             );
 
             // ✅ Extract date/time from booking state for ALL refusal paths
