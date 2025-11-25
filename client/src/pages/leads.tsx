@@ -1,10 +1,5 @@
 // client/src/pages/leads.tsx
-// ✅ FIXES APPLIED:
-// 1. Deal Value from actual bookings (hidden if $0)
-// 2. Location extracted from lead data
-// 3. Message count is real (already was)
-// 4. Last contact from actual messages (already was)
-// 5. Removed placeholder data
+// ✅ RESPONSIVE UPDATES APPLIED - Matching Analytics Page Design System
 
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useEffect } from "react";
@@ -109,15 +104,13 @@ const getTimeAgo = (date: Date | string | null): string => {
   return past.toLocaleDateString();
 };
 
-// ✅ NEW: Extract location from lead data (improved)
+// Extract location from lead data
 const extractLocation = (lead: any): string | null => {
-  // Try to extract from auditResults.location
   if (lead.auditResults && typeof lead.auditResults === "object") {
     const audit = lead.auditResults as any;
     if (audit.location) return audit.location;
   }
 
-  // Try to extract from company if it looks like a location
   if (lead.company && lead.company !== "Unknown") {
     const locationKeywords = [
       "BC",
@@ -149,7 +142,6 @@ const extractLocation = (lead: any): string | null => {
     }
   }
 
-  // Try to extract from tags
   if (lead.tags && Array.isArray(lead.tags)) {
     const locationTag = lead.tags.find((tag: string) =>
       /vancouver|surrey|richmond|burnaby|coquitlam|bc|british columbia|langley|delta|maple ridge|new westminster/i.test(
@@ -159,7 +151,6 @@ const extractLocation = (lead: any): string | null => {
     if (locationTag) return locationTag;
   }
 
-  // Try to extract from phone number area code (604, 778, 236 are BC)
   if (lead.phone) {
     const bcAreaCodes = ["604", "778", "236"];
     const phoneDigits = lead.phone.replace(/\D/g, "");
@@ -193,10 +184,8 @@ export default function Leads() {
   >(null);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
 
-  // ✅ WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
 
-  // ✅ Listen for lead-related WebSocket events
   useEffect(() => {
     if (!wsData || !selectedClientId) return;
 
@@ -222,12 +211,10 @@ export default function Leads() {
         queryKey: [`/api/dashboard/${selectedClientId}`],
       });
 
-      // ✅ NEW: Also refresh bookings
       queryClient.invalidateQueries({
         queryKey: [`/api/bookings/${selectedClientId}`],
       });
 
-      // ✅ Update message count for specific conversation
       if (wsData.type === "new_message" && wsData.conversationId) {
         setMessageCountsMap((prev) => ({
           ...prev,
@@ -244,7 +231,6 @@ export default function Leads() {
     }
   }, [wsData, selectedClientId, queryClient, toast]);
 
-  // Fetch leads
   const { data: leads, isLoading } = useQuery({
     queryKey: ["/api/leads", selectedClientId],
     queryFn: async () => {
@@ -253,12 +239,11 @@ export default function Leads() {
     },
     enabled: !!selectedClientId,
     refetchInterval: 30000,
-    refetchOnMount: "always", // ✅ ADD THIS
-    refetchOnWindowFocus: true, // ✅ ADD THIS
-    staleTime: 0, // ✅ ADD THIS - Always consider data stale
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
-  // Fetch bookings to get real deal values
   const { data: bookingsData } = useQuery({
     queryKey: [`/api/bookings/${selectedClientId}`],
     queryFn: async () => {
@@ -305,7 +290,6 @@ export default function Leads() {
     }
   };
 
-  // Delete lead mutation
   const deleteLeadMutation = useMutation({
     mutationFn: async (leadId: string) => {
       const response = await fetch(`/api/leads/${leadId}`, {
@@ -342,7 +326,6 @@ export default function Leads() {
     },
   });
 
-  // Fetch conversations
   const { data: dashboardData } = useQuery({
     queryKey: [`/api/dashboard/${selectedClientId}`],
     enabled: !!selectedClientId,
@@ -355,17 +338,12 @@ export default function Leads() {
   const conversations = (dashboardData as any)?.conversations || [];
   const allBookings = bookingsData || [];
 
-  // ✅ NEW: Helper to get booking value for a lead
   const getLeadBookingValue = (leadId: string): number => {
     const leadBookings = allBookings.filter((b: any) => b.leadId === leadId);
     if (leadBookings.length === 0) return 0;
-
-    // Sum all booking values (if you have a value field) or use deal value
-    // For now, return the most recent booking value or count
-    return leadBookings.length * 50000; // Placeholder: assume $50k per booking
+    return leadBookings.length * 50000;
   };
 
-  // ✅ Fixed: Temperature filters based ONLY on score (no duplicate counting)
   const veryHotLeads = allLeads.filter((lead: any) => {
     const score = parseFloat(
       lead.manualScore || lead.qualificationScore || "0"
@@ -394,7 +372,6 @@ export default function Leads() {
     return score < 0.4;
   });
 
-  // Combined hot count (Very Hot + Hot)
   const allHotLeads = allLeads.filter((lead: any) => {
     const score = parseFloat(
       lead.manualScore || lead.qualificationScore || "0"
@@ -402,7 +379,6 @@ export default function Leads() {
     return score >= 0.6;
   });
 
-  // Status filters
   const newLeads = allLeads.filter((lead: any) => lead.status === "new");
   const qualifiedLeads = allLeads.filter(
     (lead: any) => lead.status === "qualified"
@@ -411,9 +387,7 @@ export default function Leads() {
     (lead: any) => lead.status === "converted"
   );
 
-  // ✅ Calculate KPIs with real booking values
   const totalValue = allLeads.reduce((sum: number, lead: any) => {
-    // Use booking value if available, otherwise use lead's dealValue
     const bookingValue = getLeadBookingValue(lead.id);
     const leadValue = parseFloat(lead.dealValue || "0");
     return sum + (bookingValue > 0 ? bookingValue : leadValue);
@@ -435,7 +409,6 @@ export default function Leads() {
     Record<string, number>
   >({});
 
-  // ✅ Fetch message counts for visible conversations
   useEffect(() => {
     if (!conversations || conversations.length === 0) return;
 
@@ -466,17 +439,14 @@ export default function Leads() {
     fetchMessageCounts();
   }, [conversations]);
 
-  // Get conversation for a lead
   const getConversationForLead = (leadId: string) => {
     return conversations.find((c: any) => c.leadId === leadId);
   };
 
-  // ✅ Get message count from map
   const getMessageCount = (conversationId: string): number => {
     return messageCountsMap[conversationId] || 0;
   };
 
-  // Navigate to conversation
   const openConversation = (leadId: string) => {
     const conversation = getConversationForLead(leadId);
     if (conversation) {
@@ -490,7 +460,6 @@ export default function Leads() {
     }
   };
 
-  // ✅ Updated badge functions with new thresholds
   const getTemperatureBadge = (lead: any) => {
     const score = parseFloat(
       lead.manualScore || lead.qualificationScore || "0"
@@ -569,7 +538,6 @@ export default function Leads() {
     return parseFloat(lead.manualScore || lead.qualificationScore || "0");
   };
 
-  // ✅ Enhanced filtering
   const filteredLeads = allLeads.filter((lead: any) => {
     const matchesSearch =
       lead.firstName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
@@ -654,19 +622,17 @@ export default function Leads() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-2"
               onClick={handleExportLeads}
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export</span>
             </Button>
             <Button
               size="sm"
-              className="bg-primary hover:bg-primary/90 gap-2"
+              className="bg-primary hover:bg-primary/90"
               onClick={() => setShowAddLeadModal(true)}
             >
-              <UserPlus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add New Lead</span>
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add Lead
             </Button>
           </div>
         </div>
@@ -776,89 +742,87 @@ export default function Leads() {
           className="space-y-6"
         >
           {/* Tab Navigation with Underline Style */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="border-b border-slate-200 pb-0 flex-1">
-              <div className="flex gap-6 overflow-x-auto scrollbar-hide">
-                <button
-                  onClick={() => setActiveTab("all")}
-                  className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === "all"
-                      ? "text-slate-900 font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    <span>All Leads</span>
-                    <Badge variant="secondary" className="ml-1">
-                      {allLeads.length}
-                    </Badge>
-                  </div>
-                  {activeTab === "all" && (
-                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                  )}
-                </button>
+          <div className="border-b border-slate-200 pb-0 mb-6">
+            <div className="flex gap-6 overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("all")}
+                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "all"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  <span>All Leads</span>
+                  <Badge variant="secondary" className="ml-1">
+                    {allLeads.length}
+                  </Badge>
+                </div>
+                {activeTab === "all" && (
+                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
+                )}
+              </button>
 
-                <button
-                  onClick={() => setActiveTab("hot")}
-                  className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === "hot"
-                      ? "text-slate-900 font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Flame className="w-4 h-4" />
-                    <span>Hot</span>
-                    <Badge variant="secondary" className="ml-1">
-                      {hotLeads.length}
-                    </Badge>
-                  </div>
-                  {activeTab === "hot" && (
-                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                  )}
-                </button>
+              <button
+                onClick={() => setActiveTab("hot")}
+                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "hot"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4" />
+                  <span>Hot</span>
+                  <Badge variant="secondary" className="ml-1">
+                    {hotLeads.length}
+                  </Badge>
+                </div>
+                {activeTab === "hot" && (
+                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
+                )}
+              </button>
 
-                <button
-                  onClick={() => setActiveTab("warm")}
-                  className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === "warm"
-                      ? "text-slate-900 font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Wind className="w-4 h-4" />
-                    <span>Warm</span>
-                    <Badge variant="secondary" className="ml-1">
-                      {warmLeads.length}
-                    </Badge>
-                  </div>
-                  {activeTab === "warm" && (
-                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                  )}
-                </button>
+              <button
+                onClick={() => setActiveTab("warm")}
+                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "warm"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Wind className="w-4 h-4" />
+                  <span>Warm</span>
+                  <Badge variant="secondary" className="ml-1">
+                    {warmLeads.length}
+                  </Badge>
+                </div>
+                {activeTab === "warm" && (
+                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
+                )}
+              </button>
 
-                <button
-                  onClick={() => setActiveTab("cold")}
-                  className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === "cold"
-                      ? "text-slate-900 font-semibold"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Snowflake className="w-4 h-4" />
-                    <span>Cold</span>
-                    <Badge variant="secondary" className="ml-1">
-                      {coldLeads.length}
-                    </Badge>
-                  </div>
-                  {activeTab === "cold" && (
-                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={() => setActiveTab("cold")}
+                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                  activeTab === "cold"
+                    ? "text-slate-900 font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Snowflake className="w-4 h-4" />
+                  <span>Cold</span>
+                  <Badge variant="secondary" className="ml-1">
+                    {coldLeads.length}
+                  </Badge>
+                </div>
+                {activeTab === "cold" && (
+                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
+                )}
+              </button>
             </div>
           </div>
 
@@ -1084,9 +1048,8 @@ export default function Leads() {
                         )}
                       </div>
 
-                      {/* ✅ FIXED: Metrics with Real Data */}
+                      {/* Metrics with Real Data */}
                       <div className="grid grid-cols-3 gap-3 mb-4 py-3 border-t border-slate-200">
-                        {/* ✅ Deal Value - Only show if > 0 */}
                         {leadValue > 0 && (
                           <div className="text-center">
                             <div className="flex items-center justify-center gap-1 text-green-600 mb-1">
@@ -1101,7 +1064,6 @@ export default function Leads() {
                           </div>
                         )}
 
-                        {/* ✅ Message Count - Real data from actual messages */}
                         <div className="text-center">
                           <div className="flex items-center justify-center gap-1 text-blue-600 mb-1">
                             <MessageCircle className="w-4 h-4" />
@@ -1114,7 +1076,6 @@ export default function Leads() {
                           <p className="text-xs text-slate-500">Messages</p>
                         </div>
 
-                        {/* ✅ Last Active - Real data from conversation */}
                         <div className="text-center">
                           <div className="flex items-center justify-center gap-1 text-orange-600 mb-1">
                             <Clock className="w-4 h-4" />
@@ -1128,7 +1089,7 @@ export default function Leads() {
                         </div>
                       </div>
 
-                      {/* ✅ Location Row - Always visible if exists */}
+                      {/* Location Row */}
                       {location && (
                         <div className="mb-4 pb-3 border-b border-slate-200">
                           <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -1172,7 +1133,7 @@ export default function Leads() {
                         )}
                       </div>
 
-                      {/* ✅ Real Tags (only if they exist) */}
+                      {/* Real Tags */}
                       {lead.tags && lead.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-4 pb-4 border-b border-slate-200">
                           {lead.tags

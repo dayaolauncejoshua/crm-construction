@@ -18,6 +18,8 @@ import {
   Building2,
   Wrench,
   ArrowRight,
+  Menu,
+  X,
 } from "lucide-react";
 
 export default function Landing() {
@@ -39,24 +41,28 @@ export default function Landing() {
 }
 
 function Header() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo - Using existing theme colors */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
-              <HardHat className="w-6 h-6 text-white" />
+          {/* Logo */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-construction rounded-lg flex items-center justify-center shadow-lg">
+              <HardHat className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">
+              <h1 className="text-base sm:text-xl font-bold text-foreground">
                 AI Lead System
               </h1>
-              <p className="text-xs text-muted-foreground">For Construction</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground hidden xs:block">
+                For Construction
+              </p>
             </div>
           </div>
 
-          {/* Navigation */}
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             <a
               href="#features"
@@ -78,24 +84,83 @@ function Header() {
             </button>
           </nav>
 
-          {/* Auth Buttons */}
-          <div className="flex items-center space-x-3">
+          {/* Desktop Auth Buttons */}
+          <div className="hidden sm:flex items-center space-x-2 sm:space-x-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => (window.location.href = "/login")}
+              className="text-sm"
             >
               Login
             </Button>
             <Button
               size="sm"
               onClick={() => (window.location.href = "/signup")}
-              className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all px-8"
+              className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all px-4 sm:px-8 text-sm"
             >
               Get Started
             </Button>
           </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+          >
+            {mobileMenuOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
         </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden py-4 space-y-3 border-t border-border">
+            <a
+              href="#features"
+              className="block px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 rounded-lg transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Features
+            </a>
+            <a
+              href="#how-it-works"
+              className="block px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 rounded-lg transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              How It Works
+            </a>
+            <button
+              onClick={() => {
+                window.location.href = "/pricing";
+                setMobileMenuOpen(false);
+              }}
+              className="block w-full text-left px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-muted/50 rounded-lg transition-colors"
+            >
+              Pricing
+            </button>
+            <div className="px-4 pt-3 space-y-2 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => (window.location.href = "/login")}
+                className="w-full"
+              >
+                Login
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => (window.location.href = "/signup")}
+                className="w-full bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white"
+              >
+                Get Started
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
@@ -103,166 +168,165 @@ function Header() {
 
 function HeroSection() {
   return (
-    <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <section className="pt-20 sm:pt-24 md:pt-32 pb-12 sm:pb-16 md:pb-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left: Content */}
-          <div>
+          <div className="text-center lg:text-left">
             {/* Badge */}
-            <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-4 py-2 mb-6">
-              <Zap className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">
+            <div className="inline-flex items-center space-x-2 bg-primary/10 border border-primary/20 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 mb-4 sm:mb-6">
+              <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-primary" />
+              <span className="text-xs sm:text-sm font-medium text-primary">
                 #1 AI Lead System for Construction
               </span>
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-4 sm:mb-6">
               Stop Losing
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">
-                {" "}
-                $100K+ Projects{" "}
+                $100K+ Projects
               </span>
               to Slow Responses
             </h1>
 
             {/* Subheadline */}
-            <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 sm:mb-8 leading-relaxed">
               AI-powered lead qualification system that responds in under 2
               minutes, qualifies prospects 24/7, and books meetings with one
               click to help you close more deals.
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6 sm:mb-8 justify-center lg:justify-start">
               <Button
                 size="lg"
                 onClick={() => (window.location.href = "/signup")}
-                className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
+                className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-auto"
               >
                 Get Started Now
-                <ArrowRight className="ml-2 w-5 h-5" />
+                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </div>
 
             {/* Trust Indicators */}
-            <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 sm:gap-6 text-xs sm:text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-success" />
+                <Check className="w-4 h-4 sm:w-5 sm:h-5 text-success flex-shrink-0" />
                 <span>Setup in 10 minutes</span>
               </div>
               <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-success" />
+                <Check className="w-4 h-4 sm:w-5 sm:h-5 text-success flex-shrink-0" />
                 <span>No contracts</span>
               </div>
               <div className="flex items-center space-x-2">
-                <Check className="w-5 h-5 text-success" />
+                <Check className="w-4 h-4 sm:w-5 sm:h-5 text-success flex-shrink-0" />
                 <span>Cancel anytime</span>
               </div>
             </div>
           </div>
 
           {/* Right: Visual */}
-          <div className="relative">
+          <div className="relative mt-8 lg:mt-0">
             {/* Main Card - Dashboard Preview */}
             <Card className="shadow-2xl border-2 overflow-hidden">
-              <div className="bg-gradient-construction p-6">
+              <div className="bg-gradient-construction p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
-                      <MessageCircle className="w-6 h-6 text-white" />
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                      <MessageCircle className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                     </div>
                     <div className="text-white">
-                      <p className="font-semibold">AI Assistant Active</p>
-                      <p className="text-xs text-white/80">
+                      <p className="text-sm sm:text-base font-semibold">AI Assistant Active</p>
+                      <p className="text-[10px] sm:text-xs text-white/80">
                         Responding in real-time
                       </p>
                     </div>
                   </div>
-                  <div className="w-3 h-3 bg-success rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 sm:w-3 sm:h-3 bg-success rounded-full animate-pulse"></div>
                 </div>
               </div>
 
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 {/* Stat Cards */}
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-success/10 border border-success/20 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-success">47</div>
-                    <div className="text-xs text-success/80">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                  <div className="bg-success/10 border border-success/20 rounded-lg p-3 sm:p-4">
+                    <div className="text-xl sm:text-2xl font-bold text-success">47</div>
+                    <div className="text-[10px] sm:text-xs text-success/80">
                       Hot Leads Today
                     </div>
                   </div>
-                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-primary">98%</div>
-                    <div className="text-xs text-primary/80">
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 sm:p-4">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">98%</div>
+                    <div className="text-[10px] sm:text-xs text-primary/80">
                       AI Qualification
                     </div>
                   </div>
                 </div>
 
                 {/* Recent Activity */}
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
-                    <div className="w-2 h-2 bg-success rounded-full"></div>
+                <div className="space-y-2 sm:space-y-3">
+                  <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-success rounded-full flex-shrink-0"></div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         Meeting booked: John Smith
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                         Commercial renovation - $250K
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      2m ago
+                    <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
+                      2m
                     </span>
                   </div>
-                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                  <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-primary rounded-full flex-shrink-0"></div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         AI qualified: Sarah Johnson
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                         Residential build - Hot lead
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      5m ago
+                    <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
+                      5m
                     </span>
                   </div>
-                  <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg border">
-                    <div className="w-2 h-2 bg-construction rounded-full"></div>
+                  <div className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 bg-muted/50 rounded-lg border">
+                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-construction rounded-full flex-shrink-0"></div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         New inquiry: Mike Chen
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                         Kitchen remodel inquiry
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      8m ago
+                    <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
+                      8m
                     </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Floating Badge */}
-            <div className="absolute -top-4 -right-4 bg-card rounded-xl shadow-xl border-2 border-construction/20 p-4 rotate-3">
+            {/* Floating Badge - Hidden on mobile */}
+            <div className="hidden sm:block absolute -top-4 -right-4 bg-card rounded-xl shadow-xl border-2 border-construction/20 p-3 sm:p-4 rotate-3">
               <div className="text-center">
-                <div className="text-3xl font-bold text-construction">
+                <div className="text-2xl sm:text-3xl font-bold text-construction">
                   2 min
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-[10px] sm:text-xs text-muted-foreground">
                   Avg Response
                 </div>
               </div>
             </div>
 
-            {/* Decorative Elements */}
-            <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-primary/20 rounded-full blur-3xl"></div>
-            <div className="absolute -top-8 -right-8 w-32 h-32 bg-construction/20 rounded-full blur-3xl"></div>
+            {/* Decorative Elements - Hidden on mobile */}
+            <div className="hidden sm:block absolute -bottom-8 -left-8 w-24 h-24 sm:w-32 sm:h-32 bg-primary/20 rounded-full blur-3xl"></div>
+            <div className="hidden sm:block absolute -top-8 -right-8 w-24 h-24 sm:w-32 sm:h-32 bg-construction/20 rounded-full blur-3xl"></div>
           </div>
         </div>
       </div>
@@ -272,31 +336,31 @@ function HeroSection() {
 
 function TrustedBySection() {
   return (
-    <section className="py-12 bg-card border-y">
+    <section className="py-8 sm:py-12 bg-card border-y">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-sm font-medium text-muted-foreground mb-8">
+        <p className="text-center text-xs sm:text-sm font-medium text-muted-foreground mb-6 sm:mb-8">
           Trusted by 200+ construction companies nationwide
         </p>
-        <div className="flex flex-wrap justify-center items-center gap-12 opacity-60">
+        <div className="flex flex-col sm:flex-row flex-wrap justify-center items-center gap-6 sm:gap-12 opacity-60">
           <div className="flex items-center space-x-2">
-            <Building2 className="w-8 h-8 text-muted-foreground" />
+            <Building2 className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
             <div>
-              <p className="font-bold text-foreground">BuildPro</p>
-              <p className="text-xs text-muted-foreground">Construction</p>
+              <p className="text-sm sm:text-base font-bold text-foreground">BuildPro</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Construction</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <HardHat className="w-8 h-8 text-muted-foreground" />
+            <HardHat className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
             <div>
-              <p className="font-bold text-foreground">Apex Builders</p>
-              <p className="text-xs text-muted-foreground">Residential</p>
+              <p className="text-sm sm:text-base font-bold text-foreground">Apex Builders</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Residential</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Wrench className="w-8 h-8 text-muted-foreground" />
+            <Wrench className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />
             <div>
-              <p className="font-bold text-foreground">Elite Remodeling</p>
-              <p className="text-xs text-muted-foreground">Commercial</p>
+              <p className="text-sm sm:text-base font-bold text-foreground">Elite Remodeling</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Commercial</p>
             </div>
           </div>
         </div>
@@ -340,51 +404,51 @@ function HowItWorksSection() {
   ];
 
   return (
-    <section id="how-it-works" className="py-20 bg-muted/30">
+    <section id="how-it-works" className="py-12 sm:py-16 md:py-20 bg-muted/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <div className="text-center mb-12 sm:mb-16">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
             How It Works
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
             From inquiry to qualified lead in minutes, not hours
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 items-stretch">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 items-stretch">
           {steps.map((step, index) => (
             <div key={index} className="relative flex">
               <Card className="border-2 hover:border-primary/50 transition-all hover:shadow-lg h-full w-full">
-                <CardContent className="p-8 flex flex-col h-full">
+                <CardContent className="p-6 sm:p-8 flex flex-col h-full">
                   {/* Number and Icon - SIDE BY SIDE at top */}
-                  <div className="flex items-center justify-center gap-3 mb-8">
+                  <div className="flex items-center justify-center gap-3 mb-6 sm:mb-8">
                     {/* Number Badge */}
                     <div
-                      className={`flex items-center justify-center w-14 h-14 rounded-full font-bold text-lg ${step.colorClass} shadow-lg`}
+                      className={`flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-full font-bold text-base sm:text-lg ${step.colorClass} shadow-lg`}
                     >
                       {step.number}
                     </div>
                     {/* Icon */}
                     <div
-                      className={`flex items-center justify-center w-14 h-14 rounded-xl ${step.bgClass}`}
+                      className={`flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-xl ${step.bgClass}`}
                     >
-                      <step.icon className={`w-7 h-7 ${step.iconColorClass}`} />
+                      <step.icon className={`w-6 h-6 sm:w-7 sm:h-7 ${step.iconColorClass}`} />
                     </div>
                   </div>
 
                   {/* Content - Centered and grows to fill space */}
                   <div className="flex flex-col flex-1 text-center">
-                    <h3 className="text-xl font-bold text-foreground mb-3">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground mb-2 sm:mb-3">
                       {step.title}
                     </h3>
-                    <p className="text-muted-foreground leading-relaxed">
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
                       {step.description}
                     </p>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Arrow Between Cards */}
+              {/* Arrow Between Cards - Hidden on mobile & tablet */}
               {index < steps.length - 1 && (
                 <div className="hidden md:flex absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
                   <div className="bg-white rounded-full p-2 shadow-lg border border-slate-200">
@@ -453,35 +517,35 @@ function FeaturesSection() {
   ];
 
   return (
-    <section id="features" className="py-20 bg-background">
+    <section id="features" className="py-12 sm:py-16 md:py-20 bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <div className="text-center mb-12 sm:mb-16">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-3 sm:mb-4">
             Everything You Need to Convert Leads
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
             Built specifically for construction companies who want more projects
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {features.map((feature, index) => (
             <Card
               key={index}
               className="border-2 hover:border-primary/50 transition-all hover:shadow-lg"
             >
-              <CardContent className="p-6">
+              <CardContent className="p-5 sm:p-6">
                 <div
-                  className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 ${feature.bgClass}`}
+                  className={`inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl mb-3 sm:mb-4 ${feature.bgClass}`}
                 >
                   <feature.icon
-                    className={`w-6 h-6 ${feature.iconColorClass}`}
+                    className={`w-5 h-5 sm:w-6 sm:h-6 ${feature.iconColorClass}`}
                   />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2">
+                <h3 className="text-base sm:text-lg font-bold text-foreground mb-2">
                   {feature.title}
                 </h3>
-                <p className="text-muted-foreground">{feature.description}</p>
+                <p className="text-sm sm:text-base text-muted-foreground">{feature.description}</p>
               </CardContent>
             </Card>
           ))}
@@ -493,29 +557,29 @@ function FeaturesSection() {
 
 function StatsSection() {
   return (
-    <section className="py-20 bg-gradient-to-br from-blue-600 to-orange-500 text-white">
+    <section className="py-12 sm:py-16 md:py-20 bg-gradient-to-br from-blue-600 to-orange-500 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+        <div className="text-center mb-8 sm:mb-12">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4">
             Results That Speak for Themselves
           </h2>
         </div>
-        <div className="grid md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           <div className="text-center">
-            <div className="text-5xl font-bold mb-2">5-10x</div>
-            <div className="text-white/80">More Qualified Leads</div>
+            <div className="text-3xl sm:text-4xl md:text-5xl font-bold mb-2">5-10x</div>
+            <div className="text-sm sm:text-base text-white/80">More Qualified Leads</div>
           </div>
           <div className="text-center">
-            <div className="text-5xl font-bold mb-2">2 min</div>
-            <div className="text-white/80">Average Response Time</div>
+            <div className="text-3xl sm:text-4xl md:text-5xl font-bold mb-2">2 min</div>
+            <div className="text-sm sm:text-base text-white/80">Average Response Time</div>
           </div>
           <div className="text-center">
-            <div className="text-5xl font-bold mb-2">73%</div>
-            <div className="text-white/80">AI Qualification Rate</div>
+            <div className="text-3xl sm:text-4xl md:text-5xl font-bold mb-2">73%</div>
+            <div className="text-sm sm:text-base text-white/80">AI Qualification Rate</div>
           </div>
           <div className="text-center">
-            <div className="text-5xl font-bold mb-2">24/7</div>
-            <div className="text-white/80">Always Available</div>
+            <div className="text-3xl sm:text-4xl md:text-5xl font-bold mb-2">24/7</div>
+            <div className="text-sm sm:text-base text-white/80">Always Available</div>
           </div>
         </div>
       </div>
@@ -571,19 +635,19 @@ function LeadCaptureSection() {
 
   if (success) {
     return (
-      <section className="py-20 bg-gradient-construction">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <div className="bg-white rounded-lg p-12 shadow-2xl">
-            <Check className="w-16 h-16 mx-auto text-success mb-4" />
-            <h2 className="text-3xl font-bold mb-4">
+      <section className="py-12 sm:py-16 md:py-20 bg-gradient-construction">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="bg-white rounded-lg p-8 sm:p-12 shadow-2xl text-center">
+            <Check className="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-success mb-4" />
+            <h2 className="text-2xl sm:text-3xl font-bold mb-4">
               {isResubmission ? "Welcome Back! 👋" : "Check Your WhatsApp! 📱"}
             </h2>
-            <p className="text-lg text-muted-foreground mb-4">
+            <p className="text-base sm:text-lg text-muted-foreground mb-4">
               {isResubmission
                 ? "Thanks for the update! We have your information and will be in touch soon."
                 : `We've sent you a message at ${phone}`}
             </p>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               {isResubmission
                 ? "If you need immediate assistance, feel free to call us directly."
                 : "Our team will help you with your construction project. Reply on WhatsApp to get started!"}
@@ -595,32 +659,34 @@ function LeadCaptureSection() {
   }
 
   return (
-    <section className="py-20 bg-gradient-construction">
-      <div className="max-w-2xl mx-auto px-4 text-center">
-        <h2 className="text-4xl font-bold text-white mb-4">
-          Get Your Free Construction Quote
-        </h2>
-        <p className="text-white/90 mb-8 text-lg">
-          Tell us about your project and get a response in 2 minutes
-        </p>
+    <section className="py-12 sm:py-16 md:py-20 bg-gradient-construction">
+      <div className="max-w-2xl mx-auto px-4">
+        <div className="text-center mb-6 sm:mb-8">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-3 sm:mb-4">
+            Get Your Free Construction Quote
+          </h2>
+          <p className="text-sm sm:text-base md:text-lg text-white/90">
+            Tell us about your project and get a response in 2 minutes
+          </p>
+        </div>
 
-        <div className="bg-white rounded-lg p-8 shadow-2xl">
+        <div className="bg-white rounded-lg p-6 sm:p-8 shadow-2xl">
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   type="text"
                   placeholder="First name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="text-lg py-6"
+                  className="text-base sm:text-lg py-5 sm:py-6"
                 />
                 <Input
                   type="text"
                   placeholder="Last name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="text-lg py-6"
+                  className="text-base sm:text-lg py-5 sm:py-6"
                 />
               </div>
               <Input
@@ -628,12 +694,12 @@ function LeadCaptureSection() {
                 placeholder="Your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="text-lg py-6"
+                className="text-base sm:text-lg py-5 sm:py-6"
               />
               <Button
                 onClick={() => setStep(2)}
                 size="lg"
-                className="w-full text-lg py-6"
+                className="w-full text-base sm:text-lg py-5 sm:py-6 h-auto"
                 disabled={!firstName || !email}
               >
                 Continue →
@@ -648,10 +714,10 @@ function LeadCaptureSection() {
                 placeholder="WhatsApp number (e.g., +639123456789)"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="text-lg py-6"
+                className="text-base sm:text-lg py-5 sm:py-6"
               />
-              <label className="flex items-start text-left text-sm gap-2">
-                <input type="checkbox" className="mt-1" required />
+              <label className="flex items-start text-left text-xs sm:text-sm gap-2">
+                <input type="checkbox" className="mt-1 flex-shrink-0" required />
                 <span className="text-gray-600">
                   I agree to receive WhatsApp messages about my audit. Reply
                   STOP to opt out anytime.
@@ -661,7 +727,7 @@ function LeadCaptureSection() {
                 onClick={handleSubmit}
                 disabled={isSubmitting || !phone}
                 size="lg"
-                className="w-full text-lg py-6"
+                className="w-full text-base sm:text-lg py-5 sm:py-6 h-auto"
               >
                 {isSubmitting ? "Sending..." : "Get My Free Quote 🚀"}
               </Button>
@@ -676,7 +742,7 @@ function LeadCaptureSection() {
           )}
         </div>
 
-        <p className="text-white/80 text-sm mt-4">
+        <p className="text-white/80 text-xs sm:text-sm mt-4 text-center">
           💯 Setup in 10 minutes • 📱 Response via WhatsApp in under 2 minutes
         </p>
       </div>
@@ -686,21 +752,21 @@ function LeadCaptureSection() {
 
 function CTASection() {
   return (
-    <section className="py-20 bg-muted/30">
+    <section className="py-12 sm:py-16 md:py-20 bg-muted/30">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-4 sm:mb-6">
           Ready to Close More Deals?
         </h2>
-        <p className="text-xl text-muted-foreground mb-8">
+        <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-6 sm:mb-8">
           Join hundreds of construction businesses already using AI to convert more leads.
         </p>
         <Button
           size="lg"
           onClick={() => (window.location.href = "/signup")}
-          className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-lg px-8"
+          className="bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600 text-white shadow-xl hover:shadow-2xl transition-all text-base sm:text-lg px-6 sm:px-8 h-12 sm:h-auto"
         >
           Sign Up Now
-          <ArrowRight className="ml-2 w-5 h-5" />
+          <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
         </Button>
       </div>
     </section>
@@ -709,26 +775,26 @@ function CTASection() {
 
 function Footer() {
   return (
-    <footer className="bg-secondary text-secondary-foreground py-12">
+    <footer className="bg-secondary text-secondary-foreground py-8 sm:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-4 gap-8 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-6 sm:mb-8">
           {/* Brand */}
-          <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-orange-500 rounded-lg flex items-center justify-center">
-                <HardHat className="w-5 h-5 text-white" />
+          <div className="col-span-2 md:col-span-1">
+            <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-600 to-orange-500 rounded-lg flex items-center justify-center">
+                <HardHat className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <span className="font-bold">AI Lead System</span>
+              <span className="text-sm sm:text-base font-bold">AI Lead System</span>
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               AI-powered lead generation for construction companies.
             </p>
           </div>
 
           {/* Product */}
           <div>
-            <h3 className="font-semibold mb-4">Product</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+            <h3 className="text-sm sm:text-base font-semibold mb-3 sm:mb-4">Product</h3>
+            <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <li>
                 <a href="#features" className="hover:text-foreground">
                   Features
@@ -744,8 +810,8 @@ function Footer() {
 
           {/* Company */}
           <div>
-            <h3 className="font-semibold mb-4">Company</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+            <h3 className="text-sm sm:text-base font-semibold mb-3 sm:mb-4">Company</h3>
+            <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <li>
                 <a href="#" className="hover:text-foreground">
                   About
@@ -766,8 +832,8 @@ function Footer() {
 
           {/* Legal */}
           <div>
-            <h3 className="font-semibold mb-4">Legal</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+            <h3 className="text-sm sm:text-base font-semibold mb-3 sm:mb-4">Legal</h3>
+            <ul className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <li>
                 <a href="#" className="hover:text-foreground">
                   Privacy Policy
@@ -782,7 +848,7 @@ function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
+        <div className="border-t border-border pt-6 sm:pt-8 text-center text-xs sm:text-sm text-muted-foreground">
           <p>© 2025 AI Lead System. All rights reserved.</p>
         </div>
       </div>

@@ -514,12 +514,12 @@ export default function Clients() {
       <header className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
               {user?.role === "super_admin"
                 ? "All Clients (View Only)"
                 : "Client Management"}
             </h2>
-            <p className="text-slate-600">
+            <p className="text-sm text-slate-600">
               {user?.role === "super_admin"
                 ? "View all clients across the platform"
                 : "Manage your business clients and their settings"}
@@ -528,14 +528,8 @@ export default function Clients() {
 
           <div className="flex items-center gap-2">
             {/* ✅ FIX 1: Export Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportClients}
-              className="gap-2"
-            >
+            <Button variant="outline" size="sm" onClick={handleExportClients}>
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export</span>
             </Button>
 
             {canCreateClient && (
@@ -774,7 +768,7 @@ export default function Clients() {
         {!clients || clients.length === 0 ? (
           <div className="text-center py-12">
             <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+            <h3 className="text-base font-semibold text-slate-900 mb-2">
               {user?.role === "super_admin"
                 ? "No Clients Yet"
                 : "No Clients Yet"}
@@ -808,7 +802,7 @@ export default function Clients() {
                         <Building2 className="text-primary text-lg" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg">{client.name}</CardTitle>
+                        <CardTitle className="text-base">{client.name}</CardTitle>
                         <Badge variant="secondary" className="mt-1">
                           {client.industry}
                         </Badge>
