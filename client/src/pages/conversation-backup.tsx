@@ -314,13 +314,8 @@ export default function Conversations() {
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const lastMarkedConversationRef = useRef<{
-    id: string;
-    timestamp: number;
-  } | null>(null);
-  const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+const lastMarkedConversationRef = useRef<{ id: string; timestamp: number } | null>(null);
+const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { toast } = useToast();
   const leadIdFromCalendar = new URLSearchParams(window.location.search).get(
@@ -765,15 +760,15 @@ export default function Conversations() {
     return matchesSearch && matchesStatus;
   });
 
-  const hotCount = conversations.filter((c: any) => {
-    const score = parseFloat(
-      c.lead?.manualScore ||
-        c.lead?.qualificationScore ||
-        c.qualificationScore ||
-        "0"
-    );
-    return score >= 0.6 || c.lead?.temperature === "hot";
-  }).length;
+const hotCount = conversations.filter((c: any) => {
+  const score = parseFloat(
+    c.lead?.manualScore ||
+      c.lead?.qualificationScore ||
+      c.qualificationScore ||
+      "0"
+  );
+  return score >= 0.6 || c.lead?.temperature === "hot";
+}).length;
   const aiHandlingCount = conversations.filter(
     (c: any) => c.isAiHandled === true
   ).length;
@@ -781,279 +776,196 @@ export default function Conversations() {
     (c: any) => c.isAiHandled === false
   ).length;
 
-  useEffect(() => {
-    if (!wsData) return;
+useEffect(() => {
+  if (!wsData) return;
 
-    console.log(`📨 ========== WEBSOCKET EVENT RECEIVED ==========`);
-    console.log(`   Type: ${wsData.type}`);
-    console.log(`   Conversation ID: ${wsData.conversationId}`);
-    console.log(`   Full Payload:`, wsData);
-    console.log(`================================================`);
+  console.log(`📨 ========== WEBSOCKET EVENT RECEIVED ==========`);
+  console.log(`   Type: ${wsData.type}`);
+  console.log(`   Conversation ID: ${wsData.conversationId}`);
+  console.log(`   Full Payload:`, wsData);
+  console.log(`================================================`);
 
-    switch (wsData.type) {
-      case "typing_indicator":
-        setTypingIndicators((prev) => ({
+  switch (wsData.type) {
+    case "typing_indicator":
+      setTypingIndicators((prev) => ({
+        ...prev,
+        [wsData.conversationId]: {
+          isTyping: wsData.isTyping,
+          sender: wsData.sender,
+          leadName: wsData.leadName,
+        },
+      }));
+
+      if (wsData.isTyping) {
+        setTimeout(() => {
+          setTypingIndicators((prev) => {
+            const current = prev[wsData.conversationId];
+            if (current && current.isTyping) {
+              return {
+                ...prev,
+                [wsData.conversationId]: {
+                  ...current,
+                  isTyping: false,
+                },
+              };
+            }
+            return prev;
+          });
+        }, 5000);
+      }
+      break;
+
+    case "conversation_updated":
+      console.log(`🔄 CONVERSATION_UPDATED Event Processing...`);
+      console.log(`   Conversation ID: ${wsData.conversationId}`);
+      console.log(`   Updates:`, wsData.updates);
+
+      // ✅ IMMEDIATE local state update (no waiting)
+      setSelectedConversation((prev: any) => {
+        if (!prev || prev.id !== wsData.conversationId) return prev;
+        
+        console.log(`   Updating SELECTED conversation state...`);
+        console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
+        
+        const updated = {
           ...prev,
-          [wsData.conversationId]: {
-            isTyping: wsData.isTyping,
-            sender: wsData.sender,
-            leadName: wsData.leadName,
-          },
-        }));
+          ...wsData.updates,
+        };
+        
+        console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
+        return updated;
+      });
 
-        if (wsData.isTyping) {
-          setTimeout(() => {
-            setTypingIndicators((prev) => {
-              const current = prev[wsData.conversationId];
-              if (current && current.isTyping) {
-                return {
-                  ...prev,
-                  [wsData.conversationId]: {
-                    ...current,
-                    isTyping: false,
-                  },
+      // Update dashboard cache
+      queryClient.setQueryData(
+        [`/api/dashboard/${selectedClientId}`],
+        (oldData: any) => {
+          if (!oldData) {
+            console.warn(`⚠️ No dashboard data in cache`);
+            return oldData;
+          }
+
+          console.log(`   Updating dashboard cache...`);
+          return {
+            ...oldData,
+            conversations: oldData.conversations.map((conv: any) => {
+              if (conv.id === wsData.conversationId) {
+                console.log(`   ✅ Found conversation in cache`);
+                console.log(`      BEFORE: isAiHandled = ${conv.isAiHandled}`);
+                
+                const updatedConv = {
+                  ...conv,
+                  ...wsData.updates,
                 };
+                
+                console.log(`      AFTER: isAiHandled = ${updatedConv.isAiHandled}`);
+                return updatedConv;
               }
-              return prev;
-            });
-          }, 5000);
-        }
-        break;
-
-      case "conversation_updated":
-        console.log(`🔄 CONVERSATION_UPDATED Event Processing...`);
-        console.log(`   Conversation ID: ${wsData.conversationId}`);
-        console.log(`   Updates:`, wsData.updates);
-
-        // ✅ IMMEDIATE local state update (no waiting)
-        setSelectedConversation((prev: any) => {
-          if (!prev || prev.id !== wsData.conversationId) return prev;
-
-          console.log(`   Updating SELECTED conversation state...`);
-          console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
-
-          const updated = {
-            ...prev,
-            ...wsData.updates,
+              return conv;
+            }),
           };
+        }
+      );
 
-          console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
-          return updated;
+      console.log(`✅ conversation_updated processing complete`);
+      break;
+
+    case "hot_lead_alert":
+      console.log(`🔥 HOT_LEAD_ALERT Event Processing...`);
+      
+      const targetConvId = wsData.conversationId || wsData.conversation?.id;
+      console.log(`   Target Conversation ID: ${targetConvId}`);
+      console.log(`   isAiHandled in payload: ${wsData.conversation?.isAiHandled}`);
+
+      // ✅ TRIPLE UPDATE: Selected state + Dashboard cache + Force UI refresh
+      
+      // 1. Update selected conversation IMMEDIATELY
+      setSelectedConversation((prev: any) => {
+        if (!prev || prev.id !== targetConvId) return prev;
+
+        console.log(`   Updating SELECTED conversation for hot lead...`);
+        console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
+
+        const updated = {
+          ...prev,
+          isAiHandled: false, // ✅ FORCE handoff
+          humanTakeoverAt: new Date(),
+          lead: wsData.conversation?.lead || prev.lead,
+          qualificationScore: wsData.conversation?.qualificationScore || prev.qualificationScore,
+        };
+
+        console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
+        return updated;
+      });
+
+      // 2. Update dashboard cache
+      queryClient.setQueryData(
+        [`/api/dashboard/${selectedClientId}`],
+        (oldData: any) => {
+          if (!oldData) return oldData;
+
+          console.log(`   Updating dashboard cache for hot lead...`);
+
+          return {
+            ...oldData,
+            conversations: oldData.conversations.map((conv: any) => {
+              if (conv.id === targetConvId) {
+                console.log(`   ✅ FOUND conversation in cache!`);
+                console.log(`      BEFORE: isAiHandled = ${conv.isAiHandled}`);
+
+                const updatedConv = {
+                  ...conv,
+                  isAiHandled: false, // ✅ FORCE
+                  humanTakeoverAt: new Date(),
+                  lead: wsData.conversation?.lead || conv.lead,
+                  qualificationScore: wsData.conversation?.qualificationScore || conv.qualificationScore,
+                };
+
+                console.log(`      AFTER: isAiHandled = ${updatedConv.isAiHandled}`);
+                return updatedConv;
+              }
+              return conv;
+            }),
+          };
+        }
+      );
+
+      // 3. Show toast notification
+      toast({
+        title: "🔥 Hot Lead Alert!",
+        description: `${wsData.conversation?.lead?.firstName || "Lead"} needs immediate attention - handed over to you`,
+        variant: "destructive",
+        duration: 8000,
+      });
+
+      console.log(`✅ hot_lead_alert processing complete`);
+      break;
+
+    case "new_message":
+      console.log(`💬 New Message Event: ${wsData.conversationId}`);
+      console.log(`   Message:`, wsData.message);
+
+      // ✅ INSTANT MESSAGE UPDATE (critical for real-time feel)
+      if (selectedConversation?.id === wsData.conversationId) {
+        // Invalidate messages query to trigger immediate refetch
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
 
-        // Update dashboard cache
+        // ✅ Also update conversation's lastMessage in sidebar
         queryClient.setQueryData(
           [`/api/dashboard/${selectedClientId}`],
           (oldData: any) => {
-            if (!oldData) {
-              console.warn(`⚠️ No dashboard data in cache`);
-              return oldData;
-            }
+            if (!oldData) return oldData;
 
-            console.log(`   Updating dashboard cache...`);
             return {
               ...oldData,
               conversations: oldData.conversations.map((conv: any) => {
                 if (conv.id === wsData.conversationId) {
-                  console.log(`   ✅ Found conversation in cache`);
-                  console.log(
-                    `      BEFORE: isAiHandled = ${conv.isAiHandled}`
-                  );
-
-                  const updatedConv = {
-                    ...conv,
-                    ...wsData.updates,
-                  };
-
-                  console.log(
-                    `      AFTER: isAiHandled = ${updatedConv.isAiHandled}`
-                  );
-                  return updatedConv;
-                }
-                return conv;
-              }),
-            };
-          }
-        );
-
-        console.log(`✅ conversation_updated processing complete`);
-        break;
-
-      case "hot_lead_alert":
-        console.log(`🔥 HOT_LEAD_ALERT Event Processing...`);
-
-        const targetConvId = wsData.conversationId || wsData.conversation?.id;
-        console.log(`   Target Conversation ID: ${targetConvId}`);
-        console.log(
-          `   isAiHandled in payload: ${wsData.conversation?.isAiHandled}`
-        );
-
-        // ✅ TRIPLE UPDATE: Selected state + Dashboard cache + Force UI refresh
-
-        // 1. Update selected conversation IMMEDIATELY
-        setSelectedConversation((prev: any) => {
-          if (!prev || prev.id !== targetConvId) return prev;
-
-          console.log(`   Updating SELECTED conversation for hot lead...`);
-          console.log(`      BEFORE: isAiHandled = ${prev.isAiHandled}`);
-
-          const updated = {
-            ...prev,
-            isAiHandled: false, // ✅ FORCE handoff
-            humanTakeoverAt: new Date(),
-            lead: wsData.conversation?.lead || prev.lead,
-            qualificationScore:
-              wsData.conversation?.qualificationScore ||
-              prev.qualificationScore,
-          };
-
-          console.log(`      AFTER: isAiHandled = ${updated.isAiHandled}`);
-          return updated;
-        });
-
-        // 2. Update dashboard cache
-        queryClient.setQueryData(
-          [`/api/dashboard/${selectedClientId}`],
-          (oldData: any) => {
-            if (!oldData) return oldData;
-
-            console.log(`   Updating dashboard cache for hot lead...`);
-
-            return {
-              ...oldData,
-              conversations: oldData.conversations.map((conv: any) => {
-                if (conv.id === targetConvId) {
-                  console.log(`   ✅ FOUND conversation in cache!`);
-                  console.log(
-                    `      BEFORE: isAiHandled = ${conv.isAiHandled}`
-                  );
-
-                  const updatedConv = {
-                    ...conv,
-                    isAiHandled: false, // ✅ FORCE
-                    humanTakeoverAt: new Date(),
-                    lead: wsData.conversation?.lead || conv.lead,
-                    qualificationScore:
-                      wsData.conversation?.qualificationScore ||
-                      conv.qualificationScore,
-                  };
-
-                  console.log(
-                    `      AFTER: isAiHandled = ${updatedConv.isAiHandled}`
-                  );
-                  return updatedConv;
-                }
-                return conv;
-              }),
-            };
-          }
-        );
-
-        // 3. Show toast notification
-        toast({
-          title: "🔥 Hot Lead Alert!",
-          description: `${
-            wsData.conversation?.lead?.firstName || "Lead"
-          } needs immediate attention - handed over to you`,
-          variant: "destructive",
-          duration: 8000,
-        });
-
-        console.log(`✅ hot_lead_alert processing complete`);
-        break;
-
-      case "new_message":
-        console.log(`💬 New Message Event: ${wsData.conversationId}`);
-        console.log(`   Message:`, wsData.message);
-
-        // ✅ INSTANT MESSAGE UPDATE (critical for real-time feel)
-        if (selectedConversation?.id === wsData.conversationId) {
-          // Invalidate messages query to trigger immediate refetch
-          queryClient.invalidateQueries({
-            queryKey: ["/api/conversations", wsData.conversationId, "messages"],
-          });
-
-          // ✅ Also update conversation's lastMessage in sidebar
-          queryClient.setQueryData(
-            [`/api/dashboard/${selectedClientId}`],
-            (oldData: any) => {
-              if (!oldData) return oldData;
-
-              return {
-                ...oldData,
-                conversations: oldData.conversations.map((conv: any) => {
-                  if (conv.id === wsData.conversationId) {
-                    return {
-                      ...conv,
-                      lastMessageAt: wsData.message?.sentAt || new Date(),
-                      lastMessage:
-                        wsData.message?.content?.substring(0, 50) ||
-                        conv.lastMessage,
-                    };
-                  }
-                  return conv;
-                }),
-              };
-            }
-          );
-
-          // Auto-scroll to new message
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-          }, 100);
-        } else {
-          // Update conversation list for unselected conversations
-          queryClient.invalidateQueries({
-            queryKey: [`/api/dashboard/${selectedClientId}`],
-          });
-        }
-        break;
-
-      case "message_read":
-        console.log(`✅ Message Read Event: ${wsData.conversationId}`);
-
-        if (wsData.conversationId === selectedConversation?.id) {
-          queryClient.invalidateQueries({
-            queryKey: ["/api/conversations", wsData.conversationId, "messages"],
-          });
-        }
-        break;
-
-      case "new_conversation":
-        console.log(`🆕 New Conversation Created`);
-
-        queryClient.invalidateQueries({
-          queryKey: [`/api/dashboard/${selectedClientId}`],
-        });
-
-        toast({
-          title: "New Conversation",
-          description: "A new lead has started a conversation",
-        });
-        break;
-
-      case "lead_updated":
-        console.log(`👤 Lead Updated Event: ${wsData.conversationId}`);
-
-        // Update dashboard cache
-        queryClient.setQueryData(
-          [`/api/dashboard/${selectedClientId}`],
-          (oldData: any) => {
-            if (!oldData) return oldData;
-
-            return {
-              ...oldData,
-              conversations: oldData.conversations.map((conv: any) => {
-                if (
-                  conv.id === wsData.conversationId ||
-                  conv.leadId === wsData.lead?.id
-                ) {
                   return {
                     ...conv,
-                    lead: wsData.lead,
-                    qualificationScore:
-                      wsData.lead?.qualificationScore ||
-                      conv.qualificationScore,
+                    lastMessageAt: wsData.message?.sentAt || new Date(),
+                    lastMessage: wsData.message?.content?.substring(0, 50) || conv.lastMessage,
                   };
                 }
                 return conv;
@@ -1062,100 +974,151 @@ export default function Conversations() {
           }
         );
 
-        // Update selected conversation
-        if (
-          selectedConversation?.id === wsData.conversationId ||
-          selectedConversation?.leadId === wsData.lead?.id
-        ) {
-          setSelectedConversation((prev: any) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              lead: wsData.lead,
-              qualificationScore:
-                wsData.lead?.qualificationScore || prev.qualificationScore,
-            };
-          });
-        }
-
-        // Show hot lead notification
-        if (wsData.lead?.temperature === "hot") {
-          toast({
-            title: "🔥 Lead is now HOT!",
-            description: `${
-              wsData.lead.firstName || "Lead"
-            } is now a hot lead (${(
-              parseFloat(wsData.lead.qualificationScore || "0") * 100
-            ).toFixed(0)}%)`,
-          });
-        }
-        break;
-
-      case "conversation_reopened":
-        console.log(`🔄 Conversation Reopened: ${wsData.conversationId}`);
-
+        // Auto-scroll to new message
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      } else {
+        // Update conversation list for unselected conversations
         queryClient.invalidateQueries({
           queryKey: [`/api/dashboard/${selectedClientId}`],
         });
+      }
+      break;
 
-        if (wsData.conversationId === selectedConversation?.id) {
-          queryClient.invalidateQueries({
-            queryKey: ["/api/conversations", wsData.conversationId, "messages"],
-          });
+    case "message_read":
+      console.log(`✅ Message Read Event: ${wsData.conversationId}`);
+      
+      if (wsData.conversationId === selectedConversation?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
+        });
+      }
+      break;
+
+    case "new_conversation":
+      console.log(`🆕 New Conversation Created`);
+      
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+      
+      toast({
+        title: "New Conversation",
+        description: "A new lead has started a conversation",
+      });
+      break;
+
+    case "lead_updated":
+      console.log(`👤 Lead Updated Event: ${wsData.conversationId}`);
+
+      // Update dashboard cache
+      queryClient.setQueryData(
+        [`/api/dashboard/${selectedClientId}`],
+        (oldData: any) => {
+          if (!oldData) return oldData;
+
+          return {
+            ...oldData,
+            conversations: oldData.conversations.map((conv: any) => {
+              if (conv.id === wsData.conversationId || conv.leadId === wsData.lead?.id) {
+                return {
+                  ...conv,
+                  lead: wsData.lead,
+                  qualificationScore: wsData.lead?.qualificationScore || conv.qualificationScore,
+                };
+              }
+              return conv;
+            }),
+          };
         }
+      );
 
+      // Update selected conversation
+      if (selectedConversation?.id === wsData.conversationId || 
+          selectedConversation?.leadId === wsData.lead?.id) {
+        setSelectedConversation((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            lead: wsData.lead,
+            qualificationScore: wsData.lead?.qualificationScore || prev.qualificationScore,
+          };
+        });
+      }
+
+      // Show hot lead notification
+      if (wsData.lead?.temperature === "hot") {
         toast({
-          title: "⚠️ Conversation Reopened",
-          description: `${
-            wsData.lead?.firstName || "Lead"
-          } messaged again after termination. Please review.`,
-          variant: "default",
-          duration: 10000,
+          title: "🔥 Lead is now HOT!",
+          description: `${wsData.lead.firstName || "Lead"} is now a hot lead (${(
+            parseFloat(wsData.lead.qualificationScore || "0") * 100
+          ).toFixed(0)}%)`,
         });
-        break;
+      }
+      break;
 
-      case "message_reacted":
-        console.log(`❤️ Message Reacted: ${wsData.conversationId}`);
+    case "conversation_reopened":
+      console.log(`🔄 Conversation Reopened: ${wsData.conversationId}`);
 
-        if (wsData.conversationId === selectedConversation?.id) {
-          queryClient.invalidateQueries({
-            queryKey: ["/api/conversations", wsData.conversationId, "messages"],
-          });
-        }
-        break;
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
 
-      case "booking_approval_needed":
-      case "booking_updated":
-        console.log(`📅 Booking Event: ${wsData.type}`);
-
-        // Refresh bookings
+      if (wsData.conversationId === selectedConversation?.id) {
         queryClient.invalidateQueries({
-          queryKey: ["/api/bookings", selectedClientId, "pending"],
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
+      }
 
+      toast({
+        title: "⚠️ Conversation Reopened",
+        description: `${wsData.lead?.firstName || "Lead"} messaged again after termination. Please review.`,
+        variant: "default",
+        duration: 10000,
+      });
+      break;
+
+    case "message_reacted":
+      console.log(`❤️ Message Reacted: ${wsData.conversationId}`);
+
+      if (wsData.conversationId === selectedConversation?.id) {
         queryClient.invalidateQueries({
-          queryKey: ["/api/bookings", selectedClientId],
+          queryKey: ["/api/conversations", wsData.conversationId, "messages"],
         });
+      }
+      break;
 
-        // Show toast
-        toast({
-          title: "📅 New Booking Proposed",
-          description: `AI proposed a meeting with ${
-            wsData.booking?.lead?.firstName || "a lead"
-          }`,
-          duration: 8000,
-        });
-        break;
+    case "booking_approval_needed":
+    case "booking_updated":
+      console.log(`📅 Booking Event: ${wsData.type}`);
 
-      default:
-        console.log(`📡 Unhandled WebSocket event: ${wsData.type}`);
+      // Refresh bookings
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId, "pending"],
+      });
 
-        // Fallback: Refetch dashboard
-        queryClient.invalidateQueries({
-          queryKey: [`/api/dashboard/${selectedClientId}`],
-        });
-    }
-  }, [wsData, selectedClientId, queryClient, toast, selectedConversation]);
+      queryClient.invalidateQueries({
+        queryKey: ["/api/bookings", selectedClientId],
+      });
+
+      // Show toast
+      toast({
+        title: "📅 New Booking Proposed",
+        description: `AI proposed a meeting with ${wsData.booking?.lead?.firstName || "a lead"}`,
+        duration: 8000,
+      });
+      break;
+
+    default:
+      console.log(`📡 Unhandled WebSocket event: ${wsData.type}`);
+      
+      // Fallback: Refetch dashboard
+      queryClient.invalidateQueries({
+        queryKey: [`/api/dashboard/${selectedClientId}`],
+      });
+  }
+}, [wsData, selectedClientId, queryClient, toast, selectedConversation]);
 
   useEffect(() => {
     if (messages && messages.length > 0) {
@@ -1173,83 +1136,83 @@ export default function Conversations() {
     }
   }, [selectedConversation?.id]);
 
-  // ✅ Debounced mark-as-read (prevents infinite loop)
-  useEffect(() => {
-    if (!selectedConversation || !messages || messages.length === 0) {
-      return;
-    }
+ // ✅ Debounced mark-as-read (prevents infinite loop)
+useEffect(() => {
+  if (!selectedConversation || !messages || messages.length === 0) {
+    return;
+  }
 
-    const conversationId = selectedConversation.id;
-    const now = Date.now();
+  const conversationId = selectedConversation.id;
+  const now = Date.now();
 
-    // ✅ SAFER: pull current into a local variable
-    const lastMarked = lastMarkedConversationRef.current;
+  // ✅ SAFER: pull current into a local variable
+  const lastMarked = lastMarkedConversationRef.current;
 
-    if (
-      lastMarked &&
-      lastMarked.id === conversationId &&
-      now - lastMarked.timestamp < 3000
-    ) {
-      console.log(
-        "⏭️ Skipping mark-as-read - already marked %s recently",
-        conversationId
-      );
-      return;
-    }
-
-    const unreadMessages = messages.filter(
-      (m: any) => m.sender === "lead" && !m.readAt
+  if (
+    lastMarked &&
+    lastMarked.id === conversationId &&
+    now - lastMarked.timestamp < 3000
+  ) {
+    console.log(
+      "⏭️ Skipping mark-as-read - already marked %s recently",
+      conversationId
     );
-    if (unreadMessages.length === 0) {
-      console.log("✅ No unread messages in conversation %s", conversationId);
-      return;
-    }
+    return;
+  }
 
+  const unreadMessages = messages.filter(
+    (m: any) => m.sender === "lead" && !m.readAt
+  );
+  if (unreadMessages.length === 0) {
+    console.log("✅ No unread messages in conversation %s", conversationId);
+    return;
+  }
+
+  if (markAsReadTimeoutRef.current) {
+    clearTimeout(markAsReadTimeoutRef.current);
+  }
+
+  markAsReadTimeoutRef.current = setTimeout(() => {
+    console.log(
+      "📖 Marking %d messages as read in conversation %s",
+      unreadMessages.length,
+      conversationId
+    );
+
+    lastMarkedConversationRef.current = {
+      id: conversationId,
+      timestamp: Date.now(),
+    };
+
+    fetch(`/api/conversations/${conversationId}/messages/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        messageIds: unreadMessages.map((m: any) => m.id),
+      }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          console.log("✅ Successfully marked messages as read");
+        } else {
+          console.error(
+            "❌ Failed to mark messages as read:",
+            res.statusText
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("❌ Error marking messages as read:", err);
+      });
+  }, 500);
+
+  return () => {
     if (markAsReadTimeoutRef.current) {
       clearTimeout(markAsReadTimeoutRef.current);
     }
-
-    markAsReadTimeoutRef.current = setTimeout(() => {
-      console.log(
-        "📖 Marking %d messages as read in conversation %s",
-        unreadMessages.length,
-        conversationId
-      );
-
-      lastMarkedConversationRef.current = {
-        id: conversationId,
-        timestamp: Date.now(),
-      };
-
-      fetch(`/api/conversations/${conversationId}/messages/read`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          messageIds: unreadMessages.map((m: any) => m.id),
-        }),
-      })
-        .then((res) => {
-          if (res.ok) {
-            console.log("✅ Successfully marked messages as read");
-          } else {
-            console.error(
-              "❌ Failed to mark messages as read:",
-              res.statusText
-            );
-          }
-        })
-        .catch((err) => {
-          console.error("❌ Error marking messages as read:", err);
-        });
-    }, 500);
-
-    return () => {
-      if (markAsReadTimeoutRef.current) {
-        clearTimeout(markAsReadTimeoutRef.current);
-      }
-    };
-  }, [selectedConversation?.id, messages]);
+  };
+}, [selectedConversation?.id, messages]);
 
   useEffect(() => {
     if (
@@ -1276,95 +1239,96 @@ export default function Conversations() {
   };
 
   const getStatusBadge = (conversation: any) => {
-    const temperature = conversation.lead?.temperature;
-    const status = conversation.lead?.status;
-    const tags = conversation.lead?.tags || [];
-    const isAiHandled = conversation.isAiHandled;
-    const score = parseFloat(
-      conversation.lead?.manualScore ||
-        conversation.lead?.qualificationScore ||
-        conversation.qualificationScore ||
-        "0"
-    );
+  const temperature = conversation.lead?.temperature;
+  const status = conversation.lead?.status;
+  const tags = conversation.lead?.tags || [];
+  const isAiHandled = conversation.isAiHandled;
+  const score = parseFloat(
+    conversation.lead?.manualScore ||
+      conversation.lead?.qualificationScore ||
+      conversation.qualificationScore ||
+      "0"
+  );
 
-    const isReopened = tags.includes("reopened");
-    const wasTerminated = tags.includes("terminated");
+  const isReopened = tags.includes("reopened");
+  const wasTerminated = tags.includes("terminated");
 
-    // PRIORITY 1: Reopened conversations
-    if (isReopened && !isAiHandled) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 text-xs">
-          🔄 Reopened
-        </Badge>
-      );
-    }
-
-    // PRIORITY 2: Terminated/Spam
-    if (status === "spam" || wasTerminated) {
-      return (
-        <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-xs">
-          🚫 Terminated
-        </Badge>
-      );
-    }
-
-    // PRIORITY 3: Not a lead
-    if (status === "not-a-lead") {
-      return (
-        <Badge className="bg-gray-100 text-gray-800 text-xs">
-          🚫 Not a Lead
-        </Badge>
-      );
-    }
-
-    // ✅ PRIORITY 4: VERY HOT (0.8+) - NEW TIER
-    if (temperature === "hot" && score >= 0.8) {
-      return (
-        <Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white border-0 text-xs font-bold shadow-sm">
-          🔥🔥 Very Hot
-        </Badge>
-      );
-    }
-
-    // ✅ PRIORITY 5: HOT (0.6-0.79) - LOWERED THRESHOLD
-    if (temperature === "hot" || score >= 0.6) {
-      return (
-        <Badge className="bg-red-100 text-red-800 border border-red-200 text-xs font-semibold">
-          🔥 Hot
-        </Badge>
-      );
-    }
-
-    // PRIORITY 6: WARM (0.4-0.59)
-    if (temperature === "warm" || score >= 0.4) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 text-xs">😐 Warm</Badge>
-      );
-    }
-
-    // PRIORITY 7: Show handling mode for all other states
-    if (!isAiHandled) {
-      return (
-        <Badge className="bg-green-100 text-green-800 border border-green-200 text-xs flex items-center gap-1">
-          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-          You
-        </Badge>
-      );
-    }
-
-    // DEFAULT: AI handling
+  // PRIORITY 1: Reopened conversations
+  if (isReopened && !isAiHandled) {
     return (
-      <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-xs flex items-center gap-1">
-        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
-        AI
+      <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 text-xs">
+        🔄 Reopened
       </Badge>
     );
-  };
+  }
+
+  // PRIORITY 2: Terminated/Spam
+  if (status === "spam" || wasTerminated) {
+    return (
+      <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-xs">
+        🚫 Terminated
+      </Badge>
+    );
+  }
+
+  // PRIORITY 3: Not a lead
+  if (status === "not-a-lead") {
+    return (
+      <Badge className="bg-gray-100 text-gray-800 text-xs">
+        🚫 Not a Lead
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 4: VERY HOT (0.8+) - NEW TIER
+  if (temperature === "hot" && score >= 0.8) {
+    return (
+      <Badge className="bg-gradient-to-r from-red-500 to-orange-500 text-white border-0 text-xs font-bold shadow-sm">
+        🔥🔥 Very Hot
+      </Badge>
+    );
+  }
+
+  // ✅ PRIORITY 5: HOT (0.6-0.79) - LOWERED THRESHOLD
+  if (temperature === "hot" || score >= 0.6) {
+    return (
+      <Badge className="bg-red-100 text-red-800 border border-red-200 text-xs font-semibold">
+        🔥 Hot
+      </Badge>
+    );
+  }
+
+  // PRIORITY 6: WARM (0.4-0.59)
+  if (temperature === "warm" || score >= 0.4) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 text-xs">😐 Warm</Badge>
+    );
+  }
+
+  // PRIORITY 7: Show handling mode for all other states
+  if (!isAiHandled) {
+    return (
+      <Badge className="bg-green-100 text-green-800 border border-green-200 text-xs flex items-center gap-1">
+        <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+        You
+      </Badge>
+    );
+  }
+
+  // DEFAULT: AI handling
+  return (
+    <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-xs flex items-center gap-1">
+      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+      AI
+    </Badge>
+  );
+};
 
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Vancouver",
     });
   };
 
@@ -1772,7 +1736,7 @@ export default function Conversations() {
                     </div>
                   </div>
 
-                  <Separator />
+                  <Separator />       
 
                   <Separator />
                 </div>
@@ -2993,6 +2957,7 @@ export default function Conversations() {
                                           month: "short",
                                           day: "numeric",
                                           year: "numeric",
+                                          timeZone: "America/Vancouver",
                                         })}
                                       </p>
                                       {isExpired && (
@@ -3018,6 +2983,7 @@ export default function Conversations() {
                                           hour: "numeric",
                                           minute: "2-digit",
                                           hour12: true,
+                                          timeZone: "America/Vancouver",
                                         })}{" "}
                                         • {booking.duration} min
                                       </p>
@@ -3522,158 +3488,156 @@ export default function Conversations() {
           )}
         </div>
 
+       
         {/* Right: Desktop Lead Detail Sidebar */}
-        {selectedConversation && showLeadDetails && (
-          <div className="hidden lg:block w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Lead Details
-              </h3>
-              {parseFloat(
+{selectedConversation && showLeadDetails && (
+  <div className="hidden lg:block w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+    <div className="p-4 border-b border-slate-200">
+      <h3 className="text-sm font-semibold text-slate-900">
+        Lead Details
+      </h3>
+      {parseFloat(
+        selectedConversation.lead?.manualScore ||
+          selectedConversation.lead?.qualificationScore ||
+          selectedConversation.qualificationScore ||
+          "0"
+      ) >= 0.6 && (
+        <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          <span className="text-xs font-semibold text-red-800">
+            {parseFloat(
+              selectedConversation.lead?.manualScore ||
+                selectedConversation.lead?.qualificationScore ||
+                selectedConversation.qualificationScore ||
+                "0"
+            ) >= 0.8
+              ? "🔥🔥 VERY HOT LEAD"
+              : "🔥 HOT LEAD"}
+          </span>
+        </div>
+      )}
+    </div>
+
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Contact Info */}
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Phone</span>
+          <span className="text-slate-900 font-medium">
+            {selectedConversation.lead?.phone || "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Email</span>
+          <span className="text-slate-900 text-xs truncate ml-2">
+            {selectedConversation.lead?.email || "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 text-xs">Company</span>
+          <span className="text-slate-900 font-medium">
+            {selectedConversation.lead?.company || "—"}
+          </span>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Lead Metrics */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Temperature</span>
+          <Badge
+            className={`text-xs ${
+              selectedConversation.lead?.temperature === "hot"
+                ? "bg-red-100 text-red-800"
+                : selectedConversation.lead?.temperature === "warm"
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-blue-100 text-blue-800"
+            }`}
+          >
+            {selectedConversation.lead?.temperature === "hot" && "🔥 Hot"}
+            {selectedConversation.lead?.temperature === "warm" && "😐 Warm"}
+            {selectedConversation.lead?.temperature === "cold" && "❄️ Cold"}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Status</span>
+          <Badge variant="outline" className="text-xs capitalize">
+            {selectedConversation.lead?.status || "new"}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Score</span>
+          <Badge
+            className={`text-xs ${
+              parseFloat(
                 selectedConversation.lead?.manualScore ||
                   selectedConversation.lead?.qualificationScore ||
                   selectedConversation.qualificationScore ||
                   "0"
-              ) >= 0.6 && (
-                <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs font-semibold text-red-800">
-                    {parseFloat(
-                      selectedConversation.lead?.manualScore ||
-                        selectedConversation.lead?.qualificationScore ||
-                        selectedConversation.qualificationScore ||
-                        "0"
-                    ) >= 0.8
-                      ? "🔥🔥 VERY HOT LEAD"
-                      : "🔥 HOT LEAD"}
-                  </span>
-                </div>
-              )}
-            </div>
+              ) >= 0.8
+                ? "bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold"
+                : parseFloat(
+                    selectedConversation.lead?.manualScore ||
+                      selectedConversation.lead?.qualificationScore ||
+                      selectedConversation.qualificationScore ||
+                      "0"
+                  ) >= 0.6
+                ? "bg-red-100 text-red-800 font-semibold"
+                : parseFloat(
+                    selectedConversation.lead?.manualScore ||
+                      selectedConversation.lead?.qualificationScore ||
+                      selectedConversation.qualificationScore ||
+                      "0"
+                  ) >= 0.4
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-blue-100 text-blue-800"
+            }`}
+          >
+            {(
+              parseFloat(
+                selectedConversation.lead?.manualScore ||
+                  selectedConversation.lead?.qualificationScore ||
+                  selectedConversation.qualificationScore ||
+                  "0"
+              ) * 100
+            ).toFixed(0)}
+            %
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">Source</span>
+          <span className="text-xs text-slate-600">
+            {selectedConversation.lead?.source || "unknown"}
+          </span>
+        </div>
+      </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Contact Info */}
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Phone</span>
-                  <span className="text-slate-900 font-medium">
-                    {selectedConversation.lead?.phone || "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Email</span>
-                  <span className="text-slate-900 text-xs truncate ml-2">
-                    {selectedConversation.lead?.email || "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-500 text-xs">Company</span>
-                  <span className="text-slate-900 font-medium">
-                    {selectedConversation.lead?.company || "—"}
-                  </span>
-                </div>
-              </div>
+      <Separator />
 
-              <Separator />
-
-              {/* Lead Metrics */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Temperature</span>
-                  <Badge
-                    className={`text-xs ${
-                      selectedConversation.lead?.temperature === "hot"
-                        ? "bg-red-100 text-red-800"
-                        : selectedConversation.lead?.temperature === "warm"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {selectedConversation.lead?.temperature === "hot" &&
-                      "🔥 Hot"}
-                    {selectedConversation.lead?.temperature === "warm" &&
-                      "😐 Warm"}
-                    {selectedConversation.lead?.temperature === "cold" &&
-                      "❄️ Cold"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Status</span>
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {selectedConversation.lead?.status || "new"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Score</span>
-                  <Badge
-                    className={`text-xs ${
-                      parseFloat(
-                        selectedConversation.lead?.manualScore ||
-                          selectedConversation.lead?.qualificationScore ||
-                          selectedConversation.qualificationScore ||
-                          "0"
-                      ) >= 0.8
-                        ? "bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold"
-                        : parseFloat(
-                            selectedConversation.lead?.manualScore ||
-                              selectedConversation.lead?.qualificationScore ||
-                              selectedConversation.qualificationScore ||
-                              "0"
-                          ) >= 0.6
-                        ? "bg-red-100 text-red-800 font-semibold"
-                        : parseFloat(
-                            selectedConversation.lead?.manualScore ||
-                              selectedConversation.lead?.qualificationScore ||
-                              selectedConversation.qualificationScore ||
-                              "0"
-                          ) >= 0.4
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-blue-100 text-blue-800"
-                    }`}
-                  >
-                    {(
-                      parseFloat(
-                        selectedConversation.lead?.manualScore ||
-                          selectedConversation.lead?.qualificationScore ||
-                          selectedConversation.qualificationScore ||
-                          "0"
-                      ) * 100
-                    ).toFixed(0)}
-                    %
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Source</span>
-                  <span className="text-xs text-slate-600">
-                    {selectedConversation.lead?.source || "unknown"}
-                  </span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Lead Timeline */}
-              <div className="pt-2 border-t border-slate-200">
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Created</span>
-                  <span>
-                    {new Date(
-                      selectedConversation.lead?.createdAt
-                    ).toLocaleDateString()}
-                  </span>
-                </div>
-                {selectedConversation.lead?.responseTimeSeconds && (
-                  <div className="flex justify-between text-xs text-slate-500 mt-1">
-                    <span>Response</span>
-                    <span className="font-semibold text-green-600">
-                      {selectedConversation.lead.responseTimeSeconds}s
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Lead Timeline */}
+      <div className="pt-2 border-t border-slate-200">
+        <div className="flex justify-between text-xs text-slate-500">
+          <span>Created</span>
+          <span>
+            {new Date(
+              selectedConversation.lead?.createdAt
+            ).toLocaleDateString()}
+          </span>
+        </div>
+        {selectedConversation.lead?.responseTimeSeconds && (
+          <div className="flex justify-between text-xs text-slate-500 mt-1">
+            <span>Response</span>
+            <span className="font-semibold text-green-600">
+              {selectedConversation.lead.responseTimeSeconds}s
+            </span>
           </div>
         )}
+      </div>
+    </div>
+  </div>
+)}
       </div>
 
       {/* Book Meeting Modal */}
@@ -3723,6 +3687,7 @@ export default function Conversations() {
                           day: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
+                          timeZone: "America/Vancouver",
                         })}{" "}
                         ({conflictError.conflictingBooking?.duration} min)
                       </p>
@@ -3820,11 +3785,13 @@ export default function Conversations() {
                                 {start.toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                })}
-                                {" - "}
+                                  timeZone: "America/Vancouver",
+                                })}{" "}
+                                -{" "}
                                 {end.toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: "America/Vancouver",
                                 })}
                               </span>
                               <span className="text-blue-600 text-xs truncate">
@@ -3895,6 +3862,7 @@ export default function Conversations() {
                       return end.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver",
                       });
                     })()}
                   </strong>

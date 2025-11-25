@@ -54,7 +54,6 @@ import {
   XCircle,
   AlertCircle,
   TrendingUp,
-  TrendingDown,
   Users,
   ChevronLeft,
   ChevronRight,
@@ -65,8 +64,6 @@ import {
   Edit3,
   RefreshCw,
   Download,
-  Search,
-  MoreVertical,
 } from "lucide-react";
 
 export default function CalendarPage() {
@@ -381,49 +378,50 @@ export default function CalendarPage() {
   });
 
   // Export bookings handler
-  const handleExportBookings = async () => {
-    try {
-      if (!selectedClientId) {
-        toast({
-          title: "Error",
-          description: "No client selected",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const response = await fetch(`/api/bookings/${selectedClientId}/export`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to export bookings");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `bookings-export-${
-        new Date().toISOString().split("T")[0]
-      }.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
+const handleExportBookings = async () => {
+  try {
+    if (!selectedClientId) {
       toast({
-        title: "Export Successful",
-        description: "Your bookings have been exported to CSV.",
-      });
-    } catch (error) {
-      toast({
-        title: "Export Failed",
-        description: "Failed to export bookings. Please try again.",
+        title: "Error",
+        description: "No client selected",
         variant: "destructive",
       });
+      return;
     }
-  };
+
+    const response = await fetch(
+      `/api/bookings/${selectedClientId}/export`,
+      {
+        credentials: "include",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to export bookings");
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bookings-export-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    toast({
+      title: "Export Successful",
+      description: "Your bookings have been exported to CSV.",
+    });
+  } catch (error) {
+    toast({
+      title: "Export Failed",
+      description: "Failed to export bookings. Please try again.",
+      variant: "destructive",
+    });
+  }
+};
 
   // WebSocket for real-time updates
   const { data: wsData } = useWebSocket();
@@ -463,59 +461,6 @@ export default function CalendarPage() {
     totalBookings > 0
       ? Math.round((completedBookings.length / totalBookings) * 100)
       : 0;
-
-  // Calculate trends (vs last 30 days)
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const sixtyDaysAgo = new Date(now);
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
-  const prevPeriodBookings = bookings.filter((b: any) => {
-    const bookingDate = new Date(b.scheduledFor);
-    return bookingDate >= sixtyDaysAgo && bookingDate < thirtyDaysAgo;
-  });
-
-  const prevTotalBookings = prevPeriodBookings.length;
-  const prevTodayCount = prevPeriodBookings.filter((b: any) => {
-    const bookingDate = new Date(b.scheduledFor);
-    const compareDate = new Date(thirtyDaysAgo);
-    return bookingDate.getDate() === compareDate.getDate();
-  }).length;
-  const prevUpcomingCount = prevPeriodBookings.filter(
-    (b: any) => b.status === "scheduled"
-  ).length;
-  const prevCompletedCount = prevPeriodBookings.filter(
-    (b: any) => b.status === "completed"
-  ).length;
-
-  // Calculate percentage changes
-  const totalBookingsTrend =
-    prevTotalBookings > 0
-      ? (
-          ((totalBookings - prevTotalBookings) / prevTotalBookings) *
-          100
-        ).toFixed(1)
-      : "0.0";
-  const todayTrend =
-    prevTodayCount > 0
-      ? (
-          ((todayBookings.length - prevTodayCount) / prevTodayCount) *
-          100
-        ).toFixed(1)
-      : "0.0";
-  const upcomingTrend =
-    prevUpcomingCount > 0
-      ? (
-          ((upcomingBookings.length - prevUpcomingCount) / prevUpcomingCount) *
-          100
-        ).toFixed(1)
-      : "0.0";
-  const showRateTrend =
-    prevCompletedCount > 0 && prevTotalBookings > 0
-      ? (
-          showRate - Math.round((prevCompletedCount / prevTotalBookings) * 100)
-        ).toFixed(1)
-      : "0.0";
 
   // Calendar generation
   const getDaysInMonth = (date: Date) => {
@@ -599,6 +544,7 @@ export default function CalendarPage() {
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
+          timeZone: "America/Vancouver",
         })
       );
       setRescheduleDuration(selectedBooking.duration.toString());
@@ -791,14 +737,14 @@ export default function CalendarPage() {
               Manage your appointments and meetings
             </p>
           </div>
-          <Button
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={handleExportBookings}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export Schedule
-          </Button>
+          <Button 
+  variant="outline" 
+  className="w-full sm:w-auto"
+  onClick={handleExportBookings}
+>
+  <Download className="w-4 h-4 mr-2" />
+  Export Schedule
+</Button>
         </div>
       </header>
 
@@ -821,151 +767,70 @@ export default function CalendarPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-
-        {/* KPI Cards - UPDATED */}
+        {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Total Bookings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 Total Bookings
               </CardTitle>
-              <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
-                <CalendarIcon className="h-5 w-5 text-white" />
-              </div>
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalBookings}</div>
-              <p className="text-xs text-muted-foreground mb-3">
-                All scheduled meetings
-              </p>
-              <Badge
-                variant="secondary"
-                className="bg-slate-900 text-white hover:bg-slate-900 text-xs font-medium"
-              >
-                {parseFloat(totalBookingsTrend) >= 0 ? (
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 mr-1" />
-                )}
-                {parseFloat(totalBookingsTrend) >= 0 ? "+" : ""}
-                {totalBookingsTrend}% vs last period
-              </Badge>
+              <p className="text-xs text-muted-foreground">All time bookings</p>
             </CardContent>
           </Card>
 
-          {/* Today's Meetings */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 Today's Meetings
               </CardTitle>
-              <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-white" />
-              </div>
+              <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{todayBookings.length}</div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Scheduled for today
+              <p className="text-xs text-muted-foreground">
+                <TrendingUp className="w-3 h-3 inline mr-1" />
+                Active today
               </p>
-              <Badge
-                variant="secondary"
-                className="bg-slate-900 text-white hover:bg-slate-900 text-xs font-medium"
-              >
-                {parseFloat(todayTrend) >= 0 ? (
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 mr-1" />
-                )}
-                {parseFloat(todayTrend) >= 0 ? "+" : ""}
-                {todayTrend}% vs last period
-              </Badge>
             </CardContent>
           </Card>
 
-          {/* Upcoming */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Upcoming</CardTitle>
-              <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-white" />
-              </div>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
                 {upcomingBookings.length}
               </div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Future appointments
+              <p className="text-xs text-muted-foreground">
+                Scheduled meetings
               </p>
-              <Badge
-                variant="secondary"
-                className="bg-slate-900 text-white hover:bg-slate-900 text-xs font-medium"
-              >
-                {parseFloat(upcomingTrend) >= 0 ? (
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 mr-1" />
-                )}
-                {parseFloat(upcomingTrend) >= 0 ? "+" : ""}
-                {upcomingTrend}% vs last period
-              </Badge>
             </CardContent>
           </Card>
 
-          {/* Completion Rate */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Completion Rate
-              </CardTitle>
-              <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-white" />
-              </div>
+              <CardTitle className="text-sm font-medium">Show Rate</CardTitle>
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{showRate}%</div>
-              <p className="text-xs text-muted-foreground mb-3">
-                Successfully completed
-              </p>
-              <Badge
-                variant="secondary"
-                className="bg-slate-900 text-white hover:bg-slate-900 text-xs font-medium"
-              >
-                {parseFloat(showRateTrend) >= 0 ? (
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 mr-1" />
-                )}
-                {parseFloat(showRateTrend) >= 0 ? "+" : ""}
-                {showRateTrend}% vs last period
-              </Badge>
+              <p className="text-xs text-muted-foreground">Completion rate</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs - UPDATED */}
-        <Tabs defaultValue="calendar" className="space-y-6">
-          {/* Tab Navigation with Underline Style */}
-          <div className="border-b border-slate-200">
-            <TabsList className="bg-transparent h-auto p-0 border-0">
-              <TabsTrigger
-                value="calendar"
-                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-slate-900 after:transition-all rounded-none"
-              >
-                <CalendarIcon className="w-4 h-4 mr-2" />
-                <span>Calendar</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="bookings"
-                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-slate-900 after:transition-all rounded-none"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                <span>Bookings</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        {/* Tabs */}
+        <Tabs defaultValue="calendar" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          </TabsList>
 
           {/* Calendar Tab */}
           <TabsContent value="calendar">
@@ -1158,6 +1023,7 @@ export default function CalendarPage() {
                                 ).toLocaleTimeString("en-US", {
                                   hour: "numeric",
                                   minute: "2-digit",
+                                  timeZone: "America/Vancouver"
                                 })}{" "}
                                 {booking.attendeeName}
                               </div>
@@ -1203,186 +1069,82 @@ export default function CalendarPage() {
             </Card>
           </TabsContent>
 
-          {/* Bookings Tab - UPDATED */}
+          {/* Bookings Tab */}
           <TabsContent value="bookings">
-            {/* Search and Filters */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search by client name or title..."
-                  className="pl-10"
-                />
-              </div>
-              <Select defaultValue="all-status">
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-status">All Status</SelectItem>
-                  <SelectItem value="scheduled">Scheduled</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select defaultValue="all-types">
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-types">All Types</SelectItem>
-                  <SelectItem value="consultation">Consultation</SelectItem>
-                  <SelectItem value="site-visit">Site Visit</SelectItem>
-                  <SelectItem value="follow-up">Follow-up</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>All Bookings</CardTitle>
+                  <Badge variant="secondary">
+                    {upcomingBookings.length} upcoming
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {upcomingBookings.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <h3 className="text-base font-medium text-slate-900 mb-1">
+                      No upcoming bookings
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Schedule meetings from the Conversations page
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingBookings.map((booking: any) => (
+                      <Card
+                        key={booking.id}
+                        className="border border-slate-200 hover:shadow-sm transition-shadow cursor-pointer"
+                        onClick={() => handleEventClick(booking)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-slate-900 text-sm mb-1">
+                                {booking.title}
+                              </h4>
+                              <p className="text-sm text-slate-600">
+                                {booking.attendeeName}
+                              </p>
+                            </div>
+                            {getStatusBadge(booking.status)}
+                          </div>
 
-            {/* Bookings Header */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">All Bookings</h3>
-              <span className="text-sm text-slate-500">
-                {upcomingBookings.length} total
-              </span>
-            </div>
-
-            {/* Bookings List */}
-            {upcomingBookings.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
-                <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="text-base font-medium text-slate-900 mb-1">
-                  No upcoming bookings
-                </h3>
-                <p className="text-slate-600 text-sm">
-                  Schedule meetings from the Conversations page
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {upcomingBookings.map((booking: any) => (
-                  <div
-                    key={booking.id}
-                    className="group relative flex items-start gap-4 p-4 bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer"
-                    onClick={() => handleEventClick(booking)}
-                  >
-                    {/* Avatar */}
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 font-semibold text-sm">
-                        {booking.attendeeName
-                          ?.split(" ")
-                          .map((n: string) => n[0])
-                          .join("")
-                          .toUpperCase() || "?"}
-                      </div>
-                    </div>
-
-                    {/* Status Indicator */}
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-16 rounded-r-full bg-green-500" />
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-slate-900 text-base mb-1">
-                            {booking.title}
-                          </h4>
-                          <p className="text-sm text-slate-600">
-                            {booking.attendeeName}
-                          </p>
-                        </div>
-                        <button className="text-slate-400 hover:text-slate-600 p-1">
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
-                      </div>
-
-                      {/* Details Row */}
-                      <div className="flex items-center gap-4 text-sm text-slate-600 mb-3">
-                        <div className="flex items-center gap-1.5">
-                          <CalendarIcon className="w-4 h-4 text-slate-400" />
-                          <span>
-                            {new Date(booking.scheduledFor).toLocaleDateString(
-                              "en-US",
-                              {
+                          <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
+                            <div className="flex items-center">
+                              <CalendarIcon className="w-3 h-3 mr-1" />
+                              {new Date(
+                                booking.scheduledFor
+                              ).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "numeric",
-                                year: "numeric",
-                              }
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-4 h-4 text-slate-400" />
-                          <span>
-                            {new Date(booking.scheduledFor).toLocaleTimeString(
-                              "en-US",
-                              {
-                                hour: "numeric",
+                                timeZone: "America/Vancouver"
+                              })}
+                            </div>
+                            <div className="flex items-center">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {new Date(
+                                booking.scheduledFor
+                              ).toLocaleTimeString("en-US", {
+                                hour: "2-digit",
                                 minute: "2-digit",
-                                hour12: true,
-                              }
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-4 h-4 text-slate-400" />
-                          <span>{booking.duration} min</span>
-                        </div>
-                      </div>
-
-                      {/* Location */}
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600 mb-3">
-                        <MapPin className="w-4 h-4 text-slate-400" />
-                        <span>{booking.location || "TBD"}</span>
-                      </div>
-
-                      {/* Badges & Actions */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-green-50 text-green-700 hover:bg-green-50 border-green-200">
-                            {booking.status === "scheduled"
-                              ? "Confirmed"
-                              : booking.status}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="bg-slate-50 text-slate-700 capitalize"
-                          >
-                            {booking.meetingType?.replace("-", " ") ||
-                              "Consultation"}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {/* <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.location.href = `mailto:${booking.attendeeEmail}`;
-                            }}
-                          >
-                            <Mail className="w-4 h-4 mr-1" />
-                            Email
-                          </Button> */}
-                          {/* <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.location.href = `tel:${booking.attendeePhone}`;
-                            }}
-                          >
-                            <Phone className="w-4 h-4 mr-1" />
-                            Call
-                          </Button> */}
-                        </div>
-                      </div>
-                    </div>
+                                timeZone: "America/Vancouver"
+                              })}
+                            </div>
+                            <div className="flex items-center">
+                              <MapPin className="w-3 h-3 mr-1" />
+                              {booking.location}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -1416,6 +1178,7 @@ export default function CalendarPage() {
                         month: "long",
                         day: "numeric",
                         year: "numeric",
+                        timeZone: "America/Vancouver"
                       }
                     )}
                   </span>
@@ -1428,6 +1191,7 @@ export default function CalendarPage() {
                       {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       }
                     )}{" "}
                     ({selectedBooking.duration} minutes)
@@ -1819,6 +1583,7 @@ export default function CalendarPage() {
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
+                    timeZone: "America/Vancouver"
                   }
                 )}
               </p>
@@ -1883,6 +1648,7 @@ export default function CalendarPage() {
                       return end.toLocaleTimeString("en-US", {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       });
                     })()}
                   </strong>
@@ -1949,7 +1715,7 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Confirmation Modal */}
+      {/* Cancel Confirmation Modal - MOVED HERE */}
       <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1976,6 +1742,7 @@ export default function CalendarPage() {
                         weekday: "long",
                         month: "long",
                         day: "numeric",
+                        timeZone: "America/Vancouver"
                       }
                     )}{" "}
                     at{" "}
@@ -1984,6 +1751,7 @@ export default function CalendarPage() {
                       {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Vancouver"
                       }
                     )}
                   </p>
