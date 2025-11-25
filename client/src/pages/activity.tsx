@@ -92,7 +92,7 @@ export default function ActivityLog() {
     data: activityData,
     isLoading: isActivityLoading,
   } = useQuery<{ activities: any[] }>({
-    // ✅ CORRECTED: The queryKey is now an array with the URL and the filters object.
+  
     // Our new getQueryFn knows how to handle this.
     queryKey: ["/api/user/activity", filters],
     
@@ -101,12 +101,16 @@ export default function ActivityLog() {
   });
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-50">
+      {/* Header - Fixed at top */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0">
         <h2 className="text-2xl font-bold text-slate-900">Account Activity</h2>
       </header>
-      <main className="flex-1 overflow-auto p-6">
-        <Breadcrumb className="mb-6">
+
+      {/* Main Content - No scrolling, uses flexbox layout */}
+      <main className="flex-1 flex flex-col p-6 gap-6 overflow-hidden">
+        {/* Breadcrumb - Always visible */}
+        <Breadcrumb className="flex-shrink-0">
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink
@@ -117,10 +121,9 @@ export default function ActivityLog() {
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
-            {/* ✅ ADD THIS NEW BREADCRUMB ITEM */}
             <BreadcrumbItem>
               <BreadcrumbLink
-                onClick={() => setLocation("/settings?tab=security")} // Optional: Link back to the specific tab
+                onClick={() => setLocation("/settings?tab=security")}
                 className="cursor-pointer"
               >
                 Security
@@ -133,8 +136,8 @@ export default function ActivityLog() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        {/* Filter Card */}
-        <Card className="mb-6 border-2">
+        {/* Filter Card - Always visible */}
+        <Card className="border-2 flex-shrink-0">
           <CardHeader>
             <CardTitle>Filter Activities</CardTitle>
           </CardHeader>
@@ -148,7 +151,6 @@ export default function ActivityLog() {
                 <SelectContent>
                   <SelectItem value="all">All Activities</SelectItem>
                   <SelectItem value="login">Login</SelectItem>
-                  {/* ✅ CORRECTED VALUES & ADDED MISSING OPTIONS */}
                   <SelectItem value="password_changed">
                     Password Change
                   </SelectItem>
@@ -208,56 +210,58 @@ export default function ActivityLog() {
           </CardContent>
         </Card>
 
-        {/* Results Card */}
-        <Card className="border-2">
-          <CardHeader>
+        {/* Results Card - Scrollable content */}
+        <Card className="border-2 flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="flex-shrink-0">
             <CardTitle>Activity History</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[250px]">Action</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead className="text-right">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isActivityLoading && (
+          <CardContent className="flex-1 overflow-auto p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white z-10">
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center h-24">
-                      <Loader2 className="mx-auto w-6 h-6 animate-spin text-slate-400" />
-                    </TableCell>
+                    <TableHead className="w-[250px]">Action</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead className="text-right">Date</TableHead>
                   </TableRow>
-                )}
-                {!isActivityLoading &&
-                  activityData?.activities.map((activity) => (
-                    <TableRow key={activity.id}>
-                      <TableCell className="font-medium flex items-center gap-3">
-                        {getActivityIcon(activity.action)}
-                        {formatActionText(activity.action)}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-sm">
-                        {activity.ipAddress || "No IP recorded"}
-                      </TableCell>
-                      <TableCell className="text-right text-slate-500 text-sm">
-                        {new Date(activity.createdAt).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                {!isActivityLoading &&
-                  activityData?.activities.length === 0 && (
+                </TableHeader>
+                <TableBody>
+                  {isActivityLoading && (
                     <TableRow>
-                      <TableCell
-                        colSpan={3}
-                        className="text-center h-24 text-slate-500"
-                      >
-                        No activities found for the selected filters.
+                      <TableCell colSpan={3} className="text-center h-24">
+                        <Loader2 className="mx-auto w-6 h-6 animate-spin text-slate-400" />
                       </TableCell>
                     </TableRow>
                   )}
-              </TableBody>
-            </Table>
+                  {!isActivityLoading &&
+                    activityData?.activities.map((activity) => (
+                      <TableRow key={activity.id}>
+                        <TableCell className="font-medium flex items-center gap-3">
+                          {getActivityIcon(activity.action)}
+                          {formatActionText(activity.action)}
+                        </TableCell>
+                        <TableCell className="text-slate-500 text-sm">
+                          {activity.ipAddress || "No IP recorded"}
+                        </TableCell>
+                        <TableCell className="text-right text-slate-500 text-sm">
+                          {new Date(activity.createdAt).toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {!isActivityLoading &&
+                    activityData?.activities.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={3}
+                          className="text-center h-24 text-slate-500"
+                        >
+                          No activities found for the selected filters.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </main>

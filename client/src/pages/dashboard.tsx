@@ -502,6 +502,88 @@ export default function Dashboard() {
                 </Tooltip1>
               </TooltipProvider>
 
+              {/* System Status Dropdown - MATCHES LIVE INDICATOR SIZE */}
+              <TooltipProvider delayDuration={300}>
+                <Tooltip1>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-medium transition-all shadow-sm hover:shadow-md cursor-pointer">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          systemHealth?.whatsapp === "operational" &&
+                          systemHealth?.ai === "operational"
+                            ? "bg-construction animate-pulse"
+                            : systemHealth?.whatsapp === "degraded" ||
+                              systemHealth?.ai === "degraded"
+                            ? "bg-amber-500 animate-pulse"
+                            : "bg-red-500"
+                        }`}
+                      ></div>
+                      <span className="text-slate-700">
+                        {systemHealth?.whatsapp === "operational" &&
+                        systemHealth?.ai === "operational"
+                          ? "All Systems"
+                          : "Status"}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="p-3">
+                    <div className="space-y-2 min-w-[180px]">
+                      <div className="text-xs font-semibold mb-2 pb-2 border-b">
+                        System Status
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">WhatsApp</span>
+                        <span
+                          className={`text-xs font-medium capitalize ${
+                            systemHealth?.whatsapp === "operational"
+                              ? "text-construction"
+                              : systemHealth?.whatsapp === "degraded"
+                              ? "text-amber-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {systemHealth?.whatsapp || "Unknown"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">
+                          AI System
+                        </span>
+                        <span
+                          className={`text-xs font-medium capitalize ${
+                            systemHealth?.ai === "operational"
+                              ? "text-construction"
+                              : systemHealth?.ai === "degraded"
+                              ? "text-amber-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {systemHealth?.ai || "Unknown"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600">VSL</span>
+                        <span
+                          className={`text-xs font-medium capitalize ${
+                            systemHealth?.vsl === "maintenance"
+                              ? "text-amber-600"
+                              : "text-construction"
+                          }`}
+                        >
+                          {systemHealth?.vsl || "Unknown"}
+                        </span>
+                      </div>
+                      <div className="pt-2 mt-2 border-t flex items-center justify-between">
+                        <span className="text-xs text-slate-500">Uptime</span>
+                        <span className="text-xs font-semibold">
+                          {systemHealth?.uptime || "0s"}
+                        </span>
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip1>
+              </TooltipProvider>
+
               {/* Status Indicator */}
               <div
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
@@ -731,9 +813,9 @@ export default function Dashboard() {
             </div>
 
             {/* MAIN CONTENT GRID */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-5">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-5 items-start">
               {/* LEFT COLUMN */}
-              <div className="lg:col-span-2 flex flex-col h-full space-y-6">
+              <div className="lg:col-span-2 flex flex-col space-y-6">
                 {/* LEAD TREND CHART */}
                 <Card className="flex-none border-2">
                   <CardHeader>
@@ -889,7 +971,7 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* ✅ PROFESSIONAL: AI Response Time Chart */}
+                  {/* AI RESPONSE TIME CHART */}
                   <Card className="border-2">
                     <CardHeader>
                       <CardTitle className="text-base flex items-center justify-between">
@@ -967,7 +1049,6 @@ export default function Dashboard() {
                         </AreaChart>
                       </ResponsiveContainer>
 
-                      {/* ✅ PROFESSIONAL: Summary Stats with Human Badge */}
                       <div
                         className={`grid ${
                           hasHumanData ? "grid-cols-2" : "grid-cols-1"
@@ -984,7 +1065,6 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* ✅ PROFESSIONAL: Human Response as Badge/Stat (not a line) */}
                         {hasHumanData && (
                           <div className="text-center">
                             <div className="text-lg font-bold text-construction">
@@ -1006,20 +1086,20 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* RIGHT COLUMN */}
-              <div className="flex flex-col h-full justify-between space-y-6">
-                {/* NEEDS ATTENTION */}
-                <Card className="border-l-4 border-l-construction">
-                  <CardHeader>
+              {/* RIGHT COLUMN - EQUAL HEIGHT SCROLLABLE CARDS */}
+              <div className="flex flex-col space-y-6 h-full">
+                {/* NEEDS ATTENTION - SCROLLABLE, TAKES 50% HEIGHT */}
+                <Card className="border-l-4 border-l-construction flex-1 flex flex-col overflow-hidden">
+                  <CardHeader className="flex-shrink-0">
                     <CardTitle className="text-base flex items-center">
                       <Flame className="w-5 h-5 text-construction mr-2" />
                       Needs Attention
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="max-h-[320px] overflow-y-auto scrollbar-hide">
+                  <CardContent className="flex-1 overflow-y-auto scrollbar-hide">
                     {hotLeads.length > 0 ? (
                       <div className="space-y-3">
-                        {hotLeads.slice(0, 5).map((lead: any) => (
+                        {hotLeads.slice(0, 10).map((lead: any) => (
                           <div
                             key={lead.id}
                             className="p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border-2 border-construction/20 cursor-pointer hover:border-construction/40 transition-colors"
@@ -1069,13 +1149,6 @@ export default function Dashboard() {
                             </div>
                           </div>
                         ))}
-                        <Button
-                          variant="link"
-                          className="w-full text-sm text-construction hover:text-construction/80"
-                          onClick={() => setLocation("/leads")}
-                        >
-                          View all hot leads →
-                        </Button>
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -1091,12 +1164,12 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* RECENT ACTIVITY */}
-                <Card className="border-l-4 border-l-primary">
-                  <CardHeader>
+                {/* RECENT ACTIVITY - SCROLLABLE, TAKES 50% HEIGHT */}
+                <Card className="border-l-4 border-l-primary flex-1 flex flex-col overflow-hidden">
+                  <CardHeader className="flex-shrink-0">
                     <CardTitle className="text-base">Recent Activity</CardTitle>
                   </CardHeader>
-                  <CardContent className="max-h-[125px] overflow-y-auto scrollbar-hide">
+                  <CardContent className="flex-1 overflow-y-auto scrollbar-hide">
                     {recentActivity.length > 0 ? (
                       <div className="space-y-3">
                         {recentActivity.map((activity: any, index: number) => (
@@ -1136,7 +1209,6 @@ export default function Dashboard() {
                                   minute: "2-digit",
                                 })}
                               </p>
-                              {/* ✅ NEW: Show inquiry if available */}
                               {activity.inquiry && (
                                 <p className="text-xs text-slate-600 mt-1 italic line-clamp-2">
                                   💬 "{activity.inquiry}"
@@ -1154,68 +1226,6 @@ export default function Dashboard() {
                         </p>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-
-                {/* SYSTEM STATUS */}
-                <Card className="border-l-4 border-l-slate-200">
-                  <CardHeader>
-                    <CardTitle className="text-base">System Status</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-construction rounded-full"></div>
-                          <span className="text-sm text-slate-700">
-                            WhatsApp
-                          </span>
-                        </div>
-                        <span className="text-xs text-construction font-medium">
-                          {systemHealth?.whatsapp || "Active"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-primary rounded-full"></div>
-                          <span className="text-sm text-slate-700">
-                            AI System
-                          </span>
-                        </div>
-                        <span className="text-xs text-primary font-medium">
-                          {systemHealth?.ai || "Active"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              systemHealth?.vsl === "maintenance"
-                                ? "bg-amber-500"
-                                : "bg-construction"
-                            }`}
-                          ></div>
-                          <span className="text-sm text-slate-700">VSL</span>
-                        </div>
-                        <span
-                          className={`text-xs font-medium ${
-                            systemHealth?.vsl === "maintenance"
-                              ? "text-amber-600"
-                              : "text-construction"
-                          }`}
-                        >
-                          {systemHealth?.vsl || "Active"}
-                        </span>
-                      </div>
-                      <div className="pt-3 mt-3 border-t border-slate-200">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">Uptime</span>
-                          <span className="text-xs font-semibold text-slate-900">
-                            {systemHealth?.uptime || "99.8%"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               </div>

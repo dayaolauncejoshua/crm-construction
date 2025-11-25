@@ -4986,23 +4986,28 @@ Could you suggest some alternative times that work for you? We'd love to find a 
   // ========================= SYSTEM HEALTH ROUTES  =============================
 
   // System health endpoint
-  app.get("/api/health", async (req, res) => {
-    try {
-      const health = {
-        whatsapp: "operational", // TODO: Implement actual health checks
-        ai: "operational",
-        vsl: "maintenance",
-        calendar: "operational",
-        uptime: "99.8%",
-        timestamp: new Date().toISOString(),
-      };
+app.get("/api/health", async (req, res) => {
+  try {
+    const { getSystemHealth } = await import("./services/health-monitor");
+    const health = await getSystemHealth();
 
-      res.json(health);
-    } catch (error) {
-      res.status(500).json({ message: "Health check failed" });
-    }
-  });
+    const response = {
+      whatsapp: health.whatsapp.status,
+      ai: health.ai.status,
+      vsl: health.vsl.status,
+      uptime: health.uptime,
+      timestamp: health.timestamp,
+    };
 
+    res.json(response);
+  } catch (error: any) {
+    console.error("❌ Health check error:", error);
+    res.status(500).json({ 
+      message: "Health check failed",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
   // ==================== AI HEALTH & RETRY ROUTES ====================
 
   // Get AI health status
@@ -5111,71 +5116,6 @@ Could you suggest some alternative times that work for you? We'd love to find a 
     } catch (error: any) {
       console.error("Error fetching retry stats:", error);
       res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ==================== SENDGRID TEST (TEMPORARY - Remove after testing) ====================
-  app.get("/api/test/sendgrid", requireAuth, async (req, res) => {
-    try {
-      const user = req.user!;
-
-      console.log("📧 [SENDGRID TEST] Starting...");
-      console.log("📧 Sending to:", user.email);
-      console.log("📧 From:", process.env.EMAIL_FROM);
-      console.log("📧 Host:", process.env.EMAIL_HOST);
-      console.log("📧 Port:", process.env.EMAIL_PORT);
-      console.log("📧 User:", process.env.EMAIL_USER);
-
-      const testTime = new Date().toLocaleString();
-
-      await emailService.sendEmail({
-        to: user.email!,
-        toName: `${user.firstName} ${user.lastName}`,
-        subject: "✅ SendGrid Test - Email Working!",
-        htmlBody: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Email is Working!</h1>
-          </div>
-          
-          <div style="background: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #374151;">
-              <strong>Congratulations!</strong> If you're reading this, your SendGrid email notifications are configured correctly.
-            </p>
-            
-            <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0; font-size: 14px; color: #6b7280;">
-                <strong>Test Details:</strong><br>
-                Sent at: ${testTime}<br>
-                To: ${user.email}<br>
-                Via: SendGrid SMTP
-              </p>
-            </div>
-            
-            <p style="font-size: 14px; color: #6b7280;">
-              Your hot lead and booking notifications will now be delivered reliably! 🚀
-            </p>
-          </div>
-        </div>
-      `,
-        textBody: `EMAIL IS WORKING! 🎉\n\nCongratulations! SendGrid is configured correctly.\n\nTest Details:\nSent at: ${testTime}\nTo: ${user.email}\nVia: SendGrid SMTP`,
-      });
-
-      console.log("✅ [SENDGRID TEST] Email sent successfully!");
-
-      res.json({
-        success: true,
-        message: `Test email sent to ${user.email}. Check your inbox!`,
-        sentAt: testTime,
-      });
-    } catch (error: any) {
-      console.error("❌ [SENDGRID TEST] Failed:", error);
-
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        code: error.code,
-      });
     }
   });
 

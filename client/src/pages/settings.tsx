@@ -1657,6 +1657,7 @@ export default function Settings() {
                       checked={emailNotifications}
                       onCheckedChange={handleToggleEmailNotifications}
                       disabled={updatePreferencesMutation.isPending}
+                      style={{ minHeight: "28px" }}
                     />
                   </div>
 
@@ -1680,6 +1681,7 @@ export default function Settings() {
                       checked={whatsappNotifications}
                       onCheckedChange={handleToggleWhatsAppNotifications}
                       disabled={updatePreferencesMutation.isPending}
+                      style={{ minHeight: "28px" }}
                     />
                   </div>
 
@@ -1696,7 +1698,7 @@ export default function Settings() {
                     <ul className="text-xs text-blue-800 mt-2 space-y-1 ml-6 list-disc">
                       <li>
                         <strong>Hot Leads:</strong> High-priority leads (score
-                        ≥70%)
+                        ≥85%)
                       </li>
                       <li>
                         <strong>Booking Proposals:</strong> When AI schedules a
@@ -1738,6 +1740,7 @@ export default function Settings() {
                       checked={leadNotifications}
                       onCheckedChange={setLeadNotifications}
                       disabled={updatePreferencesMutation.isPending}
+                      style={{ minHeight: "28px" }}
                     />
                   </div>
 
@@ -1759,6 +1762,7 @@ export default function Settings() {
                       checked={bookingNotifications}
                       onCheckedChange={handleToggleBookingNotifications}
                       disabled={updatePreferencesMutation.isPending}
+                      style={{ minHeight: "28px" }}
                     />
                   </div>
 
@@ -1780,6 +1784,7 @@ export default function Settings() {
                       checked={weeklyReports}
                       onCheckedChange={handleToggleWeeklyReports}
                       disabled={updatePreferencesMutation.isPending}
+                      style={{ minHeight: "28px" }}
                     />
                   </div>
 
