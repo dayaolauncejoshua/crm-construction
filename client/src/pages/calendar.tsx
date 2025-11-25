@@ -94,6 +94,11 @@ export default function CalendarPage() {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all-status");
+  const [typeFilter, setTypeFilter] = useState("all-types");
+
   const { selectedClientId } = useClient();
 
   // Fetch bookings - context provides the correct client
@@ -513,9 +518,31 @@ export default function CalendarPage() {
   const showRateTrend =
     prevCompletedCount > 0 && prevTotalBookings > 0
       ? (
-          showRate - Math.round((prevCompletedCount / prevTotalBookings) * 100)
+          showRate -
+          Math.round((prevCompletedCount / prevTotalBookings) * 100)
         ).toFixed(1)
       : "0.0";
+
+  // Filter bookings based on search and filters
+  const filteredBookings = upcomingBookings.filter((booking: any) => {
+    // Search filter
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch =
+      searchQuery === "" ||
+      booking.title?.toLowerCase().includes(searchLower) ||
+      booking.attendeeName?.toLowerCase().includes(searchLower) ||
+      booking.location?.toLowerCase().includes(searchLower);
+
+    // Status filter
+    const matchesStatus =
+      statusFilter === "all-status" || booking.status === statusFilter;
+
+    // Type filter
+    const matchesType =
+      typeFilter === "all-types" || booking.meetingType === typeFilter;
+
+    return matchesSearch && matchesStatus && matchesType;
+  });
 
   // Calendar generation
   const getDaysInMonth = (date: Date) => {
@@ -1212,9 +1239,11 @@ export default function CalendarPage() {
                 <Input
                   placeholder="Search by client name or title..."
                   className="pl-10"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select defaultValue="all-status">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
@@ -1223,9 +1252,10 @@ export default function CalendarPage() {
                   <SelectItem value="scheduled">Scheduled</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="no-show">No-show</SelectItem>
                 </SelectContent>
               </Select>
-              <Select defaultValue="all-types">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="All Types" />
                 </SelectTrigger>
@@ -1242,24 +1272,49 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">All Bookings</h3>
               <span className="text-sm text-slate-500">
-                {upcomingBookings.length} total
+                {filteredBookings.length} of {upcomingBookings.length} bookings
               </span>
             </div>
 
             {/* Bookings List */}
-            {upcomingBookings.length === 0 ? (
+            {filteredBookings.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
-                <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="text-base font-medium text-slate-900 mb-1">
-                  No upcoming bookings
-                </h3>
-                <p className="text-slate-600 text-sm">
-                  Schedule meetings from the Conversations page
-                </p>
+                {upcomingBookings.length === 0 ? (
+                  <>
+                    <Clock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <h3 className="text-base font-medium text-slate-900 mb-1">
+                      No upcoming bookings
+                    </h3>
+                    <p className="text-slate-600 text-sm">
+                      Schedule meetings from the Conversations page
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                    <h3 className="text-base font-medium text-slate-900 mb-1">
+                      No bookings match your filters
+                    </h3>
+                    <p className="text-slate-600 text-sm mb-4">
+                      Try adjusting your search or filter criteria
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setStatusFilter("all-status");
+                        setTypeFilter("all-types");
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
-                {upcomingBookings.map((booking: any) => (
+                {filteredBookings.map((booking: any) => (
                   <div
                     key={booking.id}
                     className="group relative flex items-start gap-4 p-4 bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer"
@@ -1363,8 +1418,8 @@ export default function CalendarPage() {
                           >
                             <Mail className="w-4 h-4 mr-1" />
                             Email
-                          </Button> */}
-                          {/* <Button
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             className="h-8"
