@@ -2,7 +2,7 @@
 // ... (keep all your existing imports and code until the generateVSL method)
 
 import OpenAI from "openai";
-import ffmpeg from "fluent-ffmpeg";
+
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
@@ -11,10 +11,33 @@ import { progressTracker } from "./progress-tracker.services";
 import { ConsoleLogger } from "../utils/console-logger.utils";
 import { cloudinaryService } from "server/services/cloudinary.service";
 
-import ffmpegPath from "@ffmpeg-installer/ffmpeg";
-import ffprobePath from "@ffprobe-installer/ffprobe";
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-ffmpeg.setFfprobePath(ffprobePath.path);
+// Conditional FFmpeg loading - only loads when VSL generation is triggered
+let ffmpeg: any;
+let ffmpegPath: any;
+let ffprobePath: any;
+
+async function initFFmpeg() {
+  if (!ffmpeg) {
+    try {
+      const fluentFfmpeg = await import("fluent-ffmpeg");
+      const installer = await import("@ffmpeg-installer/ffmpeg");
+      const probeInstaller = await import("@ffprobe-installer/ffprobe");
+      
+      ffmpeg = fluentFfmpeg.default;
+      ffmpegPath = installer.default;
+      ffprobePath = probeInstaller.default;
+      
+      ffmpeg.setFfmpegPath(ffmpegPath.path);
+      ffmpeg.setFfprobePath(ffprobePath.path);
+      
+      console.log("✅ FFmpeg initialized successfully");
+    } catch (error) {
+      console.error("❌ FFmpeg initialization failed:", error);
+      throw new Error("FFmpeg not available - VSL generation disabled");
+    }
+  }
+  return ffmpeg;
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY2,
@@ -573,6 +596,8 @@ Return ONLY valid JSON in this format:
 
   /** 🎬 MAIN: Generate complete multi-scene VSL */
   async generateVSL(options: VSLGenerationOptions) {
+     // Initialize FFmpeg before use
+  await initFFmpeg();
     console.log("📋 VSL Generator received options:", {
       vslId: options.vslId,
       title: options.title,
