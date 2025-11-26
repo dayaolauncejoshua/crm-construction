@@ -879,6 +879,81 @@ export async function generateAIResponse(
     return "Great! Our team will send you the meeting details shortly. Is there anything else you'd like to discuss about your project?";
   }
 
+  const currentMessage = conversationHistory[conversationHistory.length - 1];
+ const isFromLead = currentMessage?.sender === "lead";
+const lastContent = currentMessage?.content?.toLowerCase() || "";
+  
+  // Detect explicit pricing questions
+  const isPriceQuestion = 
+    /\b(how much|what'?s the (cost|price)|price range|cost range|typically cost|rough cost|ballpark)\b/i.test(lastContent) &&
+    /\b(cost|price|much|range)\b/i.test(lastContent);
+  
+  console.log(`🔍 Price Question Check:`, {
+    isFromLead,
+    isPriceQuestion,
+    lastContent: lastContent.substring(0, 100)
+  });
+
+  // If lead just asked about pricing, answer BEFORE continuing booking flow
+  if (isFromLead && isPriceQuestion) {
+    console.log(`💰 PRICE QUESTION DETECTED - Answering before resuming booking`);
+    
+    // Extract project context from conversation
+    const leadMessages = conversationHistory
+      .filter(m => m.sender === "lead")
+      .map(m => m.content)
+      .join(" ");
+    
+    const projectType = 
+      /\bdeck\b/i.test(leadMessages) ? "deck" :
+      /\bkitchen\b/i.test(leadMessages) ? "kitchen" :
+      /\bbathroom\b/i.test(leadMessages) ? "bathroom" :
+      /\bbasement\b/i.test(leadMessages) ? "basement" :
+      /\baddition\b/i.test(leadMessages) ? "addition" :
+      "renovation";
+    
+    // Build a special prompt for price questions
+    const pricePrompt = `The customer just asked: "${currentMessage.content}"
+
+CONTEXT: ${projectType} project. Previous conversation shows: ${leadMessages.substring(0, 200)}
+
+YOUR TASK: Answer their price question briefly, then return to booking.
+
+Follow these rules:
+1. Give typical price range for ${projectType} projects
+2. Reference their specific details if mentioned (size, location)
+3. Keep it brief (2-3 sentences)
+4. End with: "When works for you?" or "Which day works best?"
+
+Examples:
+- "Deck construction typically ranges from $30-$60 per sq ft depending on materials. For your 200 sq ft project in Surrey, that's roughly $6k-$12k. When works for a site visit?"
+- "Kitchen renovations typically range from $40k-$80k depending on finishes and layout. For your Vancouver project, let's schedule a site visit to provide an accurate quote. Which day works?"
+
+Respond now:`;
+
+    try {
+      const response = await callClaudeWithRetry(() =>
+        anthropic.messages.create({
+          model: CLAUDE_MODEL,
+          max_tokens: 150,
+          temperature: 0.4,
+          system: "You answer price questions briefly with ranges, then return to scheduling. Keep responses under 50 words.",
+          messages: [{ role: "user", content: pricePrompt }],
+        })
+      );
+
+      const content = response.content[0];
+      if (content.type === "text") {
+        const priceAnswer = content.text.trim();
+        console.log(`✅ Price answer generated: ${priceAnswer.substring(0, 100)}...`);
+        return priceAnswer;
+      }
+    } catch (error) {
+      console.error("❌ Error generating price answer:", error);
+      // Fall through to normal flow if price answer fails
+    }
+  }
+
   const context = extractConversationContext(conversationHistory);
   const bookingState = detectBookingState(conversationHistory, context);
 
@@ -1023,6 +1098,34 @@ EXAMPLE: "Perfect! To finalize the booking, I need your ${missing.join(" and ")}
 4. Keep response under 50 words
 5. Use "meeting" or "site visit" (never "call")
 
+**BUDGET & PRICING QUESTION HANDLING:**
+
+If customer asks about THEIR SPECIFIC budget concerns (e.g., "Is $15k enough?", "Can you work with that?"):
+- Acknowledge their question directly (don't dodge it)
+- Provide context: "Full renovations typically start around $40k-$50k"
+- Stay positive: "Let's explore what's possible"
+- Move to meeting: "Let's meet to discuss realistic options"
+
+If customer asks GENERAL pricing questions (e.g., "How much does it cost?", "What's the price range?"):
+- Answer briefly with typical range for that project type
+- Reference their specific project details if provided
+- Move back to booking: "For your [project details], let's schedule a site visit. When works?"
+- Keep it brief (2-3 sentences max)
+
+**EXAMPLES:**
+
+Q: "Wait, how much does it typically cost?"
+Good: "Deck construction typically ranges from $30-$60 per sq ft depending on materials - so for 200 sq ft, roughly $6k-$12k. For your deck in Surrey, let's schedule a site visit to give you an accurate quote. When works for you?"
+Bad: "Perfect! I have your deck project details..." (ignores question)
+
+Q: "What's the cost for bathroom reno?"
+Good: "Bathroom renovations typically range from $15k-$40k depending on fixtures and layout changes. To give you a precise quote for your project, when can we schedule a site visit?"
+Bad: [Dodging the question]
+
+Q: "Is $15k enough for full kitchen reno?"
+Good: "Full kitchen renos typically start around $40k-$50k, but let's meet to discuss what's achievable with $15k - perhaps phased updates. Which day works?"
+Bad: "I understand you want a full renovation. What day works?" (ignores question)
+
 Respond naturally (2-3 sentences):`;
 
   let attempts = 0;
@@ -1037,8 +1140,16 @@ Respond naturally (2-3 sentences):`;
           model: CLAUDE_MODEL,
           max_tokens: 150,
           temperature: 0.5 + attempts * 0.1,
-          system:
-            "You're a construction PM with PERFECT MEMORY. You track the booking state. If customer already provided date/time, NEVER ask for it again. If you have ALL details (date, time, name, email, address), STOP asking questions. Keep responses under 50 words.",
+          system: `You're a construction PM with PERFECT MEMORY. You track the booking state. If customer says "actually", "scratch that", "never mind", "change of plans", or "instead", they are CHANGING their project scope - use ONLY the NEW project details and forget the old ones.
+
+**PROJECT SCOPE CHANGE RULES:**
+- If customer says "actually, I want X instead of Y", forget Y completely
+- Use the MOST RECENT project type mentioned
+- Don't mix details from old and new projects (e.g., don't use deck size for bathroom)
+- Acknowledge the change: "No problem! Let's focus on [NEW PROJECT] instead"
+- Don't ask which one - they already told you the new one
+
+Keep responses under 50 words.`,
           messages: [{ role: "user", content: prompt }],
         })
       );
