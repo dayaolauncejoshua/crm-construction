@@ -2799,10 +2799,12 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
               weekday: "long",
               month: "long",
               day: "numeric",
+              timeZone: "America/Vancouver",
             })}\n` +
             `Time: ${scheduledDate.toLocaleTimeString("en-US", {
               hour: "2-digit",
               minute: "2-digit",
+              timeZone: "America/Vancouver",
             })}\n` +
             `Duration: ${duration} minutes\n` +
             `Location: ${location}\n` +
@@ -2866,10 +2868,12 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
               month: "long",
               day: "numeric",
               year: "numeric",
+              timeZone: "America/Vancouver",
             })}</p>
             <p><strong>Time:</strong> ${startTime.toLocaleTimeString("en-US", {
               hour: "2-digit",
               minute: "2-digit",
+              timeZone: "America/Vancouver",
             })}</p>
             <p><strong>Duration:</strong> ${duration} minutes</p>
             <p><strong>Location:</strong> ${location}</p>
@@ -2899,10 +2903,12 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
           weekday: "long",
           month: "long",
           day: "numeric",
+          timeZone: "America/Vancouver",
         })}
 🕐 ${startTime.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "America/Vancouver",
         })}
 ⏱️ ${duration} minutes
 📍 ${location}
@@ -3664,10 +3670,12 @@ If you'd like to reschedule, please let us know. We apologize for any inconvenie
           month: "long",
           day: "numeric",
           year: "numeric",
+          timeZone: "America/Vancouver",
         });
         const formattedTime = startTime.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "America/Vancouver",
         });
 
         // ✅ NEW: Add approval message to conversation FIRST

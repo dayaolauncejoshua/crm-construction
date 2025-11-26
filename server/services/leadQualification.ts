@@ -1431,6 +1431,24 @@ export class LeadQualificationService {
             );
 
             // Extract lead details from conversation
+            const previousLeadState = {
+              hadName:
+                lead.firstName &&
+                lead.firstName !== lead.phone &&
+                !lead.firstName.startsWith("639") &&
+                !lead.firstName.startsWith("+") &&
+                !lead.firstName.toLowerCase().includes("unknown") &&
+                lead.firstName.length > 2,
+              hadEmail:
+                lead.email &&
+                !lead.email.includes("whatsapp_") &&
+                !lead.email.includes("@temp.com"),
+              firstName: lead.firstName,
+            };
+
+            console.log("📸 Previous lead state:", previousLeadState);
+
+            // Extract lead details from conversation
             const extractedDetails = await extractLeadDetails(messages);
             console.log("📋 Extracted details:", extractedDetails);
 
@@ -1714,47 +1732,113 @@ export class LeadQualificationService {
                   return; // Wait for response
                 }
               }
+              // Detect what was JUST provided in the last message
               const lastLeadMessage =
-                messages
+                freshMessages
                   .filter((m) => m.sender === "lead")
                   .slice(-1)[0]
                   ?.content.toLowerCase() || "";
-              const justProvidedDetails =
-                (detailsCheck.missingDetails.includes("specific address") &&
-                  (lastLeadMessage.includes("address") ||
-                    lastLeadMessage.match(
-                      /\d+\s+\w+\s+(st|ave|rd|way|drive|lane|blvd)/i
-                    ))) ||
-                (detailsCheck.missingDetails.includes("your full name") &&
-                  lastLeadMessage.includes("name")) ||
-                (detailsCheck.missingDetails.includes("email") &&
-                  lastLeadMessage.includes("@"));
 
-              if (justProvidedDetails) {
-                console.log(
-                  "⚠️ Lead just provided details but validation failed"
-                );
-                await storage.updateConversation(conversation.id, {
-                  isAiHandled: false,
-                  humanTakeoverAt: new Date(),
-                });
+              console.log(
+                `🔍 Last lead message for detection: "${lastLeadMessage}"`
+              );
+              console.log(`🔍 Message length: ${lastLeadMessage.length}`);
 
-                const acknowledgment = `Thank you for providing those details! Let me review this information and our team will reach out shortly to confirm your booking. 📋`;
+              // Check regex patterns
+              const namePattern = /\b(name is|i'm|i am|my name|call me)\b/i;
+              const emailPattern = /@/;
+              const addressPattern =
+                /\d+\s+\w+\s+(st|ave|rd|street|avenue|road)/i;
 
-                await whatsappService.sendTextMessage(from, acknowledgment);
-                await storage.createMessage({
-                  conversationId: conversation.id,
-                  content: acknowledgment,
-                  sender: "ai",
-                  channel: "whatsapp",
-                  sentAt: new Date(),
-                  deliveredAt: new Date(),
-                });
+              const namePatternMatches = namePattern.test(lastLeadMessage);
+              const emailPatternMatches = emailPattern.test(lastLeadMessage);
+              const addressPatternMatches =
+                addressPattern.test(lastLeadMessage) ||
+                /address/i.test(lastLeadMessage);
 
-                return;
+              console.log(`🔍 Pattern matches:`, {
+                namePattern: namePatternMatches,
+                emailPattern: emailPatternMatches,
+                addressPattern: addressPatternMatches,
+              });
+
+              // Check if name was JUST added (wasn't there before, is there now)
+              const justProvidedName =
+                !previousLeadState.hadName &&
+                detailsCheck.hasName &&
+                namePatternMatches;
+
+              // Check if email was JUST added
+              const justProvidedEmail =
+                !previousLeadState.hadEmail &&
+                detailsCheck.hasEmail &&
+                emailPatternMatches;
+
+              // Check if address was JUST provided (address is never pre-filled, so simpler check)
+              const justProvidedAddress =
+                detailsCheck.hasAddress && addressPatternMatches;
+
+              console.log("🔍 Detection:", {
+                justProvidedName,
+                justProvidedEmail,
+                justProvidedAddress,
+                previousHadName: previousLeadState.hadName,
+                currentHasName: detailsCheck.hasName,
+                previousHadEmail: previousLeadState.hadEmail,
+                currentHasEmail: detailsCheck.hasEmail,
+              });
+
+              console.log("🔍 Detailed name check:", {
+                condition1_previousDidNotHaveName: !previousLeadState.hadName,
+                condition2_currentHasName: detailsCheck.hasName,
+                condition3_messageContainsName: namePatternMatches,
+                result: justProvidedName,
+              });
+
+              // Build acknowledgment
+              let acknowledgment = "";
+              const providedItems: string[] = [];
+
+              if (justProvidedName) providedItems.push("name");
+              if (justProvidedEmail) providedItems.push("email");
+              if (justProvidedAddress) providedItems.push("address");
+
+              console.log("📝 Provided items:", providedItems);
+
+              if (providedItems.length > 0) {
+                // Get the newly provided first name
+                const firstName =
+                  lead.firstName &&
+                  lead.firstName !== lead.phone &&
+                  !lead.firstName.startsWith("639") &&
+                  !lead.firstName.startsWith("+") &&
+                  lead.firstName.length > 1
+                    ? lead.firstName
+                    : null;
+
+                if (justProvidedName && firstName) {
+                  // They just told us their name - use it!
+                  acknowledgment = `Thanks ${firstName}! `;
+                  console.log(`✅ Acknowledging name: "${firstName}"`);
+                } else if (justProvidedEmail) {
+                  // They provided email (and we already had name)
+                  acknowledgment = `Perfect! `;
+                  console.log(`✅ Acknowledging email`);
+                } else if (justProvidedAddress) {
+                  // They provided address last
+                  acknowledgment = `Great! `;
+                  console.log(`✅ Acknowledging address`);
+                } else {
+                  acknowledgment = `Perfect! `;
+                }
+              } else {
+                // First ask (nothing provided yet)
+                acknowledgment = "";
               }
 
-              // Detect time change
+              // ============================================
+              // Check for time change
+              // ============================================
               const timeChange = detectTimeChange(freshMessages);
               let timeAcknowledgment = "";
               if (timeChange.hasChange && timeChange.newTime) {
@@ -1769,19 +1853,44 @@ export class LeadQualificationService {
               const currentDate =
                 bookingIntent.proposedDateTime?.date || "the meeting";
 
-              const missingList = detailsCheck.missingDetails
-                .map(
-                  (d, i) =>
-                    `${i + 1}. ${d.charAt(0).toUpperCase() + d.slice(1)}`
-                )
-                .join("\n");
+              // ============================================
+              // 🆕 ENHANCED: Natural, conversational request
+              // ============================================
+              const remainingCount = detailsCheck.missingDetails.length;
 
-              const detailsRequest = `${timeAcknowledgment}Perfect! Before I confirm the booking for ${currentDate} at ${currentTime}, I need a few more details:
+              let requestIntro = "";
+              if (acknowledgment || timeAcknowledgment) {
+                requestIntro = `${timeAcknowledgment}${acknowledgment}`;
+              } else {
+                requestIntro = "Perfect! ";
+              }
 
-${missingList}
+              let requestBody = "";
+              if (remainingCount === 1) {
+                // Only 1 item left - simpler phrasing
+                const lastItem = detailsCheck.missingDetails[0];
+                requestBody = `To finalize your booking for ${currentDate} at ${currentTime}, I just need your ${lastItem}.`;
+              } else if (remainingCount === 2) {
+                // 2 items left
+                requestBody = `To complete the booking for ${currentDate} at ${currentTime}, I need:\n\n${detailsCheck.missingDetails
+                  .map(
+                    (d, i) =>
+                      `${i + 1}. ${d.charAt(0).toUpperCase() + d.slice(1)}`
+                  )
+                  .join("\n")}`;
+              } else {
+                // 3 items (initial ask)
+                requestBody = `Before I confirm the booking for ${currentDate} at ${currentTime}, I need a few more details:\n\n${detailsCheck.missingDetails
+                  .map(
+                    (d, i) =>
+                      `${i + 1}. ${d.charAt(0).toUpperCase() + d.slice(1)}`
+                  )
+                  .join("\n")}`;
+              }
 
-Please provide all in one message (e.g., "My name is John Smith, email john@email.com, address is 123 Main St, Vancouver"). 📋`;
+              const detailsRequest = `${requestIntro}${requestBody} 📋`;
 
+              // Send the request
               await whatsappService.sendTextMessage(from, detailsRequest);
               await storage.createMessage({
                 conversationId: conversation.id,
