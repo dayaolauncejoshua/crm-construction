@@ -250,6 +250,7 @@ class NotificationService {
       console.error(`   Stack:`, error.stack);
     }
   }
+
   // Send urgent alert when Claude API is down and high-value lead detected
   async sendUrgentLeadAlert(data: {
   userId: string;
@@ -431,27 +432,83 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
   ): string {
     const appUrl = process.env.FRONTEND_URL || "http://localhost:5000";
 
-     // ✅ NEW: Extract project details from qualification reasoning
-  const reasoning = qualification.reasoning || "";
-  
-  // Try to extract project type from reasoning or lead data
-  let projectType = "Construction project";
-  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
-  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
-  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
-  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
-  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
-  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
-  else if (reasoning.toLowerCase().includes("residential")) projectType = "Residential construction";
+    // ✅ ROBUST: Extract project type with scope change detection
+    const reasoning = qualification.reasoning || "";
+    const lowerReasoning = reasoning.toLowerCase();
+    
+    console.log(`🔍 [EMAIL-HTML] Full reasoning:`, reasoning.substring(0, 200));
+    
+    // Check for scope change keywords
+    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
+    
+    console.log(`🔍 [EMAIL-HTML] Scope change detected:`, hasScopeChange);
+    
+    let projectType = "Construction project";
+    
+    if (hasScopeChange) {
+      // If there was a scope change, look for the FINAL/CONFIRMED project
+      // Check for phrases like "bathroom renovation" after "focus on", "switched to", etc.
+      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
+        projectType = "Bathroom renovation";
+        console.log(`✅ [EMAIL-HTML] Scope change → Bathroom renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
+        projectType = "Kitchen renovation";
+        console.log(`✅ [EMAIL-HTML] Scope change → Kitchen renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
+        projectType = "Deck construction";
+        console.log(`✅ [EMAIL-HTML] Scope change → Deck construction`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
+        projectType = "Basement finishing";
+        console.log(`✅ [EMAIL-HTML] Scope change → Basement finishing`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
+        projectType = "Warehouse construction";
+        console.log(`✅ [EMAIL-HTML] Scope change → Warehouse construction`);
+      } else {
+        // Fallback: Use lastIndexOf if scope change keywords don't help
+        console.log(`⚠️ [EMAIL-HTML] Scope change detected but no clear final project, using lastIndexOf`);
+        const projectMatches = [
+          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        ].filter(match => match.pos !== -1);
+        
+        if (projectMatches.length > 0) {
+          projectMatches.sort((a, b) => b.pos - a.pos);
+          projectType = projectMatches[0].type;
+        }
+      }
+    } else {
+      // No scope change - use lastIndexOf as before
+      console.log(`🔍 [EMAIL-HTML] No scope change, using lastIndexOf`);
+      const projectMatches = [
+        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
+        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
+      ].filter(match => match.pos !== -1);
+      
+      if (projectMatches.length > 0) {
+        projectMatches.sort((a, b) => b.pos - a.pos);
+        projectType = projectMatches[0].type;
+        console.log(`✅ [EMAIL-HTML] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
+      }
+    }
+    
+    // Fallback to lead company
+    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+      projectType = `${lead.company} project`;
+    }
 
-  // Extract address from reasoning if available
-  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
-  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+    console.log(`✅ [EMAIL-HTML] Final project type: ${projectType}`);
 
-  // Use lead's company as fallback project descriptor
-  if (lead.company && lead.company !== "Unknown" && projectType === "Construction project") {
-    projectType = `${lead.company} project`;
-  }
+    // Extract address from reasoning if available
+    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
 
     return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -538,21 +595,76 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
     lead: any,
     qualification: any
   ): string {
+    // ✅ ROBUST: Extract project type with scope change detection (SAME LOGIC)
     const reasoning = qualification.reasoning || "";
-  
-  // Extract project type
-  let projectType = "Construction project";
-  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
-  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
-  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
-  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
-  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
-  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
-  else if (lead.company && lead.company !== "Unknown") projectType = `${lead.company} project`;
+    const lowerReasoning = reasoning.toLowerCase();
+    
+    console.log(`🔍 [EMAIL-TEXT] Full reasoning:`, reasoning.substring(0, 200));
+    
+    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
+    console.log(`🔍 [EMAIL-TEXT] Scope change detected:`, hasScopeChange);
+    
+    let projectType = "Construction project";
+    
+    if (hasScopeChange) {
+      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
+        projectType = "Bathroom renovation";
+        console.log(`✅ [EMAIL-TEXT] Scope change → Bathroom renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
+        projectType = "Kitchen renovation";
+        console.log(`✅ [EMAIL-TEXT] Scope change → Kitchen renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
+        projectType = "Deck construction";
+        console.log(`✅ [EMAIL-TEXT] Scope change → Deck construction`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
+        projectType = "Basement finishing";
+        console.log(`✅ [EMAIL-TEXT] Scope change → Basement finishing`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
+        projectType = "Warehouse construction";
+        console.log(`✅ [EMAIL-TEXT] Scope change → Warehouse construction`);
+      } else {
+        console.log(`⚠️ [EMAIL-TEXT] Scope change detected but no clear final project, using lastIndexOf`);
+        const projectMatches = [
+          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        ].filter(match => match.pos !== -1);
+        
+        if (projectMatches.length > 0) {
+          projectMatches.sort((a, b) => b.pos - a.pos);
+          projectType = projectMatches[0].type;
+        }
+      }
+    } else {
+      console.log(`🔍 [EMAIL-TEXT] No scope change, using lastIndexOf`);
+      const projectMatches = [
+        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
+        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
+      ].filter(match => match.pos !== -1);
+      
+      if (projectMatches.length > 0) {
+        projectMatches.sort((a, b) => b.pos - a.pos);
+        projectType = projectMatches[0].type;
+        console.log(`✅ [EMAIL-TEXT] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
+      }
+    }
+    
+    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+      projectType = `${lead.company} project`;
+    }
 
-  // Extract address
-  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
-  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+    console.log(`✅ [EMAIL-TEXT] Final project type: ${projectType}`);
+
+    // Extract address
+    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
 
     return `
 Hi ${user.firstName},
@@ -757,23 +869,78 @@ LeadFlow CRM
     qualification: any
   ): string {
 
+    // ✅ ROBUST: Extract project type with scope change detection (SAME LOGIC)
     const reasoning = qualification.reasoning || "";
-  
-  // Extract project type
-  let projectType = "Construction project";
-  if (reasoning.toLowerCase().includes("warehouse")) projectType = "Warehouse construction";
-  else if (reasoning.toLowerCase().includes("kitchen")) projectType = "Kitchen renovation";
-  else if (reasoning.toLowerCase().includes("deck")) projectType = "Deck construction";
-  else if (reasoning.toLowerCase().includes("basement")) projectType = "Basement finishing";
-  else if (reasoning.toLowerCase().includes("bathroom")) projectType = "Bathroom renovation";
-  else if (reasoning.toLowerCase().includes("commercial")) projectType = "Commercial building";
-  else if (lead.company && lead.company !== "Unknown") projectType = `${lead.company} project`;
+    const lowerReasoning = reasoning.toLowerCase();
+    
+    console.log(`🔍 [WHATSAPP] Full reasoning:`, reasoning.substring(0, 200));
+    
+    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
+    console.log(`🔍 [WHATSAPP] Scope change detected:`, hasScopeChange);
+    
+    let projectType = "Construction project";
+    
+    if (hasScopeChange) {
+      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
+        projectType = "Bathroom renovation";
+        console.log(`✅ [WHATSAPP] Scope change → Bathroom renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
+        projectType = "Kitchen renovation";
+        console.log(`✅ [WHATSAPP] Scope change → Kitchen renovation`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
+        projectType = "Deck construction";
+        console.log(`✅ [WHATSAPP] Scope change → Deck construction`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
+        projectType = "Basement finishing";
+        console.log(`✅ [WHATSAPP] Scope change → Basement finishing`);
+      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
+        projectType = "Warehouse construction";
+        console.log(`✅ [WHATSAPP] Scope change → Warehouse construction`);
+      } else {
+        console.log(`⚠️ [WHATSAPP] Scope change detected but no clear final project, using lastIndexOf`);
+        const projectMatches = [
+          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        ].filter(match => match.pos !== -1);
+        
+        if (projectMatches.length > 0) {
+          projectMatches.sort((a, b) => b.pos - a.pos);
+          projectType = projectMatches[0].type;
+        }
+      }
+    } else {
+      console.log(`🔍 [WHATSAPP] No scope change, using lastIndexOf`);
+      const projectMatches = [
+        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
+        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
+        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
+        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
+        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
+        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
+      ].filter(match => match.pos !== -1);
+      
+      if (projectMatches.length > 0) {
+        projectMatches.sort((a, b) => b.pos - a.pos);
+        projectType = projectMatches[0].type;
+        console.log(`✅ [WHATSAPP] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
+      }
+    }
+    
+    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+      projectType = `${lead.company} project`;
+    }
 
-  // Extract address
-  const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
-  const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+    console.log(`✅ [WHATSAPP] Final project type: ${projectType}`);
 
-     return `🔥 *Hot Lead Alert!*
+    // Extract address
+    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
+
+    return `🔥 *Hot Lead Alert!*
 
 👤 *${lead.firstName} ${lead.lastName}*
 🏗️ Project: ${projectType}
@@ -786,7 +953,7 @@ _${qualification.reasoning}_
 ⏱️ Respond within 5 minutes!
 
 View in CRM: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
-}
+  }
 
   private generateBookingWhatsAppMessage(
     user: any,

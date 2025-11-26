@@ -84,16 +84,18 @@ async function callClaudeWithRetry<T>(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const result = await apiCall();
-      
+
       // ✅ SUCCESS: Reset consecutive error counter
       consecutive529Errors = 0;
-      
+
       return result;
     } catch (error: any) {
       lastError = error;
 
-      const is529Error = error.status === 529 || error.error?.type === "overloaded_error";
-      const is429Error = error.status === 429 || error.error?.type === "rate_limit_error";
+      const is529Error =
+        error.status === 529 || error.error?.type === "overloaded_error";
+      const is429Error =
+        error.status === 429 || error.error?.type === "rate_limit_error";
       const isRetryable = is529Error || is429Error;
 
       // ✅ Track 529 errors
@@ -102,7 +104,7 @@ async function callClaudeWithRetry<T>(
         console.error(
           `🚨 [CLAUDE] 529 ERROR (consecutive: ${consecutive529Errors}/${MAX_CONSECUTIVE_529})`
         );
-        
+
         // ✅ Log severe outage
         if (consecutive529Errors >= MAX_CONSECUTIVE_529) {
           console.error(
@@ -113,15 +115,12 @@ async function callClaudeWithRetry<T>(
 
       if (!isRetryable || attempt === maxRetries) {
         // ✅ Log final failure with context
-        console.error(
-          `❌ [CLAUDE] Final failure after ${attempt} attempts:`,
-          {
-            status: error.status,
-            type: error.error?.type,
-            message: error.message,
-            consecutive529s: consecutive529Errors,
-          }
-        );
+        console.error(`❌ [CLAUDE] Final failure after ${attempt} attempts:`, {
+          status: error.status,
+          type: error.error?.type,
+          message: error.message,
+          consecutive529s: consecutive529Errors,
+        });
         throw error;
       }
 
@@ -135,7 +134,7 @@ async function callClaudeWithRetry<T>(
 
       console.warn(
         `⚠️ [CLAUDE] ${error.status} error (attempt ${attempt}/${maxRetries}). ` +
-        `Retrying in ${(totalDelay / 1000).toFixed(1)}s...`
+          `Retrying in ${(totalDelay / 1000).toFixed(1)}s...`
       );
 
       await new Promise((resolve) => setTimeout(resolve, totalDelay));
@@ -149,18 +148,18 @@ async function callClaudeWithRetry<T>(
 export function getClaudeAPIHealth(): {
   isHealthy: boolean;
   consecutive529Errors: number;
-  status: 'healthy' | 'degraded' | 'down';
+  status: "healthy" | "degraded" | "down";
 } {
-  let status: 'healthy' | 'degraded' | 'down';
-  
+  let status: "healthy" | "degraded" | "down";
+
   if (consecutive529Errors === 0) {
-    status = 'healthy';
+    status = "healthy";
   } else if (consecutive529Errors < MAX_CONSECUTIVE_529) {
-    status = 'degraded';
+    status = "degraded";
   } else {
-    status = 'down';
+    status = "down";
   }
-  
+
   return {
     isHealthy: consecutive529Errors < MAX_CONSECUTIVE_529,
     consecutive529Errors,
@@ -308,7 +307,9 @@ export function extractConversationContext(messages: any[]): {
   if (/\d+\s*sq\s*ft|\d+\s*square\s*feet/i.test(allLeadText)) {
     providedInfo.set("size", "provided");
   }
-  if (/composite|cedar|wood|pressure[\s-]?treated|material/i.test(allLeadText)) {
+  if (
+    /composite|cedar|wood|pressure[\s-]?treated|material/i.test(allLeadText)
+  ) {
     providedInfo.set("materials", "provided");
   }
 
@@ -421,16 +422,18 @@ export function detectBookingState(
     .filter((m) => m.sender === "ai")
     .map((m) => m.content);
 
-  const hasDate = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
-    leadMessages
-  );
+  const hasDate =
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(
+      leadMessages
+    );
   const hasTime = /\b\d{1,2}\s*(am|pm|AM|PM)\b/i.test(leadMessages);
   const hasEmail = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/i.test(
     leadMessages
   );
-  const hasAddress = /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)\b/i.test(
-    leadMessages
-  );
+  const hasAddress =
+    /\b\d+\s+\w+\s+(st|street|ave|avenue|rd|road|way|drive|lane|blvd|boulevard)\b/i.test(
+      leadMessages
+    );
 
   const nameMatch = leadMessages.match(
     /(?:my name is|name is|i'm|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
@@ -744,9 +747,7 @@ export async function qualifyLead(
     }
 
     const conversationText = conversationHistory
-      .map(
-        (m) => `${m.sender === "lead" ? "Customer" : "Agent"}: ${m.content}`
-      )
+      .map((m) => `${m.sender === "lead" ? "Customer" : "Agent"}: ${m.content}`)
       .join("\n");
 
     const customerMessageCount = conversationHistory.filter(
@@ -759,6 +760,31 @@ CONVERSATION:
 ${conversationText}
 
 Customer messages: ${customerMessageCount}
+
+**🚨 CRITICAL: CHECK FOR PROJECT SCOPE CHANGES FIRST! 🚨**
+
+BEFORE scoring, scan the conversation for scope changes.
+
+Scope change indicators:
+- "actually", "scratch that", "never mind", "instead", "switch to", "change of plans", "forget about"
+
+IF customer mentioned TWO different projects:
+1. OLD project = mentioned BEFORE scope change keywords
+2. NEW project = mentioned AFTER scope change keywords
+3. ✅ USE ONLY THE NEW PROJECT in your reasoning
+4. ❌ DO NOT mention the old project anywhere in your response
+
+**EXAMPLES:**
+
+Conversation: "I need deck construction, 200 sq ft" → "Actually scratch that, I want bathroom reno"
+❌ WRONG: "reasoning": "Deck construction booking confirmed..."
+✅ CORRECT: "reasoning": "Bathroom renovation booking confirmed..."
+
+Conversation: "Kitchen reno, $50k" → "Never mind, let's do a basement instead"
+❌ WRONG: "reasoning": "Kitchen renovation with $50k budget..."
+✅ CORRECT: "reasoning": "Basement renovation with details provided..."
+
+**Now proceed with scoring:**
 
 Score this lead from 0.0 to 1.0 based on BUYING SIGNALS:
 
@@ -825,7 +851,7 @@ Return JSON:
         max_tokens: 400,
         temperature: 0.3,
         system:
-          "You're a lead qualification expert. Be VERY CONSERVATIVE with ultra-hot scoring (0.85+). Most meeting requests should be 0.65-0.75 (HOT) so AI can handle booking. Only 0.85+ for EXTREME cases with CEO/owner + ASAP urgency + $2M+ budget. Return valid JSON only.",
+          "You're a lead qualification expert with PERFECT MEMORY. CRITICAL: If customer changes project scope (says 'actually', 'scratch that', 'instead'), use ONLY the NEW project in your reasoning field - completely forget the old project. Be VERY CONSERVATIVE with ultra-hot scoring (0.85+). Most meeting requests should be 0.65-0.75 (HOT) so AI can handle booking. Only 0.85+ for EXTREME cases with CEO/owner + ASAP urgency + $2M+ budget. Return valid JSON only.",
         messages: [{ role: "user", content: prompt }],
       })
     );
@@ -838,11 +864,60 @@ Return JSON:
     const result = parseClaudeJSON(content.text);
     const finalScore = result.score || 0.5;
 
+    // 🚨 POST-PROCESSING: Fix scope change issues
+    let finalReasoning = result.reasoning || "Lead qualified";
+
+    // Check if conversation has scope change
+    const hasScopeChange =
+      /\b(actually|scratch that|never mind|instead|forget about|change of plans)\b/i.test(
+        conversationText
+      );
+
+    if (hasScopeChange) {
+      console.log("🔄 SCOPE CHANGE DETECTED - Post-processing reasoning...");
+
+      // Find the NEW project (mentioned AFTER scope change keyword)
+      const scopeChangeMatch = conversationText.match(
+        /(actually|scratch that|never mind|instead|forget about|change of plans)[^.]*?(bathroom|deck|kitchen|basement|addition|garage|renovation|reno)/gi
+      );
+
+      if (scopeChangeMatch && scopeChangeMatch.length > 0) {
+        const lastMatch =
+          scopeChangeMatch[scopeChangeMatch.length - 1].toLowerCase();
+
+        let newProjectType = "";
+        if (/bathroom/.test(lastMatch)) newProjectType = "Bathroom renovation";
+        else if (/deck/.test(lastMatch)) newProjectType = "Deck construction";
+        else if (/kitchen/.test(lastMatch))
+          newProjectType = "Kitchen renovation";
+        else if (/basement/.test(lastMatch))
+          newProjectType = "Basement renovation";
+        else if (/addition/.test(lastMatch)) newProjectType = "Addition";
+        else if (/garage/.test(lastMatch))
+          newProjectType = "Garage construction";
+
+        if (newProjectType) {
+          console.log(`✅ NEW PROJECT IDENTIFIED: ${newProjectType}`);
+
+          // Force-replace old project mentions in reasoning
+          finalReasoning = finalReasoning
+            .replace(/Deck construction/gi, newProjectType)
+            .replace(/Kitchen renovation/gi, newProjectType)
+            .replace(/Bathroom renovation/gi, newProjectType)
+            .replace(/Basement renovation/gi, newProjectType);
+
+          console.log(
+            `✅ REASONING CORRECTED: ${finalReasoning.substring(0, 100)}...`
+          );
+        }
+      }
+    }
+
     console.log("📊 Lead Qualification:", {
       score: finalScore.toFixed(2),
       intent: result.intent,
       needsHumanAttention: finalScore >= 0.7,
-      reasoning: result.reasoning,
+      reasoning: finalReasoning,
     });
 
     return {
@@ -852,7 +927,7 @@ Return JSON:
       budget: result.budget || "unknown",
       timeline: result.timeline || "unknown",
       needsHumanAttention: finalScore >= 0.7,
-      reasoning: result.reasoning || "Lead qualified",
+      reasoning: finalReasoning, // ✅ Use post-processed reasoning
       nextAction: result.nextAction || "continue conversation",
     };
   } catch (error) {
@@ -880,42 +955,52 @@ export async function generateAIResponse(
   }
 
   const currentMessage = conversationHistory[conversationHistory.length - 1];
- const isFromLead = currentMessage?.sender === "lead";
-const lastContent = currentMessage?.content?.toLowerCase() || "";
-  
+  const isFromLead = currentMessage?.sender === "lead";
+  const lastContent = currentMessage?.content?.toLowerCase() || "";
+
   // Detect explicit pricing questions
-  const isPriceQuestion = 
-    /\b(how much|what'?s the (cost|price)|price range|cost range|typically cost|rough cost|ballpark)\b/i.test(lastContent) &&
-    /\b(cost|price|much|range)\b/i.test(lastContent);
-  
+  const isPriceQuestion =
+    /\b(how much|what'?s the (cost|price)|price range|cost range|typically cost|rough cost|ballpark)\b/i.test(
+      lastContent
+    ) && /\b(cost|price|much|range)\b/i.test(lastContent);
+
   console.log(`🔍 Price Question Check:`, {
     isFromLead,
     isPriceQuestion,
-    lastContent: lastContent.substring(0, 100)
+    lastContent: lastContent.substring(0, 100),
   });
 
   // If lead just asked about pricing, answer BEFORE continuing booking flow
   if (isFromLead && isPriceQuestion) {
-    console.log(`💰 PRICE QUESTION DETECTED - Answering before resuming booking`);
-    
+    console.log(
+      `💰 PRICE QUESTION DETECTED - Answering before resuming booking`
+    );
+
     // Extract project context from conversation
     const leadMessages = conversationHistory
-      .filter(m => m.sender === "lead")
-      .map(m => m.content)
+      .filter((m) => m.sender === "lead")
+      .map((m) => m.content)
       .join(" ");
-    
-    const projectType = 
-      /\bdeck\b/i.test(leadMessages) ? "deck" :
-      /\bkitchen\b/i.test(leadMessages) ? "kitchen" :
-      /\bbathroom\b/i.test(leadMessages) ? "bathroom" :
-      /\bbasement\b/i.test(leadMessages) ? "basement" :
-      /\baddition\b/i.test(leadMessages) ? "addition" :
-      "renovation";
-    
+
+    const projectType = /\bdeck\b/i.test(leadMessages)
+      ? "deck"
+      : /\bkitchen\b/i.test(leadMessages)
+      ? "kitchen"
+      : /\bbathroom\b/i.test(leadMessages)
+      ? "bathroom"
+      : /\bbasement\b/i.test(leadMessages)
+      ? "basement"
+      : /\baddition\b/i.test(leadMessages)
+      ? "addition"
+      : "renovation";
+
     // Build a special prompt for price questions
     const pricePrompt = `The customer just asked: "${currentMessage.content}"
 
-CONTEXT: ${projectType} project. Previous conversation shows: ${leadMessages.substring(0, 200)}
+CONTEXT: ${projectType} project. Previous conversation shows: ${leadMessages.substring(
+      0,
+      200
+    )}
 
 YOUR TASK: Answer their price question briefly, then return to booking.
 
@@ -937,7 +1022,8 @@ Respond now:`;
           model: CLAUDE_MODEL,
           max_tokens: 150,
           temperature: 0.4,
-          system: "You answer price questions briefly with ranges, then return to scheduling. Keep responses under 50 words.",
+          system:
+            "You answer price questions briefly with ranges, then return to scheduling. Keep responses under 50 words.",
           messages: [{ role: "user", content: pricePrompt }],
         })
       );
@@ -945,7 +1031,9 @@ Respond now:`;
       const content = response.content[0];
       if (content.type === "text") {
         const priceAnswer = content.text.trim();
-        console.log(`✅ Price answer generated: ${priceAnswer.substring(0, 100)}...`);
+        console.log(
+          `✅ Price answer generated: ${priceAnswer.substring(0, 100)}...`
+        );
         return priceAnswer;
       }
     } catch (error) {
@@ -1001,7 +1089,9 @@ Respond now:`;
   }
 
   if (missing.length > 0) {
-    stateGuidance += `\n\n**⚠️ STILL NEED: ${missing.join(", ")}**\nAsk for ONLY these missing details.`;
+    stateGuidance += `\n\n**⚠️ STILL NEED: ${missing.join(
+      ", "
+    )}**\nAsk for ONLY these missing details.`;
   }
 
   const alreadyHave: string[] = [];
@@ -1031,7 +1121,9 @@ ${contextGuidance}
 
 ${stateGuidance}
 
-**CURRENT BOOKING STATE: ${bookingState.state.toUpperCase().replace(/_/g, " ")}**
+**CURRENT BOOKING STATE: ${bookingState.state
+    .toUpperCase()
+    .replace(/_/g, " ")}**
 
 CONVERSATION:
 ${conversation}
@@ -1074,7 +1166,9 @@ DO NOT ask "what time?" again!
 ACTION: Acknowledge their time and ask for personal details`
     : `ACTION: Ask what time on ${bookingState.collectedInfo.date}`
 }
-EXAMPLE: "Great! What time on ${bookingState.collectedInfo.date || "that day"}?"`
+EXAMPLE: "Great! What time on ${
+        bookingState.collectedInfo.date || "that day"
+      }?"`
     : ""
 }
 
@@ -1087,13 +1181,19 @@ ${
 ACTION: Ask for ONLY the missing details`
     : `⚠️ YOU HAVE ALL DETAILS - DO NOT ASK FOR ANYTHING!`
 }
-EXAMPLE: "Perfect! To finalize the booking, I need your ${missing.join(" and ")}."`
+EXAMPLE: "Perfect! To finalize the booking, I need your ${missing.join(
+        " and "
+      )}."`
     : ""
 }
 
 **CRITICAL RULES:**
-1. If DATE confirmed (${bookingState.collectedInfo.date || "NOT YET"}) → DO NOT ask for date again
-2. If TIME confirmed (${bookingState.collectedInfo.time || "NOT YET"}) → DO NOT ask "what time?" again
+1. If DATE confirmed (${
+    bookingState.collectedInfo.date || "NOT YET"
+  }) → DO NOT ask for date again
+2. If TIME confirmed (${
+    bookingState.collectedInfo.time || "NOT YET"
+  }) → DO NOT ask "what time?" again
 3. Read the "ALREADY PROVIDED" section carefully
 4. Keep response under 50 words
 5. Use "meeting" or "site visit" (never "call")
@@ -1140,16 +1240,23 @@ Respond naturally (2-3 sentences):`;
           model: CLAUDE_MODEL,
           max_tokens: 150,
           temperature: 0.5 + attempts * 0.1,
-          system: `You're a construction PM with PERFECT MEMORY. You track the booking state. If customer says "actually", "scratch that", "never mind", "change of plans", or "instead", they are CHANGING their project scope - use ONLY the NEW project details and forget the old ones.
+          system: `You're a construction PM with PERFECT MEMORY.
 
-**PROJECT SCOPE CHANGE RULES:**
-- If customer says "actually, I want X instead of Y", forget Y completely
-- Use the MOST RECENT project type mentioned
-- Don't mix details from old and new projects (e.g., don't use deck size for bathroom)
-- Acknowledge the change: "No problem! Let's focus on [NEW PROJECT] instead"
-- Don't ask which one - they already told you the new one
+🚨 CRITICAL SCOPE CHANGE DETECTION 🚨
+Scan conversation for these keywords: "actually", "scratch that", "never mind", "instead", "forget about", "change of plans"
 
-Keep responses under 50 words.`,
+IF found:
+1. Project BEFORE keyword = OLD (IGNORE IT COMPLETELY)
+2. Project AFTER keyword = NEW (USE THIS ONLY)
+3. Treat conversation as if OLD project never existed
+4. Never say "confusion" or "clarify" - the customer already told you the new project
+
+EXAMPLE:
+Customer: "Deck, 300 sq ft" → "Actually, bathroom reno instead"
+❌ WRONG: "I see confusion... deck or bathroom?"
+✅ CORRECT: "Perfect! Bathroom renovation it is."
+
+Track booking state. Keep responses under 50 words.`,
           messages: [{ role: "user", content: prompt }],
         })
       );
@@ -1170,7 +1277,9 @@ Keep responses under 50 words.`,
         console.log(`✅ Non-repetitive response (attempt ${attempts})`);
 
         if (bookingState.collectedInfo.hasTime) {
-          if (/what time|when.*available|morning or afternoon/i.test(aiResponse)) {
+          if (
+            /what time|when.*available|morning or afternoon/i.test(aiResponse)
+          ) {
             console.warn(
               "⚠️ AI asking for time when we already have it, retrying..."
             );
@@ -1198,7 +1307,11 @@ Keep responses under 50 words.`,
         console.error("❌ Max attempts reached, using state-aware fallback");
 
         if (bookingState.state === "getting_details" && missing.length > 0) {
-          return `To finalize the booking for ${bookingState.collectedInfo.date} at ${bookingState.collectedInfo.time}, I need your ${missing.join(" and ")}.`;
+          return `To finalize the booking for ${
+            bookingState.collectedInfo.date
+          } at ${bookingState.collectedInfo.time}, I need your ${missing.join(
+            " and "
+          )}.`;
         } else if (bookingState.state === "getting_time") {
           return `What time on ${bookingState.collectedInfo.date} works best for you?`;
         } else if (bookingState.state === "getting_date") {
@@ -1488,33 +1601,35 @@ export function detectRefusal(conversationHistory: any[]): {
 } {
   console.log(`\n🔍 ========== REFUSAL DETECTION START ==========`);
   console.log(`   Total messages in history: ${conversationHistory.length}`);
-  
+
   const messages = conversationHistory.slice(-10); // Last 10 messages for better context
   console.log(`   Analyzing last ${messages.length} messages`);
-  
+
   // ✅ FIRST PASS: Check if AI recently asked for booking details
   let aiAskedForDetails = false;
-  const aiMessages = messages.filter(m => m.sender === "ai");
-  
+  const aiMessages = messages.filter((m) => m.sender === "ai");
+
   for (const aiMsg of aiMessages) {
     const content = aiMsg.content.toLowerCase();
-    const asksForDetails = 
+    const asksForDetails =
       /\b(name|email|address|contact information|details)\b/i.test(content) &&
       /\b(need|require|provide|share|give|confirm)\b/i.test(content);
-    
+
     if (asksForDetails) {
       aiAskedForDetails = true;
-      console.log(`   🤖 AI asked for details: "${aiMsg.content.substring(0, 80)}..."`);
+      console.log(
+        `   🤖 AI asked for details: "${aiMsg.content.substring(0, 80)}..."`
+      );
       break;
     }
   }
-  
+
   console.log(`   AI asked for details: ${aiAskedForDetails}`);
-  
+
   // ✅ SECOND PASS: Check lead messages for refusals
-  const leadMessages = messages.filter(m => m.sender === "lead");
+  const leadMessages = messages.filter((m) => m.sender === "lead");
   console.log(`   Lead messages to check: ${leadMessages.length}`);
-  
+
   // Explicit refusal patterns (high confidence - always count)
   const explicitRefusalPatterns = [
     /\b(i'll|i will|ill)\s+(provide|give|share)\s+(that|it|those|this|them)\s+(to|with|when)/i,
@@ -1528,7 +1643,7 @@ export function detectRefusal(conversationHistory: any[]): {
     /\b(later|after|then)\b.*\b(provide|give|share)\b/i,
     /\b(provide|give|share)\b.*\b(later|after|then)\b/i,
   ];
-  
+
   // Simple refusal patterns (only count if AI asked for details)
   const simpleRefusalPatterns = [
     /^no\s*thanks?$/i,
@@ -1548,12 +1663,16 @@ export function detectRefusal(conversationHistory: any[]): {
     const content = leadMsg.content.trim();
     const contentLower = content.toLowerCase().trim();
     const isLastMessage = i === 0; // ✅ Check if this is the LAST lead message
-    
-    console.log(`\n   📝 Checking lead message ${i + 1}/${leadMessages.length}: "${content}"`);
+
+    console.log(
+      `\n   📝 Checking lead message ${i + 1}/${
+        leadMessages.length
+      }: "${content}"`
+    );
     if (isLastMessage) {
       console.log(`      ⭐ This is the MOST RECENT lead message`);
     }
-    
+
     // Check explicit refusals (always count, no AI context needed)
     let isExplicitRefusal = false;
     for (const pattern of explicitRefusalPatterns) {
@@ -1563,24 +1682,26 @@ export function detectRefusal(conversationHistory: any[]): {
         break;
       }
     }
-    
+
     // Check simple refusals (only if AI asked for details)
     let isSimpleRefusal = false;
     if (aiAskedForDetails) {
       for (const pattern of simpleRefusalPatterns) {
         if (pattern.test(contentLower)) {
           isSimpleRefusal = true;
-          console.log(`      ✅ SIMPLE REFUSAL MATCH (context-aware): ${pattern}`);
+          console.log(
+            `      ✅ SIMPLE REFUSAL MATCH (context-aware): ${pattern}`
+          );
           break;
         }
       }
     }
-    
+
     if (isExplicitRefusal || isSimpleRefusal) {
       refusalCount++;
       lastRefusalMessage = content;
       console.log(`      🚫 REFUSAL #${refusalCount} DETECTED!`);
-      
+
       // ✅ NEW: Track if the LAST message is a refusal
       if (isLastMessage) {
         lastMessageIsRefusal = true;
@@ -1588,11 +1709,13 @@ export function detectRefusal(conversationHistory: any[]): {
       }
     } else {
       console.log(`      ⚪ No refusal detected in this message`);
-      
+
       // ✅ NEW: If last message is NOT a refusal, mark it
       if (isLastMessage) {
         lastMessageIsRefusal = false;
-        console.log(`      ✅ LAST MESSAGE IS NOT A REFUSAL (may contain details)`);
+        console.log(
+          `      ✅ LAST MESSAGE IS NOT A REFUSAL (may contain details)`
+        );
       }
     }
   }
@@ -1600,7 +1723,7 @@ export function detectRefusal(conversationHistory: any[]): {
   console.log(`\n   📊 FINAL RESULT:`);
   console.log(`      Has refusal: ${refusalCount > 0}`);
   console.log(`      Refusal count: ${refusalCount}`);
-  console.log(`      Last refusal: "${lastRefusalMessage || 'N/A'}"`);
+  console.log(`      Last refusal: "${lastRefusalMessage || "N/A"}"`);
   console.log(`      Last message is refusal: ${lastMessageIsRefusal}`); // ✅ NEW
   console.log(`==============================================\n`);
 
@@ -1608,6 +1731,6 @@ export function detectRefusal(conversationHistory: any[]): {
     hasRefusal: refusalCount > 0,
     refusalCount,
     lastRefusalMessage,
-    lastMessageIsRefusal, 
+    lastMessageIsRefusal,
   };
 }
