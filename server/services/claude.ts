@@ -761,32 +761,41 @@ ${conversationText}
 
 Customer messages: ${customerMessageCount}
 
-**🚨 CRITICAL: CHECK FOR PROJECT SCOPE CHANGES FIRST! 🚨**
+🚨🚨🚨 CRITICAL INSTRUCTION - READ THIS FIRST 🚨🚨🚨
 
-BEFORE scoring, scan the conversation for scope changes.
+BEFORE SCORING, CHECK: Did the customer CHANGE their project?
 
-Scope change indicators:
-- "actually", "scratch that", "never mind", "instead", "switch to", "change of plans", "forget about"
+Look for these keywords: "actually", "scratch that", "never mind", "instead", "forget about", "change of plans"
 
-IF customer mentioned TWO different projects:
-1. OLD project = mentioned BEFORE scope change keywords
-2. NEW project = mentioned AFTER scope change keywords
-3. ✅ USE ONLY THE NEW PROJECT in your reasoning
-4. ❌ DO NOT mention the old project anywhere in your response
+IF YOU FIND THESE KEYWORDS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Find the OLD project (mentioned BEFORE the keyword)
+2. Find the NEW project (mentioned AFTER the keyword)  
+3. ⚠️ COMPLETELY FORGET THE OLD PROJECT EXISTS
+4. ⚠️ Use ONLY the NEW project in your "reasoning" field
+5. ⚠️ DO NOT mention the old project anywhere in your response
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**EXAMPLES:**
+EXAMPLE 1:
+Customer: "I need deck built, 300 sq ft"
+Customer: "Actually, scratch that. I want bathroom reno instead, $35k"
 
-Conversation: "I need deck construction, 200 sq ft" → "Actually scratch that, I want bathroom reno"
-❌ WRONG: "reasoning": "Deck construction booking confirmed..."
-✅ CORRECT: "reasoning": "Bathroom renovation booking confirmed..."
+❌ WRONG reasoning: "Deck construction booking confirmed..."
+❌ WRONG reasoning: "Customer changed from deck to bathroom..."
+✅ CORRECT reasoning: "Bathroom renovation booking confirmed for Friday. Budget: $35k..."
 
-Conversation: "Kitchen reno, $50k" → "Never mind, let's do a basement instead"
-❌ WRONG: "reasoning": "Kitchen renovation with $50k budget..."
-✅ CORRECT: "reasoning": "Basement renovation with details provided..."
+EXAMPLE 2:  
+Customer: "Kitchen reno needed"
+Customer: "Never mind, let's do basement instead"
 
-**Now proceed with scoring:**
+❌ WRONG reasoning: "Kitchen renovation mentioned..."
+✅ CORRECT reasoning: "Basement renovation project..."
 
-Score this lead from 0.0 to 1.0 based on BUYING SIGNALS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ IF SCOPE CHANGE DETECTED: Treat the conversation AS IF the old project was never mentioned. Only the NEW project exists.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Now score this lead from 0.0 to 1.0 based on BUYING SIGNALS:
 
 **🔥 ULTRA-HOT (0.85-1.0) - IMMEDIATE Human Handoff (Bypass AI Booking):**
 These are EXTREME cases requiring senior team attention:
@@ -851,7 +860,7 @@ Return JSON:
         max_tokens: 400,
         temperature: 0.3,
         system:
-          "You're a lead qualification expert with PERFECT MEMORY. CRITICAL: If customer changes project scope (says 'actually', 'scratch that', 'instead'), use ONLY the NEW project in your reasoning field - completely forget the old project. Be VERY CONSERVATIVE with ultra-hot scoring (0.85+). Most meeting requests should be 0.65-0.75 (HOT) so AI can handle booking. Only 0.85+ for EXTREME cases with CEO/owner + ASAP urgency + $2M+ budget. Return valid JSON only.",
+          "You're a lead qualification expert. 🚨 CRITICAL: If customer says 'actually', 'scratch that', 'instead', or 'never mind', they CHANGED their project. In your 'reasoning' field, mention ONLY the NEW/FINAL project - DO NOT mention the old project at all. Pretend the old project never existed. Be VERY CONSERVATIVE with ultra-hot scoring (0.85+). Most meeting requests should be 0.65-0.75 (HOT) so AI can handle booking. Only 0.85+ for EXTREME cases with CEO/owner + ASAP urgency + $2M+ budget. Return valid JSON only.",
         messages: [{ role: "user", content: prompt }],
       })
     );

@@ -47,125 +47,157 @@ interface BookingNotification {
   };
 }
 
-
 class NotificationService {
   /**
    * Send hot lead alert notifications
    */
   async sendHotLeadAlert(data: HotLeadNotification): Promise<void> {
-  try {
-    console.log(`\n🔥 ========== HOT LEAD ALERT ==========`);
-    console.log(`   User ID: ${data.userId}`);
-    console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
-    console.log(`   Score: ${data.qualification.score}`);
-    console.log(`   Temperature: ${data.lead.temperature}`);
+    try {
+      console.log(`\n🔥 ========== HOT LEAD ALERT ==========`);
+      console.log(`   User ID: ${data.userId}`);
+      console.log(`   Lead: ${data.lead.firstName} ${data.lead.lastName}`);
+      console.log(`   Score: ${data.qualification.score}`);
+      console.log(`   Temperature: ${data.lead.temperature}`);
 
-    // Get user and preferences
-    const user = await storage.getUserById(data.userId);
+      // Get user and preferences
+      const user = await storage.getUserById(data.userId);
 
-    if (!user) {
-      console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
-      console.error(`   This is a critical error - user should exist!`);
-      return;
-    }
-
-    console.log(`✅ User found: ${user.email}`);
-    console.log(`   User data:`, JSON.stringify({
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      emailNotifications: user.emailNotifications,
-      whatsappNotifications: user.whatsappNotifications,
-      leadNotifications: user.leadNotifications,
-      bookingNotifications: user.bookingNotifications,
-    }, null, 2));
-
-    // ✅ NEW: Check if notification settings exist (might be undefined)
-    const emailNotificationsEnabled = user.emailNotifications !== false; // Default to true
-    const whatsappNotificationsEnabled = user.whatsappNotifications !== false; // Default to true
-    const leadNotificationsEnabled = user.leadNotifications !== false; // Default to true
-
-    console.log(`📊 Notification Settings (after defaults):`);
-    console.log(`   Email: ${emailNotificationsEnabled}`);
-    console.log(`   WhatsApp: ${whatsappNotificationsEnabled}`);
-    console.log(`   Lead alerts: ${leadNotificationsEnabled}`);
-
-    // Check if lead notifications are enabled
-    if (!leadNotificationsEnabled) {
-      console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
-      return;
-    }
-
-    const { lead, qualification } = data;
-
-    // ============================================
-    // EMAIL NOTIFICATION
-    // ============================================
-    if (emailNotificationsEnabled && user.email) {
-      try {
-        console.log(`📧 Attempting to send email to: ${user.email}`);
-
-        const emailSubject = `🔥 Hot Lead Alert: ${lead.firstName} ${lead.lastName}`;
-        const emailBody = this.generateHotLeadEmailHTML(user, lead, qualification);
-        const textBody = this.generateHotLeadEmailText(user, lead, qualification);
-
-        await emailService.sendEmail({
-          to: user.email,
-          toName: `${user.firstName} ${user.lastName}`,
-          subject: emailSubject,
-          htmlBody: emailBody,
-          textBody: textBody,
-        });
-
-        console.log(`✅ Hot lead email SENT to: ${user.email}`);
-      } catch (emailError: any) {
-        console.error(`❌ Failed to send hot lead email:`, emailError.message);
-        console.error(`   Full error:`, emailError);
-        
-        // ✅ Don't fail completely if email fails - try WhatsApp
+      if (!user) {
+        console.error(
+          `❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`
+        );
+        console.error(`   This is a critical error - user should exist!`);
+        return;
       }
-    } else {
-      console.log(`⏭️ Email notifications disabled or no email (emailNotifications: ${user.emailNotifications}, email: ${user.email})`);
-    }
 
-    // ============================================
-    // WHATSAPP NOTIFICATION
-    // ============================================
-    if (whatsappNotificationsEnabled && user.phone) {
-      try {
-        console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
+      console.log(`✅ User found: ${user.email}`);
+      console.log(
+        `   User data:`,
+        JSON.stringify(
+          {
+            id: user.id,
+            email: user.email,
+            phone: user.phone,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            emailNotifications: user.emailNotifications,
+            whatsappNotifications: user.whatsappNotifications,
+            leadNotifications: user.leadNotifications,
+            bookingNotifications: user.bookingNotifications,
+          },
+          null,
+          2
+        )
+      );
 
-        const whatsappMessage = this.generateHotLeadWhatsAppMessage(user, lead, qualification);
+      // ✅ NEW: Check if notification settings exist (might be undefined)
+      const emailNotificationsEnabled = user.emailNotifications !== false; // Default to true
+      const whatsappNotificationsEnabled = user.whatsappNotifications !== false; // Default to true
+      const leadNotificationsEnabled = user.leadNotifications !== false; // Default to true
 
-        const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
+      console.log(`📊 Notification Settings (after defaults):`);
+      console.log(`   Email: ${emailNotificationsEnabled}`);
+      console.log(`   WhatsApp: ${whatsappNotificationsEnabled}`);
+      console.log(`   Lead alerts: ${leadNotificationsEnabled}`);
 
-        if (result.success) {
-          console.log(`✅ Hot lead WhatsApp SENT to: ${user.phone}`);
-        } else {
-          console.error(`❌ Hot lead WhatsApp FAILED for: ${user.phone}`);
-          console.error(`   Reason:`, result.error);
+      // Check if lead notifications are enabled
+      if (!leadNotificationsEnabled) {
+        console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
+        return;
+      }
+
+      const { lead, qualification } = data;
+
+      // ============================================
+      // EMAIL NOTIFICATION
+      // ============================================
+      if (emailNotificationsEnabled && user.email) {
+        try {
+          console.log(`📧 Attempting to send email to: ${user.email}`);
+
+          const emailSubject = `🔥 Hot Lead Alert: ${lead.firstName} ${lead.lastName}`;
+          const emailBody = this.generateHotLeadEmailHTML(
+            user,
+            lead,
+            qualification
+          );
+          const textBody = this.generateHotLeadEmailText(
+            user,
+            lead,
+            qualification
+          );
+
+          await emailService.sendEmail({
+            to: user.email,
+            toName: `${user.firstName} ${user.lastName}`,
+            subject: emailSubject,
+            htmlBody: emailBody,
+            textBody: textBody,
+          });
+
+          console.log(`✅ Hot lead email SENT to: ${user.email}`);
+        } catch (emailError: any) {
+          console.error(
+            `❌ Failed to send hot lead email:`,
+            emailError.message
+          );
+          console.error(`   Full error:`, emailError);
+
+          // ✅ Don't fail completely if email fails - try WhatsApp
         }
-      } catch (whatsappError: any) {
-        console.error(`❌ Failed to send hot lead WhatsApp:`, whatsappError.message);
-        console.error(`   Full error:`, whatsappError);
+      } else {
+        console.log(
+          `⏭️ Email notifications disabled or no email (emailNotifications: ${user.emailNotifications}, email: ${user.email})`
+        );
       }
-    } else {
-      console.log(`⏭️ WhatsApp notifications disabled or no phone (whatsappNotifications: ${user.whatsappNotifications}, phone: ${user.phone})`);
+
+      // ============================================
+      // WHATSAPP NOTIFICATION
+      // ============================================
+      if (whatsappNotificationsEnabled && user.phone) {
+        try {
+          console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
+
+          const whatsappMessage = this.generateHotLeadWhatsAppMessage(
+            user,
+            lead,
+            qualification
+          );
+
+          const result = await whatsappService.sendTextMessage(
+            user.phone,
+            whatsappMessage
+          );
+
+          if (result.success) {
+            console.log(`✅ Hot lead WhatsApp SENT to: ${user.phone}`);
+          } else {
+            console.error(`❌ Hot lead WhatsApp FAILED for: ${user.phone}`);
+            console.error(`   Reason:`, result.error);
+          }
+        } catch (whatsappError: any) {
+          console.error(
+            `❌ Failed to send hot lead WhatsApp:`,
+            whatsappError.message
+          );
+          console.error(`   Full error:`, whatsappError);
+        }
+      } else {
+        console.log(
+          `⏭️ WhatsApp notifications disabled or no phone (whatsappNotifications: ${user.whatsappNotifications}, phone: ${user.phone})`
+        );
+      }
+
+      console.log(`✅ Hot lead notifications complete for user ${data.userId}`);
+      console.log(`==========================================\n`);
+    } catch (error: any) {
+      console.error(`❌ CRITICAL ERROR in sendHotLeadAlert:`, error.message);
+      console.error(`   Stack:`, error.stack);
     }
-
-    console.log(`✅ Hot lead notifications complete for user ${data.userId}`);
-    console.log(`==========================================\n`);
-  } catch (error: any) {
-    console.error(`❌ CRITICAL ERROR in sendHotLeadAlert:`, error.message);
-    console.error(`   Stack:`, error.stack);
   }
-}
 
-  
   //  Send booking alert notifications
-   
+
   async sendBookingAlert(data: BookingNotification): Promise<void> {
     try {
       console.log(`\n📅 ========== BOOKING ALERT ==========`);
@@ -175,9 +207,11 @@ class NotificationService {
 
       // Get user and preferences
       const user = await storage.getUserById(data.userId);
-      
+
       if (!user) {
-        console.error(`❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`);
+        console.error(
+          `❌ User ${data.userId} not found - CANNOT SEND NOTIFICATIONS`
+        );
         return;
       }
 
@@ -186,7 +220,9 @@ class NotificationService {
 
       // Check if booking notifications are enabled
       if (user.bookingNotifications === false) {
-        console.log(`⏭️ Booking notifications DISABLED for user ${data.userId}`);
+        console.log(
+          `⏭️ Booking notifications DISABLED for user ${data.userId}`
+        );
         return;
       }
 
@@ -198,7 +234,7 @@ class NotificationService {
       if (user.emailNotifications && user.email) {
         try {
           console.log(`📧 Attempting to send email to: ${user.email}`);
-          
+
           const emailSubject = `📅 New Booking Proposed: ${lead.firstName} ${lead.lastName}`;
           const emailBody = this.generateBookingEmailHTML(user, booking, lead);
           const textBody = this.generateBookingEmailText(user, booking, lead);
@@ -226,10 +262,17 @@ class NotificationService {
       if ((user.whatsappNotifications ?? true) && user.phone) {
         try {
           console.log(`📱 Attempting to send WhatsApp to: ${user.phone}`);
-          
-          const whatsappMessage = this.generateBookingWhatsAppMessage(user, booking, lead);
 
-          const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
+          const whatsappMessage = this.generateBookingWhatsAppMessage(
+            user,
+            booking,
+            lead
+          );
+
+          const result = await whatsappService.sendTextMessage(
+            user.phone,
+            whatsappMessage
+          );
 
           if (result.success) {
             console.log(`✅ Booking WhatsApp SENT to: ${user.phone}`);
@@ -237,7 +280,10 @@ class NotificationService {
             console.error(`❌ Booking WhatsApp FAILED for: ${user.phone}`);
           }
         } catch (whatsappError: any) {
-          console.error(`❌ Failed to send booking WhatsApp:`, whatsappError.message);
+          console.error(
+            `❌ Failed to send booking WhatsApp:`,
+            whatsappError.message
+          );
         }
       } else {
         console.log(`⏭️ WhatsApp notifications disabled or no phone`);
@@ -253,46 +299,48 @@ class NotificationService {
 
   // Send urgent alert when Claude API is down and high-value lead detected
   async sendUrgentLeadAlert(data: {
-  userId: string;
-  phoneNumber: string;
-  message: string;
-  reason: string;
-}): Promise<void> {
-  try {
-    console.log(`\n🚨 ========== URGENT LEAD ALERT (API FAILURE) ==========`);
-    console.log(`   User ID: ${data.userId}`);
-    console.log(`   Phone: ${data.phoneNumber}`);
-    console.log(`   Reason: ${data.reason}`);
+    userId: string;
+    phoneNumber: string;
+    message: string;
+    reason: string;
+  }): Promise<void> {
+    try {
+      console.log(`\n🚨 ========== URGENT LEAD ALERT (API FAILURE) ==========`);
+      console.log(`   User ID: ${data.userId}`);
+      console.log(`   Phone: ${data.phoneNumber}`);
+      console.log(`   Reason: ${data.reason}`);
 
-    // Get user
-    const user = await storage.getUserById(data.userId);
+      // Get user
+      const user = await storage.getUserById(data.userId);
 
-    if (!user) {
-      console.error(`❌ User ${data.userId} not found - CANNOT SEND URGENT ALERT`);
-      return;
-    }
+      if (!user) {
+        console.error(
+          `❌ User ${data.userId} not found - CANNOT SEND URGENT ALERT`
+        );
+        return;
+      }
 
-    console.log(`✅ User found: ${user.email}`);
+      console.log(`✅ User found: ${user.email}`);
 
-    // Check notification preferences
-    const emailNotificationsEnabled = user.emailNotifications !== false;
-    const whatsappNotificationsEnabled = user.whatsappNotifications !== false;
-    const leadNotificationsEnabled = user.leadNotifications !== false;
+      // Check notification preferences
+      const emailNotificationsEnabled = user.emailNotifications !== false;
+      const whatsappNotificationsEnabled = user.whatsappNotifications !== false;
+      const leadNotificationsEnabled = user.leadNotifications !== false;
 
-    if (!leadNotificationsEnabled) {
-      console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
-      return;
-    }
+      if (!leadNotificationsEnabled) {
+        console.log(`⏭️ Lead notifications DISABLED for user ${data.userId}`);
+        return;
+      }
 
-    // ============================================
-    // EMAIL NOTIFICATION
-    // ============================================
-    if (emailNotificationsEnabled && user.email) {
-      try {
-        console.log(`📧 Sending urgent email to: ${user.email}`);
+      // ============================================
+      // EMAIL NOTIFICATION
+      // ============================================
+      if (emailNotificationsEnabled && user.email) {
+        try {
+          console.log(`📧 Sending urgent email to: ${user.email}`);
 
-        const emailSubject = `🚨 URGENT: High-Value Lead - AI Unavailable`;
-        const emailBody = `
+          const emailSubject = `🚨 URGENT: High-Value Lead - AI Unavailable`;
+          const emailBody = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
               <h1 style="color: white; margin: 0; font-size: 28px;">🚨 URGENT: Manual Response Required</h1>
@@ -318,21 +366,29 @@ class NotificationService {
                 <table style="width: 100%; border-collapse: collapse;">
                   <tr>
                     <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📱 Phone:</td>
-                    <td style="padding: 8px 0; color: #450a0a;">${data.phoneNumber}</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${
+                      data.phoneNumber
+                    }</td>
                   </tr>
                   <tr>
                     <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">💬 Message:</td>
-                    <td style="padding: 8px 0; color: #450a0a;">${data.message}</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${
+                      data.message
+                    }</td>
                   </tr>
                   <tr>
                     <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🚨 Reason:</td>
-                    <td style="padding: 8px 0; color: #450a0a;">${data.reason}</td>
+                    <td style="padding: 8px 0; color: #450a0a;">${
+                      data.reason
+                    }</td>
                   </tr>
                 </table>
               </div>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                <a href="${
+                  process.env.FRONTEND_URL || "http://localhost:5000"
+                }/conversations" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
                   Respond Now →
                 </a>
               </div>
@@ -344,7 +400,7 @@ class NotificationService {
           </div>
         `;
 
-        const textBody = `
+          const textBody = `
 🚨 URGENT: Manual Response Required
 
 Hi ${user.firstName},
@@ -367,28 +423,28 @@ Best regards,
 LeadFlow CRM
         `;
 
-        await emailService.sendEmail({
-          to: user.email,
-          toName: `${user.firstName} ${user.lastName}`,
-          subject: emailSubject,
-          htmlBody: emailBody,
-          textBody: textBody,
-        });
+          await emailService.sendEmail({
+            to: user.email,
+            toName: `${user.firstName} ${user.lastName}`,
+            subject: emailSubject,
+            htmlBody: emailBody,
+            textBody: textBody,
+          });
 
-        console.log(`✅ Urgent email SENT to: ${user.email}`);
-      } catch (emailError: any) {
-        console.error(`❌ Failed to send urgent email:`, emailError.message);
+          console.log(`✅ Urgent email SENT to: ${user.email}`);
+        } catch (emailError: any) {
+          console.error(`❌ Failed to send urgent email:`, emailError.message);
+        }
       }
-    }
 
-    // ============================================
-    // WHATSAPP NOTIFICATION
-    // ============================================
-    if (whatsappNotificationsEnabled && user.phone) {
-      try {
-        console.log(`📱 Sending urgent WhatsApp to: ${user.phone}`);
+      // ============================================
+      // WHATSAPP NOTIFICATION
+      // ============================================
+      if (whatsappNotificationsEnabled && user.phone) {
+        try {
+          console.log(`📱 Sending urgent WhatsApp to: ${user.phone}`);
 
-        const whatsappMessage = `🚨 *URGENT: Manual Response Required*
+          const whatsappMessage = `🚨 *URGENT: Manual Response Required*
 
 A *high-value lead* just contacted us, but AI is unavailable.
 
@@ -401,25 +457,31 @@ A *high-value lead* just contacted us, but AI is unavailable.
 
 View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
 
-        const result = await whatsappService.sendTextMessage(user.phone, whatsappMessage);
+          const result = await whatsappService.sendTextMessage(
+            user.phone,
+            whatsappMessage
+          );
 
-        if (result.success) {
-          console.log(`✅ Urgent WhatsApp SENT to: ${user.phone}`);
-        } else {
-          console.error(`❌ Urgent WhatsApp FAILED for: ${user.phone}`);
+          if (result.success) {
+            console.log(`✅ Urgent WhatsApp SENT to: ${user.phone}`);
+          } else {
+            console.error(`❌ Urgent WhatsApp FAILED for: ${user.phone}`);
+          }
+        } catch (whatsappError: any) {
+          console.error(
+            `❌ Failed to send urgent WhatsApp:`,
+            whatsappError.message
+          );
         }
-      } catch (whatsappError: any) {
-        console.error(`❌ Failed to send urgent WhatsApp:`, whatsappError.message);
       }
-    }
 
-    console.log(`✅ Urgent lead alert complete for user ${data.userId}`);
-    console.log(`==========================================\n`);
-  } catch (error: any) {
-    console.error(`❌ CRITICAL ERROR in sendUrgentLeadAlert:`, error.message);
-    console.error(`   Stack:`, error.stack);
+      console.log(`✅ Urgent lead alert complete for user ${data.userId}`);
+      console.log(`==========================================\n`);
+    } catch (error: any) {
+      console.error(`❌ CRITICAL ERROR in sendUrgentLeadAlert:`, error.message);
+      console.error(`   Stack:`, error.stack);
+    }
   }
-}
 
   // ============================================
   // EMAIL TEMPLATE GENERATORS
@@ -432,82 +494,74 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
   ): string {
     const appUrl = process.env.FRONTEND_URL || "http://localhost:5000";
 
-    // ✅ ROBUST: Extract project type with scope change detection
+    // 🎯 SIMPLE: Find ALL project mentions, use the LAST one
     const reasoning = qualification.reasoning || "";
     const lowerReasoning = reasoning.toLowerCase();
-    
-    console.log(`🔍 [EMAIL-HTML] Full reasoning:`, reasoning.substring(0, 200));
-    
-    // Check for scope change keywords
-    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
-    
-    console.log(`🔍 [EMAIL-HTML] Scope change detected:`, hasScopeChange);
-    
+
+    console.log(`\n🔍 [EMAIL-HTML] Extracting project type...`);
+    console.log(`🔍 [EMAIL-HTML] Reasoning: ${reasoning.substring(0, 150)}...`);
+
     let projectType = "Construction project";
-    
-    if (hasScopeChange) {
-      // If there was a scope change, look for the FINAL/CONFIRMED project
-      // Check for phrases like "bathroom renovation" after "focus on", "switched to", etc.
-      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
-        projectType = "Bathroom renovation";
-        console.log(`✅ [EMAIL-HTML] Scope change → Bathroom renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
-        projectType = "Kitchen renovation";
-        console.log(`✅ [EMAIL-HTML] Scope change → Kitchen renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
-        projectType = "Deck construction";
-        console.log(`✅ [EMAIL-HTML] Scope change → Deck construction`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
-        projectType = "Basement finishing";
-        console.log(`✅ [EMAIL-HTML] Scope change → Basement finishing`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
-        projectType = "Warehouse construction";
-        console.log(`✅ [EMAIL-HTML] Scope change → Warehouse construction`);
-      } else {
-        // Fallback: Use lastIndexOf if scope change keywords don't help
-        console.log(`⚠️ [EMAIL-HTML] Scope change detected but no clear final project, using lastIndexOf`);
-        const projectMatches = [
-          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        ].filter(match => match.pos !== -1);
-        
-        if (projectMatches.length > 0) {
-          projectMatches.sort((a, b) => b.pos - a.pos);
-          projectType = projectMatches[0].type;
-        }
-      }
+
+    // Find ALL mentions of each project type with their positions
+    const projectMatches = [
+      {
+        type: "Bathroom renovation",
+        pos: lowerReasoning.lastIndexOf("bathroom"),
+      },
+      {
+        type: "Kitchen renovation",
+        pos: lowerReasoning.lastIndexOf("kitchen"),
+      },
+      { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+      {
+        type: "Basement finishing",
+        pos: lowerReasoning.lastIndexOf("basement"),
+      },
+      {
+        type: "Addition construction",
+        pos: lowerReasoning.lastIndexOf("addition"),
+      },
+      {
+        type: "Garage construction",
+        pos: lowerReasoning.lastIndexOf("garage"),
+      },
+      {
+        type: "Warehouse construction",
+        pos: lowerReasoning.lastIndexOf("warehouse"),
+      },
+      {
+        type: "Commercial building",
+        pos: lowerReasoning.lastIndexOf("commercial"),
+      },
+    ].filter((match) => match.pos !== -1); // Only keep matches that were found
+
+    // Sort by position (highest = most recent)
+    if (projectMatches.length > 0) {
+      projectMatches.sort((a, b) => b.pos - a.pos);
+      projectType = projectMatches[0].type;
+      console.log(
+        `✅ [EMAIL-HTML] Found ${projectMatches.length} mentions, using LAST: ${projectType} (position ${projectMatches[0].pos})`
+      );
     } else {
-      // No scope change - use lastIndexOf as before
-      console.log(`🔍 [EMAIL-HTML] No scope change, using lastIndexOf`);
-      const projectMatches = [
-        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
-        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
-      ].filter(match => match.pos !== -1);
-      
-      if (projectMatches.length > 0) {
-        projectMatches.sort((a, b) => b.pos - a.pos);
-        projectType = projectMatches[0].type;
-        console.log(`✅ [EMAIL-HTML] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
-      }
+      console.log(`⚠️ [EMAIL-HTML] No project type found in reasoning`);
     }
-    
+
     // Fallback to lead company
-    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+    if (
+      projectType === "Construction project" &&
+      lead.company &&
+      lead.company !== "Unknown"
+    ) {
       projectType = `${lead.company} project`;
     }
 
-    console.log(`✅ [EMAIL-HTML] Final project type: ${projectType}`);
+    console.log(`✅ [EMAIL-HTML] Final: ${projectType}\n`);
 
     // Extract address from reasoning if available
-    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const addressMatch = reasoning.match(
+      /(?:address|location|site)[:\s]+([^.!?,]+)/i
+    );
     const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
 
     return `
@@ -530,18 +584,26 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">👤 Name:</td>
-              <td style="padding: 8px 0; color: #450a0a;">${lead.firstName} ${lead.lastName}</td>
+              <td style="padding: 8px 0; color: #450a0a;">${lead.firstName} ${
+      lead.lastName
+    }</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">🏗️ Project:</td>
               <td style="padding: 8px 0; color: #450a0a;"><strong>${projectType}</strong></td>
             </tr>
-            ${extractedAddress || lead.company !== "Unknown" ? `
+            ${
+              extractedAddress || lead.company !== "Unknown"
+                ? `
             <tr>
               <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📍 Location:</td>
-              <td style="padding: 8px 0; color: #450a0a;">${extractedAddress || lead.company || "Not specified"}</td>
+              <td style="padding: 8px 0; color: #450a0a;">${
+                extractedAddress || lead.company || "Not specified"
+              }</td>
             </tr>
-            ` : ''}
+            `
+                : ""
+            }
             <tr>
               <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📧 Email:</td>
               <td style="padding: 8px 0; color: #450a0a;">${lead.email}</td>
@@ -560,7 +622,9 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #991b1b; font-weight: 600;">📊 Score:</td>
-              <td style="padding: 8px 0; color: #450a0a;">${(parseFloat(lead.qualificationScore) * 100).toFixed(0)}%</td>
+              <td style="padding: 8px 0; color: #450a0a;">${(
+                parseFloat(lead.qualificationScore) * 100
+              ).toFixed(0)}%</td>
             </tr>
           </table>
         </div>
@@ -588,82 +652,78 @@ View: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
       </div>
     </div>
   `;
-}
+  }
 
   private generateHotLeadEmailText(
     user: any,
     lead: any,
     qualification: any
   ): string {
-    // ✅ ROBUST: Extract project type with scope change detection (SAME LOGIC)
+    // 🎯 SIMPLE: Find ALL project mentions, use the LAST one
     const reasoning = qualification.reasoning || "";
     const lowerReasoning = reasoning.toLowerCase();
-    
-    console.log(`🔍 [EMAIL-TEXT] Full reasoning:`, reasoning.substring(0, 200));
-    
-    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
-    console.log(`🔍 [EMAIL-TEXT] Scope change detected:`, hasScopeChange);
-    
+
+    console.log(`\n🔍 [EMAIL-TEXT] Extracting project type...`);
+    console.log(`🔍 [EMAIL-TEXT] Reasoning: ${reasoning.substring(0, 150)}...`);
+
     let projectType = "Construction project";
-    
-    if (hasScopeChange) {
-      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
-        projectType = "Bathroom renovation";
-        console.log(`✅ [EMAIL-TEXT] Scope change → Bathroom renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
-        projectType = "Kitchen renovation";
-        console.log(`✅ [EMAIL-TEXT] Scope change → Kitchen renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
-        projectType = "Deck construction";
-        console.log(`✅ [EMAIL-TEXT] Scope change → Deck construction`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
-        projectType = "Basement finishing";
-        console.log(`✅ [EMAIL-TEXT] Scope change → Basement finishing`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
-        projectType = "Warehouse construction";
-        console.log(`✅ [EMAIL-TEXT] Scope change → Warehouse construction`);
-      } else {
-        console.log(`⚠️ [EMAIL-TEXT] Scope change detected but no clear final project, using lastIndexOf`);
-        const projectMatches = [
-          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        ].filter(match => match.pos !== -1);
-        
-        if (projectMatches.length > 0) {
-          projectMatches.sort((a, b) => b.pos - a.pos);
-          projectType = projectMatches[0].type;
-        }
-      }
+
+    const projectMatches = [
+      {
+        type: "Bathroom renovation",
+        pos: lowerReasoning.lastIndexOf("bathroom"),
+      },
+      {
+        type: "Kitchen renovation",
+        pos: lowerReasoning.lastIndexOf("kitchen"),
+      },
+      { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+      {
+        type: "Basement finishing",
+        pos: lowerReasoning.lastIndexOf("basement"),
+      },
+      {
+        type: "Addition construction",
+        pos: lowerReasoning.lastIndexOf("addition"),
+      },
+      {
+        type: "Garage construction",
+        pos: lowerReasoning.lastIndexOf("garage"),
+      },
+      {
+        type: "Warehouse construction",
+        pos: lowerReasoning.lastIndexOf("warehouse"),
+      },
+      {
+        type: "Commercial building",
+        pos: lowerReasoning.lastIndexOf("commercial"),
+      },
+    ].filter((match) => match.pos !== -1);
+
+    if (projectMatches.length > 0) {
+      projectMatches.sort((a, b) => b.pos - a.pos);
+      projectType = projectMatches[0].type;
+      console.log(
+        `✅ [EMAIL-TEXT] Found ${projectMatches.length} mentions, using LAST: ${projectType} (position ${projectMatches[0].pos})`
+      );
     } else {
-      console.log(`🔍 [EMAIL-TEXT] No scope change, using lastIndexOf`);
-      const projectMatches = [
-        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
-        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
-      ].filter(match => match.pos !== -1);
-      
-      if (projectMatches.length > 0) {
-        projectMatches.sort((a, b) => b.pos - a.pos);
-        projectType = projectMatches[0].type;
-        console.log(`✅ [EMAIL-TEXT] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
-      }
+      console.log(`⚠️ [EMAIL-TEXT] No project type found in reasoning`);
     }
-    
-    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+
+    if (
+      projectType === "Construction project" &&
+      lead.company &&
+      lead.company !== "Unknown"
+    ) {
       projectType = `${lead.company} project`;
     }
 
-    console.log(`✅ [EMAIL-TEXT] Final project type: ${projectType}`);
+    console.log(`✅ [EMAIL-TEXT] Final: ${projectType}\n`);
 
     // Extract address
-    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const addressMatch = reasoning.match(
+      /(?:address|location|site)[:\s]+([^.!?,]+)/i
+    );
     const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
 
     return `
@@ -677,7 +737,11 @@ Lead Details:
 ━━━━━━━━━━━━━━━━━━━━━━━━
 👤 Name: ${lead.firstName} ${lead.lastName}
 🏗️ Project: ${projectType}
-${extractedAddress || lead.company !== "Unknown" ? `📍 Location: ${extractedAddress || lead.company}\n` : ''}📧 Email: ${lead.email}
+${
+  extractedAddress || lead.company !== "Unknown"
+    ? `📍 Location: ${extractedAddress || lead.company}\n`
+    : ""
+}📧 Email: ${lead.email}
 📱 Phone: ${lead.phone}
 🏢 Company: ${lead.company}
 🔥 Priority: ${lead.temperature.toUpperCase()}
@@ -690,12 +754,14 @@ ${qualification.reasoning}
 
 ⏱️ Respond within 5 minutes to maximize conversion rate
 
-View in CRM: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations
+View in CRM: ${
+      process.env.FRONTEND_URL || "http://localhost:5000"
+    }/conversations
 
 Best regards,
 LeadFlow CRM
   `;
-}
+  }
 
   private generateBookingEmailHTML(user: any, booking: any, lead: any): string {
     const appUrl = process.env.FRONTEND_URL || "http://localhost:5000";
@@ -868,83 +934,80 @@ LeadFlow CRM
     lead: any,
     qualification: any
   ): string {
-
-    // ✅ ROBUST: Extract project type with scope change detection (SAME LOGIC)
+    // 🎯 SIMPLE: Find ALL project mentions, use the LAST one
     const reasoning = qualification.reasoning || "";
     const lowerReasoning = reasoning.toLowerCase();
-    
-    console.log(`🔍 [WHATSAPP] Full reasoning:`, reasoning.substring(0, 200));
-    
-    const hasScopeChange = /scratch|instead|actually|change|switched|changed mind|focus on/i.test(reasoning);
-    console.log(`🔍 [WHATSAPP] Scope change detected:`, hasScopeChange);
-    
+
+    console.log(`\n🔍 [WHATSAPP] Extracting project type...`);
+    console.log(`🔍 [WHATSAPP] Reasoning: ${reasoning.substring(0, 150)}...`);
+
     let projectType = "Construction project";
-    
-    if (hasScopeChange) {
-      if (/(?:focus on|switched to|confirmed|final|instead).*bathroom/i.test(reasoning)) {
-        projectType = "Bathroom renovation";
-        console.log(`✅ [WHATSAPP] Scope change → Bathroom renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*kitchen/i.test(reasoning)) {
-        projectType = "Kitchen renovation";
-        console.log(`✅ [WHATSAPP] Scope change → Kitchen renovation`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*deck/i.test(reasoning)) {
-        projectType = "Deck construction";
-        console.log(`✅ [WHATSAPP] Scope change → Deck construction`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*basement/i.test(reasoning)) {
-        projectType = "Basement finishing";
-        console.log(`✅ [WHATSAPP] Scope change → Basement finishing`);
-      } else if (/(?:focus on|switched to|confirmed|final|instead).*warehouse/i.test(reasoning)) {
-        projectType = "Warehouse construction";
-        console.log(`✅ [WHATSAPP] Scope change → Warehouse construction`);
-      } else {
-        console.log(`⚠️ [WHATSAPP] Scope change detected but no clear final project, using lastIndexOf`);
-        const projectMatches = [
-          { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-          { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-          { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-          { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-          { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        ].filter(match => match.pos !== -1);
-        
-        if (projectMatches.length > 0) {
-          projectMatches.sort((a, b) => b.pos - a.pos);
-          projectType = projectMatches[0].type;
-        }
-      }
+
+    const projectMatches = [
+      {
+        type: "Bathroom renovation",
+        pos: lowerReasoning.lastIndexOf("bathroom"),
+      },
+      {
+        type: "Kitchen renovation",
+        pos: lowerReasoning.lastIndexOf("kitchen"),
+      },
+      { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
+      {
+        type: "Basement finishing",
+        pos: lowerReasoning.lastIndexOf("basement"),
+      },
+      {
+        type: "Addition construction",
+        pos: lowerReasoning.lastIndexOf("addition"),
+      },
+      {
+        type: "Garage construction",
+        pos: lowerReasoning.lastIndexOf("garage"),
+      },
+      {
+        type: "Warehouse construction",
+        pos: lowerReasoning.lastIndexOf("warehouse"),
+      },
+      {
+        type: "Commercial building",
+        pos: lowerReasoning.lastIndexOf("commercial"),
+      },
+    ].filter((match) => match.pos !== -1);
+
+    if (projectMatches.length > 0) {
+      projectMatches.sort((a, b) => b.pos - a.pos);
+      projectType = projectMatches[0].type;
+      console.log(
+        `✅ [WHATSAPP] Found ${projectMatches.length} mentions, using LAST: ${projectType} (position ${projectMatches[0].pos})`
+      );
     } else {
-      console.log(`🔍 [WHATSAPP] No scope change, using lastIndexOf`);
-      const projectMatches = [
-        { type: "Warehouse construction", pos: lowerReasoning.lastIndexOf("warehouse") },
-        { type: "Kitchen renovation", pos: lowerReasoning.lastIndexOf("kitchen") },
-        { type: "Bathroom renovation", pos: lowerReasoning.lastIndexOf("bathroom") },
-        { type: "Deck construction", pos: lowerReasoning.lastIndexOf("deck") },
-        { type: "Basement finishing", pos: lowerReasoning.lastIndexOf("basement") },
-        { type: "Commercial building", pos: lowerReasoning.lastIndexOf("commercial") },
-        { type: "Residential construction", pos: lowerReasoning.lastIndexOf("residential") },
-      ].filter(match => match.pos !== -1);
-      
-      if (projectMatches.length > 0) {
-        projectMatches.sort((a, b) => b.pos - a.pos);
-        projectType = projectMatches[0].type;
-        console.log(`✅ [WHATSAPP] Using LAST mentioned: ${projectType} (pos: ${projectMatches[0].pos})`);
-      }
+      console.log(`⚠️ [WHATSAPP] No project type found in reasoning`);
     }
-    
-    if (projectType === "Construction project" && lead.company && lead.company !== "Unknown") {
+
+    if (
+      projectType === "Construction project" &&
+      lead.company &&
+      lead.company !== "Unknown"
+    ) {
       projectType = `${lead.company} project`;
     }
 
-    console.log(`✅ [WHATSAPP] Final project type: ${projectType}`);
+    console.log(`✅ [WHATSAPP] Final: ${projectType}\n`);
 
     // Extract address
-    const addressMatch = reasoning.match(/(?:address|location|site)[:\s]+([^.!?,]+)/i);
+    const addressMatch = reasoning.match(
+      /(?:address|location|site)[:\s]+([^.!?,]+)/i
+    );
     const extractedAddress = addressMatch ? addressMatch[1].trim() : null;
 
     return `🔥 *Hot Lead Alert!*
 
 👤 *${lead.firstName} ${lead.lastName}*
 🏗️ Project: ${projectType}
-${extractedAddress ? `📍 Location: ${extractedAddress}\n` : ''}🏢 ${lead.company}
+${extractedAddress ? `📍 Location: ${extractedAddress}\n` : ""}🏢 ${
+      lead.company
+    }
 📱 ${lead.phone}
 📊 Score: ${(parseFloat(lead.qualificationScore) * 100).toFixed(0)}%
 
@@ -952,7 +1015,9 @@ _${qualification.reasoning}_
 
 ⏱️ Respond within 5 minutes!
 
-View in CRM: ${process.env.FRONTEND_URL || "http://localhost:5000"}/conversations`;
+View in CRM: ${
+      process.env.FRONTEND_URL || "http://localhost:5000"
+    }/conversations`;
   }
 
   private generateBookingWhatsAppMessage(
