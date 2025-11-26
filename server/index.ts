@@ -3,7 +3,6 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
 import express, { type Request, Response, NextFunction } from "express";
-import { log } from "./vite";
 import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
@@ -143,7 +142,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      console.log(logLine);
     }
   });
 
@@ -178,9 +177,8 @@ app.use((req, res, next) => {
     console.error("❌ Failed to initialize AI retry worker:", error);
   }
 
-  const server = await registerRoutes(app);
+ const server = await registerRoutes(app);
 
-  
   // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -189,34 +187,45 @@ app.use((req, res, next) => {
     throw err;
   });
 
-// Production: Serve static files
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(process.cwd(), "dist", "public")));
-  app.get("*", (_req: Request, res: Response) => {
-    res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
-  });
-} else {
-  // Development: Setup Vite (dynamic import)
-  const { setupVite } = await import("./vite");
-  await setupVite(app, server);
-}
-
-  const PORT = parseInt(process.env.PORT || "5000", 10);
-  server.listen(PORT, "0.0.0.0", () => {
-    log(`🚀 Server running on port ${PORT}`);
-    log(`📱 Environment: ${mode}`);
-    log(`🔐 Session store: PostgreSQL`);
-    log(`🧠 AI Pattern Learning: Active`);
-    log(`🔌 WebSocket server: Initialized`);
+  // Serve static files in production
+  if (process.env.NODE_ENV === "production") {
+    // Serve frontend build
+    const publicPath = path.join(process.cwd(), "dist", "public");
     
-    // ✅ Mode-specific logs
-    if (isNgrok) {
-      log(`🌐 NGROK MODE - Ready for WhatsApp webhook testing`);
-      log(`🔗 Set webhook to: https://YOUR-NGROK-URL.ngrok-free.app/api/whatsapp/webhook`);
-    } else if (isProduction) {
-      log(`🌍 PRODUCTION MODE - CORS: ${process.env.FRONTEND_URL}`);
+    if (require('fs').existsSync(publicPath)) {
+      app.use(express.static(publicPath));
+      app.get("*", (_req: Request, res: Response) => {
+        res.sendFile(path.join(publicPath, "index.html"));
+      });
+      console.log("✅ Serving static files from:", publicPath);
     } else {
-      log(`🛠️ DEVELOPMENT MODE - Local testing only`);
+      console.log("⚠️ No frontend build found - backend only mode");
+    }
+  } else {
+    // Development mode - setup Vite
+    try {
+      const vite = await import("./vite.js");
+      await vite.setupVite(app, server);
+    } catch (error) {
+      console.error("❌ Failed to setup Vite:", error);
+    }
+  }
+
+   const PORT = parseInt(process.env.PORT || "5000", 10);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📱 Environment: ${mode}`);
+    console.log(`🔐 Session store: PostgreSQL`);
+    console.log(`🧠 AI Pattern Learning: Active`);
+    console.log(`🔌 WebSocket server: Initialized`);
+    
+    if (isNgrok) {
+      console.log(`🌐 NGROK MODE - Ready for WhatsApp webhook testing`);
+      console.log(`🔗 Set webhook to: https://YOUR-NGROK-URL.ngrok-free.app/api/whatsapp/webhook`);
+    } else if (isProduction) {
+      console.log(`🌍 PRODUCTION MODE - CORS: ${process.env.FRONTEND_URL}`);
+    } else {
+      console.log(`🛠️ DEVELOPMENT MODE - Local testing only`);
     }
   });
 
