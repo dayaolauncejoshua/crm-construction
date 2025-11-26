@@ -6,16 +6,17 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
-import voice_AI_CallRouter from "./routes/twilio-call.route";
+// TEMPORARILY DISABLED FOR DEPLOYMENT - Will fix FFmpeg issue later
+// import voice_AI_CallRouter from "./routes/twilio-call.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
+import fs from "fs";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
 import browserTestRouter from "./routes/browser-test.route";
 import cors from "cors";
 import { pool } from "./db";
-import fs from 'fs';
 
 config();
 
@@ -55,6 +56,7 @@ app.use(
   stripeWebhookRouter
 );
 
+// Voice webhook - temporarily disabled for deployment
 app.use("/api/twilioCall_webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json());
@@ -63,7 +65,14 @@ app.use(express.urlencoded({ extended: true }));
 
 const PgSession = connectPgSimple(session);
 
-app.use("/api/twilioCall_webhook", voice_AI_CallRouter);
+// Placeholder for voice webhook (feature temporarily disabled)
+app.post("/api/twilioCall_webhook", async (req, res) => {
+  console.log("⚠️ Voice webhook called - feature temporarily disabled");
+  res.status(200).json({
+    success: true,
+    message: "Voice features temporarily unavailable",
+  });
+});
 
 app.use(
   session({
