@@ -3,7 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
 import express, { type Request, Response, NextFunction } from "express";
-import { setupVite, serveStatic, log } from "./vite";
+import { log } from "./vite";
 import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
@@ -51,7 +51,7 @@ pool.query("SELECT NOW()", (err, res) => {
 
 const app = express();
 
-// ✅ SMART PROXY CONFIGURATION
+
 // Always trust proxy for ngrok and production (Render)
 app.set("trust proxy", 1);
 
@@ -189,15 +189,17 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Setup Vite in development, serve static in production
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-    app.get("*", (req: Request, res: Response) => {
-      res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
-    });
-  }
+// Production: Serve static files
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(process.cwd(), "dist", "public")));
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
+  });
+} else {
+  // Development: Setup Vite (dynamic import)
+  const { setupVite } = await import("./vite");
+  await setupVite(app, server);
+}
 
   const PORT = parseInt(process.env.PORT || "5000", 10);
   server.listen(PORT, "0.0.0.0", () => {

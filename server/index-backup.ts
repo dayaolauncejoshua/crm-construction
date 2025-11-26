@@ -1,5 +1,4 @@
 // server/index.ts
-import { videoSOPs } from "./../shared/advanced-schema";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import authRouter from "./auth";
@@ -9,39 +8,27 @@ import { registerRoutes } from "./routes";
 import { config } from "dotenv";
 import stripeWebhookRouter from "./routes/stripe-webhook";
 import voice_AI_CallRouter from "./routes/twilio-call.route";
-// import videoSOPsRouter from "./routes/videoSOPs.route";
-// import notionSOPsRouter from "./routes/notionSOPs.route";
 import { loadUser } from "./middleware/auth";
 import path from "path";
-import pg from "pg";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
+import browserTestRouter from "./routes/browser-test.route";
+import cors from "cors";
 
-// import transferRouter from "./routes/transfer.route";
-// import leadsRouter from "./routes/leads.route";
-// import transcriptsRouter from "./routes/transcripts.route";
+// Import pool from db.ts
+import { pool } from "./db";
 
-// import queueRouter from "./routes/queue.route";
-// import callsRouter from "./routes/calls.route";
-// import twilioRouter from "./routes/twilio.route";
-
-import { WebSocketServer } from "ws";
-import { leadQualificationService } from "./services/leadQualification";
-
-const { Pool } = pg;
 config();
-config({ override: false });
 
-// Create PostgreSQL pool
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // 10 second timeout
-});
+// ✅ SMART ENVIRONMENT DETECTION
+const isNgrok = process.env.NGROK_MODE === "true";
+const isProduction = process.env.NODE_ENV === "production";
+const mode = isNgrok ? "NGROK" : isProduction ? "PRODUCTION" : "DEVELOPMENT";
 
-// ✅ Add connection error handling
+console.log(`🚀 Starting server in ${mode} mode`);
+
+// Database connection monitoring
 pool.on("error", (err) => {
   console.error("❌ Unexpected database error:", err);
   if (err.message?.includes("ENOTFOUND")) {
@@ -50,16 +37,12 @@ pool.on("error", (err) => {
   }
 });
 
-// ✅ Test connection on startup
 pool.query("SELECT NOW()", (err, res) => {
   if (err) {
     console.error("❌ Database connection failed:", err.message);
     if (err.message?.includes("ENOTFOUND")) {
       console.error("💡 Cannot resolve database hostname");
-      console.error("💡 Check your DATABASE_  URL in .env");
-      console.error(
-        "💡 If using Neon, visit https://console.neon.tech to wake up database"
-      );
+      console.error("💡 Check your DATABASE_URL in .env");
     }
   } else {
     console.log("✅ Database connected successfully");
@@ -68,58 +51,60 @@ pool.query("SELECT NOW()", (err, res) => {
 
 const app = express();
 
-// for production
-// app.set("trust proxy", 1);
+// ✅ SMART PROXY CONFIGURATION
+// Always trust proxy for ngrok and production (Render)
 app.set("trust proxy", 1);
-// ✅ Trust proxy (production only)
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
 
+// ✅ SMART CORS CONFIGURATION
+app.use(
+  cors({
+    origin: isNgrok
+      ? true // Allow all origins for ngrok testing
+      : isProduction
+      ? process.env.FRONTEND_URL || false // Specific origin in production
+      : "http://localhost:5000", // Local dev
+    credentials: true,
+  })
+);
+
+// Stripe webhook (raw body)
 app.use(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   stripeWebhookRouter
 );
-// Basic middleware
-app.use("/api/twilioCall_webhook", express.raw({ type: "application/json" }));
-app.use(express.json());
 
+// Twilio webhook (raw body)
+app.use("/api/twilioCall_webhook", express.raw({ type: "application/json" }));
+
+// Standard middleware
+app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(express.urlencoded({ extended: true }));
 
-// app.use("/api/video-sops", videoSOPsRouter);
-// app.use("/api/notion-sops", notionSOPsRouter);
-// ✅ CRITICAL: PostgreSQL Session Store (instead of memory)
+// ✅ SMART SESSION CONFIGURATION
 const PgSession = connectPgSimple(session);
-const isProduction = process.env.NODE_ENV === "production";
 
 app.use("/api/twilioCall_webhook", voice_AI_CallRouter);
-// app.use("/api/transfer-to-human", transferRouter);
-// app.use("/api/leads", leadsRouter);
-// app.use("/api/transcripts", transcriptsRouter);
 
 app.use(
   session({
     store: new PgSession({
-      pool: pool,
-      tableName: "sessions",
-      createTableIfMissing: true, // Auto-create table if missing
-    }),
+  pool: pool as any, // Cast to any to satisfy type checker
+  tableName: "sessions",
+  createTableIfMissing: true,
+}),
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
     resave: false,
     saveUninitialized: false,
-    rolling: true, // Reset expiry on each request
+    rolling: true,
     name: "sessionId",
-
-    proxy: isProduction,
+    proxy: true, // Always true for both ngrok and production
     cookie: {
-      secure: isProduction,
+      secure: isProduction || isNgrok, // ✅ HTTPS for production and ngrok
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-
-      sameSite: isProduction ? "lax" : "lax",
-
+      sameSite: isProduction || isNgrok ? "none" : "lax", // ✅ Cross-origin for production/ngrok
       path: "/",
     },
   })
@@ -127,15 +112,14 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
-
-// ✅ Load user from session (must be after session, before routes)
 app.use(loadUser);
 
-// Auth routes (login, signup, logout)
+// Routes
+app.use("/api/browser-test", browserTestRouter);
 app.use(authRouter);
 app.use(twoFactorRoutes);
 
-// Request logging middleware
+// Request logging
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -167,7 +151,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // ✅ INITIALIZE SERVICES BEFORE STARTING SERVER
   console.log("🚀 Initializing services...");
 
   try {
@@ -175,26 +158,42 @@ app.use((req, res, next) => {
     console.log("✅ Spam pattern learning initialized");
   } catch (error) {
     console.error("❌ Failed to initialize spam pattern learning:", error);
-    // Continue anyway - service will initialize on first use
+  }
+
+  // ✅ NEW: Initialize AI health monitor
+  try {
+    const { aiHealthMonitor } = await import("./services/ai-health-monitor");
+    aiHealthMonitor.start();
+    console.log("✅ AI health monitor initialized");
+  } catch (error) {
+    console.error("❌ Failed to initialize AI health monitor:", error);
+  }
+
+  // ✅ NEW: Initialize AI retry worker
+  try {
+    const { aiRetryWorker } = await import("./services/ai-retry-worker");
+    aiRetryWorker.start();
+    console.log("✅ AI retry worker initialized");
+  } catch (error) {
+    console.error("❌ Failed to initialize AI retry worker:", error);
   }
 
   const server = await registerRoutes(app);
 
+  
+  // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
     throw err;
   });
 
-  // Setup Vite in development
+  // Setup Vite in development, serve static in production
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
-
-    // ✅ Serve React app for all non-API routes in production
     app.get("*", (req: Request, res: Response) => {
       res.sendFile(path.join(process.cwd(), "dist", "public", "index.html"));
     });
@@ -203,13 +202,23 @@ app.use((req, res, next) => {
   const PORT = parseInt(process.env.PORT || "5000", 10);
   server.listen(PORT, "0.0.0.0", () => {
     log(`🚀 Server running on port ${PORT}`);
-    log(`📱 Environment: ${app.get("env")}`);
+    log(`📱 Environment: ${mode}`);
     log(`🔐 Session store: PostgreSQL`);
     log(`🧠 AI Pattern Learning: Active`);
-    log(`🔌 WebSocket server: Initialized in routes.ts`);
+    log(`🔌 WebSocket server: Initialized`);
+    
+    // ✅ Mode-specific logs
+    if (isNgrok) {
+      log(`🌐 NGROK MODE - Ready for WhatsApp webhook testing`);
+      log(`🔗 Set webhook to: https://YOUR-NGROK-URL.ngrok-free.app/api/whatsapp/webhook`);
+    } else if (isProduction) {
+      log(`🌍 PRODUCTION MODE - CORS: ${process.env.FRONTEND_URL}`);
+    } else {
+      log(`🛠️ DEVELOPMENT MODE - Local testing only`);
+    }
   });
 
-  // ✅ Graceful shutdown
+  // Graceful shutdown
   process.on("SIGTERM", () => {
     console.log("⚠️ SIGTERM signal received: closing HTTP server");
     server.close(() => {
