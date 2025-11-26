@@ -7,7 +7,7 @@
     "dev": "cross-env NODE_ENV=development tsx watch --clear-screen=false server/index.ts",
     "dev:ngrok": "cross-env NGROK_MODE=true NODE_ENV=development tsx watch --clear-screen=false server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "build:server": "esbuild server/index.prod.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --outfile=dist/index.js",
+    "build:server": "esbuild server/index.prod.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
     "build:client": "vite build",
     "start": "node dist/index.js",
     "check": "tsc --noEmit",
