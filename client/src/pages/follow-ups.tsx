@@ -56,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getApiUrl } from "@/lib/api-config";
 
 interface FollowUpSequence {
   id: string;
@@ -117,7 +118,19 @@ export default function FollowUpsPage() {
   useEffect(() => {
     async function fetchClients() {
       try {
-        const res = await fetch(`/api/clients?userId=${user?.id}`);
+        const url = getApiUrl(`/api/clients?userId=${user?.id}`);
+        console.log("🔍 [FOLLOW-UPS] Fetching clients from:", url);
+        
+        const res = await fetch(url, {
+          credentials: "include",
+        });
+        
+        console.log("📡 [FOLLOW-UPS] Clients response:", res.status);
+        
+        if (!res.ok) {
+          throw new Error("Failed to fetch clients");
+        }
+        
         const data = await res.json();
         setClients(data);
         if (data.length > 0) {
@@ -143,11 +156,31 @@ export default function FollowUpsPage() {
       if (!selectedClientId) return;
       setLoading(true);
       try {
+        const sequencesUrl = getApiUrl(`/api/follow-ups/sequences/${selectedClientId}`);
+        const pendingUrl = getApiUrl(`/api/follow-ups/${selectedClientId}/pending`);
+        const statsUrl = getApiUrl(`/api/follow-ups/${selectedClientId}/stats`);
+        
+        console.log("🔍 [FOLLOW-UPS] Fetching data...");
+        console.log("  - Sequences:", sequencesUrl);
+        console.log("  - Pending:", pendingUrl);
+        console.log("  - Stats:", statsUrl);
+        
         const [seqRes, pendingRes, statsRes] = await Promise.all([
-          fetch(`/api/follow-ups/sequences/${selectedClientId}`),
-          fetch(`/api/follow-ups/${selectedClientId}/pending`),
-          fetch(`/api/follow-ups/${selectedClientId}/stats`),
+          fetch(sequencesUrl, { credentials: "include" }),
+          fetch(pendingUrl, { credentials: "include" }),
+          fetch(statsUrl, { credentials: "include" }),
         ]);
+        
+        console.log("📡 [FOLLOW-UPS] Responses:", {
+          sequences: seqRes.status,
+          pending: pendingRes.status,
+          stats: statsRes.status,
+        });
+        
+        if (!seqRes.ok || !pendingRes.ok || !statsRes.ok) {
+          throw new Error("Failed to fetch follow-up data");
+        }
+        
         const seqData = await seqRes.json();
         const pendingData = await pendingRes.json();
         const statsData = await statsRes.json();
@@ -174,9 +207,11 @@ export default function FollowUpsPage() {
   ) {
     const newStatus = currentStatus === "active" ? "paused" : "active";
     try {
-      await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
+      const url = getApiUrl(`/api/follow-ups/sequences/${sequenceId}`);
+      await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       });
       setSequences(
@@ -200,8 +235,10 @@ export default function FollowUpsPage() {
 
   async function deleteSequence(sequenceId: string) {
     try {
-      await fetch(`/api/follow-ups/sequences/${sequenceId}`, {
+      const url = getApiUrl(`/api/follow-ups/sequences/${sequenceId}`);
+      await fetch(url, {
         method: "DELETE",
+        credentials: "include",
       });
       setSequences(sequences.filter((seq) => seq.id !== sequenceId));
       toast({
@@ -220,9 +257,11 @@ export default function FollowUpsPage() {
 
   async function sendFollowUpNow(followUpId: string) {
     try {
-      const response = await fetch(`/api/follow-ups/${followUpId}/send-now`, {
+      const url = getApiUrl(`/api/follow-ups/${followUpId}/send-now`);
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
       });
       if (response.ok) {
         setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
@@ -256,9 +295,11 @@ export default function FollowUpsPage() {
 
   async function skipFollowUp(followUpId: string) {
     try {
-      const response = await fetch(`/api/follow-ups/${followUpId}/cancel`, {
+      const url = getApiUrl(`/api/follow-ups/${followUpId}/cancel`);
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
       });
       if (response.ok) {
         setPendingFollowUps(pendingFollowUps.filter((fu) => fu.id !== followUpId));
@@ -1087,9 +1128,11 @@ function CreateSequenceForm({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const response = await fetch("/api/follow-ups/sequences", {
+      const url = getApiUrl("/api/follow-ups/sequences");
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           clientId,
           name,
@@ -1125,7 +1168,6 @@ function CreateSequenceForm({
       setSubmitting(false);
     }
   }
-
   return (
     <div className="flex flex-col max-h-[85vh]">
       <DialogHeader className="px-6 pt-6 pb-4 border-b">

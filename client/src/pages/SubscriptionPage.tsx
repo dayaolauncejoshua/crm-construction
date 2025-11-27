@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, CreditCard, Calendar, DollarSign, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { getApiUrl } from "@/lib/api-config";
 
 interface Subscription {
   id: string;
@@ -36,9 +37,14 @@ export default function SubscriptionPage() {
 
   const fetchSubscription = async () => {
     try {
-      const response = await fetch("/api/stripe/subscription", {
+      const url = getApiUrl("/api/stripe/subscription");
+      console.log("🔍 [SUBSCRIPTION] Fetching from:", url);
+      
+      const response = await fetch(url, {
         credentials: "include",
       });
+
+      console.log("📡 [SUBSCRIPTION] Response:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to fetch subscription");
@@ -65,10 +71,15 @@ export default function SubscriptionPage() {
 
     setCanceling(true);
     try {
-      const response = await fetch("/api/stripe/cancel-subscription", {
+      const url = getApiUrl("/api/stripe/cancel-subscription");
+      console.log("🔍 [CANCEL] Posting to:", url);
+      
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
       });
+
+      console.log("📡 [CANCEL] Response:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to cancel subscription");
@@ -96,10 +107,15 @@ export default function SubscriptionPage() {
   const handleOpenBillingPortal = async () => {
     setOpeningPortal(true);
     try {
-      const response = await fetch("/api/stripe/billing-portal", {
+      const url = getApiUrl("/api/stripe/billing-portal");
+      console.log("🔍 [BILLING PORTAL] Posting to:", url);
+      
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
       });
+
+      console.log("📡 [BILLING PORTAL] Response:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to open billing portal");

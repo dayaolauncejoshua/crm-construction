@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useClient } from "@/contexts/ClientContext";
 import { Badge } from "@/components/ui/badge";
+import { getApiUrl } from "@/lib/api-config";
 
 interface AnalyticsData {
   timeRange: number;
@@ -107,11 +108,29 @@ export default function Analytics() {
   } = useQuery<AnalyticsData>({
     queryKey: [`/api/analytics/${selectedClientId}`, timeRange],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/analytics/${selectedClientId}?timeRange=${timeRange}`
-      );
-      if (!response.ok) throw new Error("Failed to fetch analytics");
-      return response.json();
+      if (!selectedClientId) {
+        throw new Error("No client selected");
+      }
+
+      const url = getApiUrl(`/api/analytics/${selectedClientId}?timeRange=${timeRange}`);
+      console.log("🔍 [ANALYTICS] Fetching from:", url);
+      
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      
+      console.log("📡 [ANALYTICS] Response:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ [ANALYTICS] Error:", errorText);
+        throw new Error(`Failed to fetch analytics: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("✅ [ANALYTICS] Data loaded:", data);
+      
+      return data;
     },
     enabled: !!selectedClientId,
     retry: 2,
