@@ -1,6 +1,7 @@
 // client/src/lib/queryClient.ts
 
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getApiUrl } from "./api-config";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -49,7 +50,7 @@ export const getQueryFn: <T>(options: {
       }
     }
 
-    const res = await fetch(finalUrl, {
+    const res = await fetch(getApiUrl(finalUrl), {
       credentials: "include",
     });
     // ✅ LOGIC ENDS HERE

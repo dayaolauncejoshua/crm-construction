@@ -10,6 +10,7 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { getApiUrl } from "@/lib/api-config";
 
 // 🆕 User Settings interface
 interface UserSettings {
@@ -138,88 +139,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refetch, location]);
 
-  // Login
-  const loginMutation = useMutation({
-    mutationFn: async ({
-      email,
-      password,
-    }: {
-      email: string;
-      password: string;
-    }) => {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
+ // Login
+const loginMutation = useMutation({
+  mutationFn: async ({
+    email,
+    password,
+  }: {
+    email: string;
+    password: string;
+  }) => {
+    const response = await fetch(getApiUrl("api/auth/login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Login failed");
-      }
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Login failed");
+    }
 
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setUser(data.user);
-      queryClient.invalidateQueries();
-      localStorage.setItem("auth_updated", Date.now().toString());
-    },
-  });
+    return response.json();
+  },
+  onSuccess: (data) => {
+    setUser(data.user);
+    queryClient.invalidateQueries();
+    localStorage.setItem("auth_updated", Date.now().toString());
+  },
+});
 
-  // Signup
-  const signupMutation = useMutation({
-    mutationFn: async ({
-      email,
-      password,
-      firstName,
-      lastName,
-    }: {
-      email: string;
-      password: string;
-      firstName?: string;
-      lastName?: string;
-    }) => {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password, firstName, lastName }),
-      });
+ // Signup
+const signupMutation = useMutation({
+  mutationFn: async ({
+    email,
+    password,
+    firstName,
+    lastName,
+  }: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }) => {
+    const response = await fetch(getApiUrl("api/auth/signup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password, firstName, lastName }),
+    });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Signup failed");
-      }
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Signup failed");
+    }
 
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setUser(data.user);
-      queryClient.invalidateQueries();
-      localStorage.setItem("auth_updated", Date.now().toString());
-    },
-  });
+    return response.json();
+  },
+  onSuccess: (data) => {
+    setUser(data.user);
+    queryClient.invalidateQueries();
+    localStorage.setItem("auth_updated", Date.now().toString());
+  },
+});
 
   // Logout
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+const logoutMutation = useMutation({
+  mutationFn: async () => {
+    const response = await fetch(getApiUrl("api/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+    });
 
-      if (!response.ok) throw new Error("Logout failed");
-      return response.json();
-    },
-    onSuccess: () => {
-      setUser(null);
-      queryClient.clear();
-      localStorage.setItem("auth_updated", Date.now().toString());
-      console.log("✅ Logged out successfully");
-    },
-  });
+    if (!response.ok) throw new Error("Logout failed");
+    return response.json();
+  },
+  onSuccess: () => {
+    setUser(null);
+    queryClient.clear();
+    localStorage.setItem("auth_updated", Date.now().toString());
+    console.log("✅ Logged out successfully");
+  },
+});
 
   // 🆕 Refresh user data (for profile updates)
   const refreshUser = async () => {

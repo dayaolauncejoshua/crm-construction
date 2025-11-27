@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Rocket, CheckCircle, Shield, Zap } from "lucide-react";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function Signup() {
   usePageTitle("Signup");
@@ -166,9 +167,7 @@ export default function Signup() {
               <div className="w-full border-t border-slate-200"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-slate-500">
-                Or
-              </span>
+              <span className="px-4 bg-white text-slate-500">Or</span>
             </div>
           </div>
 
@@ -178,7 +177,9 @@ export default function Signup() {
             <button
               type="button"
               onClick={() => {
-                window.location.href = "/api/auth/google/init?referrer=signup";
+                window.location.href = getApiUrl(
+                  "api/auth/google/init?referrer=signup"
+                );
               }}
               className="flex items-center justify-center px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
             >
@@ -200,7 +201,9 @@ export default function Signup() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              <span className="text-sm font-medium text-slate-700">Continue with Google</span>
+              <span className="text-sm font-medium text-slate-700">
+                Continue with Google
+              </span>
             </button>
 
             {/* Facebook button - keep as placeholder */}
