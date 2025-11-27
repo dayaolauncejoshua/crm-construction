@@ -880,27 +880,46 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
       const userId = req.query.userId as string;
       const requestUser = req.user!; // Guaranteed by requireAuth
 
-      console.log("=== CLIENTS API DEBUG ===");
-      console.log("Authenticated user:", requestUser.email, requestUser.role);
-      console.log("Requested userId:", userId);
+      console.log("=== 🔍 CLIENTS API DEBUG ===");
+    console.log("📧 User email:", requestUser?.email);
+    console.log("🎭 User role:", requestUser?.role);
+    console.log("🆔 Session user ID:", requestUser?.id);
+    console.log("🔑 Query userId:", userId);
+    console.log("🤝 Do they match?", userId === requestUser?.id);
+    console.log("🍪 Has session?", !!req.session);
+    console.log("🔐 Is authenticated?", req.isAuthenticated?.());
 
-      // Super admin can see all clients (for support)
-      if (requestUser.role === "super_admin") {
-        const allClients = await storage.getAllClients();
-        console.log("Super admin: returning all clients:", allClients.length);
-        return res.json(allClients);
-      }
+      // ✅ Safety check
+    if (!requestUser || !requestUser.id) {
+      console.error("❌ No authenticated user in session!");
+      return res.status(401).json({
+        message: "Not authenticated. Please log in.",
+      });
+    }
 
-      // Regular users can only see THEIR OWN clients
-      if (!userId || userId !== requestUser.id) {
-        console.log("❌ Access denied: user can only view their own clients");
-        return res.status(403).json({
-          message: "Access denied: You can only view your own clients",
-        });
-      }
+      // Super admin can see all clients
+    if (requestUser.role === "super_admin") {
+      const allClients = await storage.getAllClients();
+      console.log("✅ Super admin: returning", allClients.length, "clients");
+      return res.json(allClients);
+    }
 
-      const clients = await storage.getClients(userId);
-      console.log("✅ Found clients:", clients.length);
+      // ✅ Use authenticated user ID if not provided
+    const effectiveUserId = userId || requestUser.id;
+
+    // Regular users can only see THEIR OWN clients
+    if (effectiveUserId !== requestUser.id) {
+      console.log("❌ ID MISMATCH!");
+      console.log("   Requested:", effectiveUserId);
+      console.log("   Authenticated:", requestUser.id);
+      return res.status(403).json({
+        message: "Access denied: You can only view your own clients",
+      });
+    }
+
+      const clients = await storage.getClients(effectiveUserId);
+    console.log("✅ Returning", clients.length, "clients for user:", requestUser.email);
+
       res.json(clients);
     } catch (error) {
       console.error("Error fetching clients:", error);
