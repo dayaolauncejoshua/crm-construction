@@ -88,6 +88,7 @@ import {
   DialogTitle,
   DialogHeader,
 } from "@/components/ui/dialog";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function Settings() {
   usePageTitle("Settings");
@@ -259,12 +260,17 @@ export default function Settings() {
   // Update Profile Mutation
   const updateProfileMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/user/profile", {
+      const url = getApiUrl("/api/user/profile");
+      console.log("🔍 [UPDATE PROFILE] Patching to:", url);
+
+      const response = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
+
+      console.log("📡 [UPDATE PROFILE] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to update profile");
@@ -292,12 +298,17 @@ export default function Settings() {
   // Change Password Mutation
   const changePasswordMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/user/change-password", {
+      const url = getApiUrl("/api/user/change-password");
+      console.log("🔍 [CHANGE PASSWORD] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
+
+      console.log("📡 [CHANGE PASSWORD] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to change password");
@@ -327,12 +338,17 @@ export default function Settings() {
   // Set Password Mutation (for OAuth users)
   const setPasswordMutation = useMutation({
     mutationFn: async (data: { newPassword: string }) => {
-      const response = await fetch("/api/user/set-password", {
+      const url = getApiUrl("/api/user/set-password");
+      console.log("🔍 [SET PASSWORD] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
+
+      console.log("📡 [SET PASSWORD] Response:", response.status);
 
       if (!response.ok) {
         const error = await response.json();
@@ -367,12 +383,17 @@ export default function Settings() {
   // Update Preferences Mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/user/preferences", {
+      const url = getApiUrl("/api/user/preferences");
+      console.log("🔍 [UPDATE PREFERENCES] Patching to:", url);
+
+      const response = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
       });
+
+      console.log("📡 [UPDATE PREFERENCES] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to update preferences");
@@ -399,10 +420,15 @@ export default function Settings() {
   // 2FA Mutations
   const setup2FAMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/2fa/setup", {
+      const url = getApiUrl("/api/2fa/setup");
+      console.log("🔍 [SETUP 2FA] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
       });
+
+      console.log("📡 [SETUP 2FA] Response:", response.status);
 
       const data = await response.json();
 
@@ -441,12 +467,17 @@ export default function Settings() {
 
   const verify2FASetupMutation = useMutation({
     mutationFn: async (code: string) => {
-      const response = await fetch("/api/2fa/verify-setup", {
+      const url = getApiUrl("/api/2fa/verify-setup");
+      console.log("🔍 [VERIFY 2FA] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ code }),
       });
+
+      console.log("📡 [VERIFY 2FA] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Invalid code");
@@ -476,7 +507,10 @@ export default function Settings() {
 
   const disable2FAMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/2fa/disable", {
+      const url = getApiUrl("/api/2fa/disable");
+      console.log("🔍 [DISABLE 2FA] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -485,6 +519,8 @@ export default function Settings() {
           code: disable2FACode,
         }),
       });
+
+      console.log("📡 [DISABLE 2FA] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to disable 2FA");
@@ -514,12 +550,17 @@ export default function Settings() {
 
   const regenerateBackupCodesMutation = useMutation({
     mutationFn: async (data: { password?: string; code: string }) => {
-      const response = await fetch("/api/2fa/regenerate-backup-codes", {
+      const url = getApiUrl("/api/2fa/regenerate-backup-codes");
+      console.log("🔍 [REGENERATE CODES] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(data),
       });
+
+      console.log("📡 [REGENERATE CODES] Response:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to regenerate codes");
@@ -569,7 +610,10 @@ export default function Settings() {
       }
 
       // Make actual API call
-      const response = await fetch("/api/user/delete-account", {
+      const url = getApiUrl("/api/user/delete-account");
+      console.log("🔍 [DELETE ACCOUNT] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -578,6 +622,8 @@ export default function Settings() {
         }),
         credentials: "include",
       });
+
+      console.log("📡 [DELETE ACCOUNT] Response:", response.status);
 
       if (!response.ok) {
         const error = await response.json();
