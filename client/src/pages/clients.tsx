@@ -77,8 +77,9 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
-
+import { getApiUrl } from "@/lib/api-config";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const createClientSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -122,8 +123,7 @@ export default function Clients() {
   const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] = useState("");
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
 
-  // Fetch clients
-  // ✅ QUERY HOOK
+  // ✅ QUERY HOOK - WITH getApiUrl() FIX
   const {
     data: clients,
     isLoading,
@@ -133,19 +133,20 @@ export default function Clients() {
     queryFn: async () => {
       if (!user?.id) return [];
 
-      let url = `/api/clients?userId=${user.id}`;
+      let endpoint = `/api/clients?userId=${user.id}`;
       if (user?.role === "super_admin") {
-        url = "/api/super-admin/clients";
+        endpoint = "/api/super-admin/clients";
       }
 
-      console.log("🔍 [CLIENTS] Fetching from:", url); // ✅ ADD THIS
-      console.log("🔍 [CLIENTS] User ID:", user.id); // ✅ ADD THIS
+      // ✅ USE getApiUrl() to resolve to Render backend
+      const url = getApiUrl(endpoint);
+      console.log("🔍 [CLIENTS] Fetching from:", url);
 
       const response = await fetch(url, {
         credentials: "include",
       });
 
-      console.log("🔍 [CLIENTS] Response status:", response.status); // ✅ ADD THIS
+      console.log("📡 [CLIENTS] Response:", response.status);
 
       if (response.status === 401) {
         window.location.href = "/login";
@@ -160,15 +161,13 @@ export default function Clients() {
         throw new Error("Failed to fetch clients");
       }
 
-      const data = await response.json();
-      console.log("✅ [CLIENTS] Received:", data.length, "clients"); // ✅ ADD THIS
-      return data;
+      return response.json();
     },
     enabled: !!user?.id,
     retry: false,
   });
 
-  // Create client form
+   // ✅ FORM HOOK
   const form = useForm<CreateClientData>({
     resolver: zodResolver(createClientSchema),
     defaultValues: {
@@ -215,47 +214,6 @@ export default function Clients() {
     },
   });
 
-  // ✅ FIX 3: Validate setup form before saving
-  const validateSetupForm = (): boolean => {
-    const errors: Record<string, string> = {};
-
-    if (!setupName.trim()) {
-      errors.name = "Company name is required";
-    }
-
-    if (!setupIndustry) {
-      errors.industry = "Industry is required";
-    }
-
-    if (!setupWebsite.trim()) {
-      errors.website = "Website is required";
-    } else if (!/^https?:\/\/.+/.test(setupWebsite)) {
-      errors.website =
-        "Please enter a valid URL (must start with http:// or https://)";
-    }
-
-    if (!setupEmail.trim()) {
-      errors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setupEmail)) {
-      errors.email = "Please enter a valid email";
-    }
-
-    if (!setupPhone.trim()) {
-      errors.phone = "Phone is required";
-    }
-
-    if (!setupWhatsappNumber.trim()) {
-      errors.whatsappNumber = "WhatsApp number is required";
-    }
-
-    if (!setupWhatsappPhoneNumberId.trim()) {
-      errors.whatsappPhoneNumberId = "WhatsApp Phone Number ID is required";
-    }
-
-    setSetupErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
   // Update client mutation
   const updateClientMutation = useMutation({
     mutationFn: async (data: {
@@ -300,7 +258,7 @@ export default function Clients() {
   // ✅ FIX 2: Delete client mutation
   const deleteClientMutation = useMutation({
     mutationFn: async (clientId: string) => {
-      const response = await fetch(`/api/clients/${clientId}`, {
+      const response = await fetch(getApiUrl(`/api/clients/${clientId}`), {
         method: "DELETE",
         credentials: "include",
       });
@@ -341,7 +299,7 @@ export default function Clients() {
       if (!clients) return {};
 
       const statsPromises = clients.map(async (client: any) => {
-        const response = await fetch(`/api/dashboard/${client.id}`, {
+        const response = await fetch(getApiUrl(`/api/dashboard/${client.id}`), {
           credentials: "include",
         });
         if (!response.ok) return { id: client.id, leads: 0, active: 0, hot: 0 };
@@ -367,11 +325,48 @@ export default function Clients() {
     enabled: !!clients && clients.length > 0,
   });
 
-  const onSubmit = (data: CreateClientData) => {
-    createClientMutation.mutate(data);
+  // ✅ FIX 3: Validate setup form before saving
+  const validateSetupForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!setupName.trim()) {
+      errors.name = "Company name is required";
+    }
+
+    if (!setupIndustry) {
+      errors.industry = "Industry is required";
+    }
+
+    if (!setupWebsite.trim()) {
+      errors.website = "Website is required";
+    } else if (!/^https?:\/\/.+/.test(setupWebsite)) {
+      errors.website =
+        "Please enter a valid URL (must start with http:// or https://)";
+    }
+
+    if (!setupEmail.trim()) {
+      errors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setupEmail)) {
+      errors.email = "Please enter a valid email";
+    }
+
+    if (!setupPhone.trim()) {
+      errors.phone = "Phone is required";
+    }
+
+    if (!setupWhatsappNumber.trim()) {
+      errors.whatsappNumber = "WhatsApp number is required";
+    }
+
+    if (!setupWhatsappPhoneNumberId.trim()) {
+      errors.whatsappPhoneNumberId = "WhatsApp Phone Number ID is required";
+    }
+
+    setSetupErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  const handleSaveSetup = () => {
+    const handleSaveSetup = () => {
     if (!selectedClient) return;
 
     // ✅ FIX 3: Validate before saving
@@ -437,6 +432,11 @@ export default function Clients() {
       });
     }
   };
+
+  const onSubmit = (data: CreateClientData) => {
+    createClientMutation.mutate(data);
+  };
+
 
   const canCreateClient = user?.role !== "super_admin";
 

@@ -42,6 +42,7 @@ import Settings from "@/pages/settings";
 import ActivityLog from "./pages/activity";
 import { Activity } from "lucide-react";
 import BrowserTestCall from "@/pages/BrowserTestCall";
+import { getApiUrl } from "@/lib/api-config";
 
 function ProtectedRouter() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -50,30 +51,40 @@ function ProtectedRouter() {
 
   // ✅ Fetch clients - ONLY when authenticated
   const { data: clients } = useQuery({
-    queryKey: ["/api/clients", user?.id, user?.role],
-    queryFn: async () => {
-      if (!user?.id) return [];
+  queryKey: ["/api/clients", user?.id, user?.role],
+  queryFn: async () => {
+    if (!user?.id) return [];
 
-      if (user?.role === "super_admin") {
-        const response = await fetch("/api/super-admin/clients", {
-          credentials: "include",
-        });
-        if (!response.ok) return [];
-        return response.json();
-      }
+    let endpoint = `/api/clients?userId=${user.id}`;
+    if (user?.role === "super_admin") {
+      endpoint = "/api/super-admin/clients";
+    }
 
-      const response = await fetch(`/api/clients?userId=${user?.id}`, {
-        credentials: "include",
-      });
+    // ✅ USE getApiUrl() to resolve to Render backend in production
+    const url = getApiUrl(endpoint);
+    console.log("🔍 [APP] Fetching clients from:", url);
 
-      console.log("🔍 Fetching clients for userId:", user?.id); // ✅ ADD THIS
-      console.log("🔍 Response status:", response.status); // ✅ ADD THIS
-      if (!response.ok) return [];
-      return response.json();
-    },
-    enabled: !!user?.id && isAuthenticated, // ✅ Only when authenticated
-    staleTime: 30 * 1000,
-  });
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+
+    console.log("📡 [APP] Response:", response.status);
+
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return [];
+    }
+
+    if (!response.ok) {
+      console.error("❌ [APP] Failed to fetch clients");
+      return [];
+    }
+    
+    return response.json();
+  },
+  enabled: !!user?.id && isAuthenticated,
+  staleTime: 30 * 1000,
+});
 
   // Auto-select first client if none selected
   useEffect(() => {

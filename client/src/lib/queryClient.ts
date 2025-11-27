@@ -12,10 +12,13 @@ async function throwIfResNotOk(res: Response) {
 
 export async function apiRequest(
   method: string,
-  url: string,
+  url: string, // relative path like "/api/clients"
   data?: unknown | undefined
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // ✅ CRITICAL FIX: Use getApiUrl() to get full production URL
+  const fullUrl = getApiUrl(url);
+  
+  const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -32,12 +35,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    // ✅ NEW, SMARTER LOGIC STARTS HERE
     const [url, params] = queryKey;
     let finalUrl = url as string;
 
     if (params && typeof params === "object") {
-      // Filter out undefined values before creating search params
       const filteredParams = Object.entries(
         params as Record<string, any>
       ).filter(([, value]) => value !== undefined);
@@ -50,10 +51,10 @@ export const getQueryFn: <T>(options: {
       }
     }
 
+    // ✅ ALREADY USES getApiUrl() - GOOD!
     const res = await fetch(getApiUrl(finalUrl), {
       credentials: "include",
     });
-    // ✅ LOGIC ENDS HERE
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
