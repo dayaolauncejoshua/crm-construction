@@ -344,14 +344,50 @@ export default function Conversations() {
   );
 
   const { data: availableTags } = useQuery<any[]>({
-    queryKey: ["/api/lead-tags", selectedClientId],
-    enabled: !!selectedClientId,
-  });
+  queryKey: ["/api/lead-tags", selectedClientId],
+  queryFn: async () => {
+    if (!selectedClientId) return [];
+    const url = getApiUrl(`/api/lead-tags/${selectedClientId}`);
+    console.log("🔍 [TAGS] Fetching from:", url);
+    
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+    
+    console.log("📡 [TAGS] Response:", response.status);
+    
+    if (!response.ok) {
+      console.warn("Failed to fetch tags:", response.status);
+      return [];
+    }
+    
+    return response.json();
+  },
+  enabled: !!selectedClientId,
+});
 
   const { data: activityLog } = useQuery<any[]>({
-    queryKey: ["/api/leads", selectedConversation?.lead?.id, "activity"],
-    enabled: !!selectedConversation?.lead?.id,
-  });
+  queryKey: ["/api/leads", selectedConversation?.lead?.id, "activity"],
+  queryFn: async () => {
+    if (!selectedConversation?.lead?.id) return [];
+    const url = getApiUrl(`/api/leads/${selectedConversation.lead.id}/activity`);
+    console.log("🔍 [ACTIVITY] Fetching from:", url);
+    
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+    
+    console.log("📡 [ACTIVITY] Response:", response.status);
+    
+    if (!response.ok) {
+      console.warn("Failed to fetch activity log:", response.status);
+      return [];
+    }
+    
+    return response.json();
+  },
+  enabled: !!selectedConversation?.lead?.id,
+});
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -371,9 +407,27 @@ export default function Conversations() {
   );
 
   const { data: templates } = useQuery({
-    queryKey: ["/api/quick-replies", selectedClientId],
-    enabled: !!selectedClientId,
-  });
+  queryKey: ["/api/quick-replies", selectedClientId],
+  queryFn: async () => {
+    if (!selectedClientId) return [];
+    const url = getApiUrl(`/api/quick-replies/${selectedClientId}`);
+    console.log("🔍 [TEMPLATES] Fetching from:", url);
+    
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+    
+    console.log("📡 [TEMPLATES] Response:", response.status);
+    
+    if (!response.ok) {
+      console.warn("Failed to fetch templates:", response.status);
+      return [];
+    }
+    
+    return response.json();
+  },
+  enabled: !!selectedClientId,
+});
 
   const [typingIndicators, setTypingIndicators] = useState<
     Record<string, { isTyping: boolean; sender: string; leadName?: string }>
