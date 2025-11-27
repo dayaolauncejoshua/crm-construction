@@ -111,8 +111,6 @@ export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<any | null>(null);
-
-  // Setup form state
   const [setupName, setSetupName] = useState("");
   const [setupIndustry, setSetupIndustry] = useState("");
   const [setupWebsite, setSetupWebsite] = useState("");
@@ -121,8 +119,6 @@ export default function Clients() {
   const [setupWhatsappNumber, setSetupWhatsappNumber] = useState("");
   const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] =
     useState("");
-
-  // ✅ Validation errors for setup form
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
 
   // Fetch clients
@@ -162,25 +158,6 @@ export default function Clients() {
     enabled: !!user?.id,
     retry: false,
   });
-
-  // Show error state
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <XCircle className="w-6 h-6 text-red-600" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">
-            Access Denied
-          </h3>
-          <p className="text-slate-600">
-            You don't have permission to view clients.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   // Create client form
   const form = useForm<CreateClientData>({
@@ -419,6 +396,27 @@ export default function Clients() {
     }
   };
 
+  const canCreateClient = user?.role !== "super_admin";
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <XCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">
+            Access Denied
+          </h3>
+          <p className="text-slate-600">
+            You don't have permission to view clients.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -474,8 +472,6 @@ export default function Clients() {
       </div>
     );
   }
-
-  const canCreateClient = user?.role !== "super_admin";
 
   // Fetch real stats for each client
   const { data: clientStats } = useQuery({
