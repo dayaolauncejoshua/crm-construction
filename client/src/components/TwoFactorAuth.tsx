@@ -3,9 +3,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Loader2, Shield, ArrowLeft, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getApiUrl } from "@/lib/api-config";
 
 interface TwoFactorAuthProps {
   userId: string;
@@ -14,7 +21,12 @@ interface TwoFactorAuthProps {
   onBack: () => void;
 }
 
-export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAuthProps) {
+export function TwoFactorAuth({
+  userId,
+  email,
+  onSuccess,
+  onBack,
+}: TwoFactorAuthProps) {
   const [code, setCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -24,8 +36,8 @@ export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAut
     if (code.length !== 6 && code.length !== 8) {
       toast({
         title: "Invalid Code",
-        description: useBackupCode 
-          ? "Backup code must be 8 characters" 
+        description: useBackupCode
+          ? "Backup code must be 8 characters"
           : "Code must be 6 digits",
         variant: "destructive",
       });
@@ -35,12 +47,17 @@ export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAut
     setIsVerifying(true);
 
     try {
-      const response = await fetch("/api/auth/verify-2fa", {
+      const url = getApiUrl("/api/auth/verify-2fa");
+      console.log("🔍 [2FA VERIFY] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ userId, code, useBackupCode }),
       });
+
+      console.log("📡 [2FA VERIFY] Response:", response.status);
 
       const data = await response.json();
 
@@ -103,7 +120,9 @@ export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAut
                   id="code"
                   type="text"
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) =>
+                    setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
                   onKeyPress={handleKeyPress}
                   placeholder="000000"
                   maxLength={6}
@@ -157,7 +176,14 @@ export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAut
                   id="backupCode"
                   type="text"
                   value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-F0-9]/g, '').slice(0, 8))}
+                  onChange={(e) =>
+                    setCode(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-F0-9]/g, "")
+                        .slice(0, 8)
+                    )
+                  }
                   onKeyPress={handleKeyPress}
                   placeholder="XXXXXXXX"
                   maxLength={8}
@@ -199,11 +225,7 @@ export function TwoFactorAuth({ userId, email, onSuccess, onBack }: TwoFactorAut
           )}
 
           <div className="pt-4 border-t">
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="w-full gap-2"
-            >
+            <Button variant="ghost" onClick={onBack} className="w-full gap-2">
               <ArrowLeft className="w-4 h-4" />
               Back to Login
             </Button>

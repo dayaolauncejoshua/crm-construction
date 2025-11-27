@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Mail, ArrowLeft, CheckCircle, Shield, Zap, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function ForgotPassword() {
   usePageTitle("Forgot Password");
@@ -15,11 +16,17 @@ export default function ForgotPassword() {
 
   const forgotMutation = useMutation({
     mutationFn: async (email: string) => {
-      const res = await fetch("/api/auth/forgot-password", {
+      const url = getApiUrl("/api/auth/forgot-password");
+      console.log("🔍 [FORGOT PASSWORD] Posting to:", url);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email }),
       });
+
+      console.log("📡 [FORGOT PASSWORD] Response:", res.status);
 
       if (!res.ok) {
         const error = await res.json();
@@ -52,7 +59,9 @@ export default function ForgotPassword() {
                 <span className="text-2xl">🏗️</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">AI Lead System</h1>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  AI Lead System
+                </h1>
                 <p className="text-sm text-slate-500">Password Recovery</p>
               </div>
             </div>
@@ -75,7 +84,8 @@ export default function ForgotPassword() {
               </p>
               <div className="bg-white/50 rounded-lg p-4 mb-6">
                 <p className="text-sm text-slate-600 text-center">
-                  <strong>Didn't receive it?</strong> Check your spam folder or try again in a few minutes.
+                  <strong>Didn't receive it?</strong> Check your spam folder or
+                  try again in a few minutes.
                 </p>
               </div>
             </div>
@@ -99,11 +109,10 @@ export default function ForgotPassword() {
             <div className="inline-block px-4 py-2 bg-white/20 rounded-full text-sm font-medium mb-6">
               🔐 Secure Recovery
             </div>
-            <h2 className="text-4xl font-bold mb-6">
-              Your Account is Safe
-            </h2>
+            <h2 className="text-4xl font-bold mb-6">Your Account is Safe</h2>
             <p className="text-lg text-blue-100 mb-8">
-              We take security seriously. Your password reset link is encrypted and expires in 1 hour.
+              We take security seriously. Your password reset link is encrypted
+              and expires in 1 hour.
             </p>
 
             {/* Security Features */}
@@ -179,16 +188,21 @@ export default function ForgotPassword() {
               <span className="text-2xl">🏗️</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">AI Lead System</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                AI Lead System
+              </h1>
               <p className="text-sm text-slate-500">Password Recovery</p>
             </div>
           </div>
 
           {/* Heading */}
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-slate-900 mb-2">Forgot Password?</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">
+              Forgot Password?
+            </h2>
             <p className="text-slate-600">
-              No worries! Enter your email and we'll send you reset instructions.
+              No worries! Enter your email and we'll send you reset
+              instructions.
             </p>
           </div>
 
@@ -255,7 +269,10 @@ export default function ForgotPassword() {
           <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-900 text-center">
               <strong>Need help?</strong> Contact our support team at{" "}
-              <a href="mailto:support@aileadsystem.com" className="underline font-medium">
+              <a
+                href="mailto:support@aileadsystem.com"
+                className="underline font-medium"
+              >
                 support@aileadsystem.com
               </a>
             </p>
@@ -273,7 +290,7 @@ export default function ForgotPassword() {
           <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <Mail className="w-10 h-10" />
           </div>
-          
+
           <h2 className="text-4xl font-bold text-center mb-6">
             Quick Recovery
           </h2>
@@ -312,7 +329,9 @@ export default function ForgotPassword() {
                 3
               </div>
               <div>
-                <h3 className="font-semibold text-lg mb-1">Create New Password</h3>
+                <h3 className="font-semibold text-lg mb-1">
+                  Create New Password
+                </h3>
                 <p className="text-sm text-blue-100">
                   Set a strong password and you're all set!
                 </p>

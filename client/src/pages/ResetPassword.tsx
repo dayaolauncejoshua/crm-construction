@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Lock, CheckCircle, Eye, EyeOff, Shield, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function ResetPassword() {
   usePageTitle("Reset Password");
@@ -17,12 +18,24 @@ export default function ResetPassword() {
   const [countdown, setCountdown] = useState(3);
 
   const resetMutation = useMutation({
-    mutationFn: async ({ password, token }: { password: string; token: string }) => {
-      const res = await fetch(`/api/auth/reset-password/${token}`, {
+    mutationFn: async ({
+      password,
+      token,
+    }: {
+      password: string;
+      token: string;
+    }) => {
+      const url = getApiUrl(`/api/auth/reset-password/${token}`);
+      console.log("🔍 [RESET PASSWORD] Posting to:", url);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ password }),
       });
+
+      console.log("📡 [RESET PASSWORD] Response:", res.status);
 
       if (!res.ok) {
         const error = await res.json();
@@ -76,7 +89,9 @@ export default function ResetPassword() {
                 <span className="text-2xl">🏗️</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">AI Lead System</h1>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  AI Lead System
+                </h1>
                 <p className="text-sm text-slate-500">Password Reset</p>
               </div>
             </div>
@@ -93,19 +108,23 @@ export default function ResetPassword() {
               <p className="text-slate-600 mb-6">
                 Your password has been successfully reset.
               </p>
-              
+
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-6 border border-green-200">
                 <p className="text-sm text-slate-700 mb-3">
                   You can now log in with your new password
                 </p>
                 <div className="flex items-center justify-center space-x-2 text-sm text-slate-500">
                   <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                  <span>Redirecting to login in <strong className="text-blue-600">{countdown}</strong> seconds...</span>
+                  <span>
+                    Redirecting to login in{" "}
+                    <strong className="text-blue-600">{countdown}</strong>{" "}
+                    seconds...
+                  </span>
                 </div>
               </div>
 
               <Button
-                onClick={() => window.location.href = "/login"}
+                onClick={() => (window.location.href = "/login")}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600"
               >
                 Go to Login Now →
@@ -118,18 +137,20 @@ export default function ResetPassword() {
         <div className="hidden lg:flex lg:flex-1 bg-gradient-to-br from-blue-600 via-blue-700 to-orange-500 p-12 items-center justify-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-orange-500/20 rounded-full blur-3xl"></div>
-          
+
           <div className="relative z-10 max-w-lg text-white text-center">
             <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle className="w-10 h-10" />
             </div>
             <h2 className="text-4xl font-bold mb-4">All Set!</h2>
             <p className="text-lg text-blue-100 mb-8">
-              Your account is secure. Log in now to continue automating your lead generation.
+              Your account is secure. Log in now to continue automating your
+              lead generation.
             </p>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20">
               <p className="text-sm text-blue-100">
-                💡 <strong>Pro Tip:</strong> Consider using a password manager to keep your passwords secure and easily accessible.
+                💡 <strong>Pro Tip:</strong> Consider using a password manager
+                to keep your passwords secure and easily accessible.
               </p>
             </div>
           </div>
@@ -149,7 +170,9 @@ export default function ResetPassword() {
               <span className="text-2xl">🏗️</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">AI Lead System</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                AI Lead System
+              </h1>
               <p className="text-sm text-slate-500">Password Reset</p>
             </div>
           </div>
@@ -189,7 +212,11 @@ export default function ResetPassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -219,23 +246,35 @@ export default function ResetPassword() {
               <div className="space-y-2">
                 {passwordRequirements.map((req, idx) => (
                   <div key={idx} className="flex items-center text-sm">
-                    <div className={`w-4 h-4 rounded-full mr-2 flex items-center justify-center ${
-                      req.met ? 'bg-green-500' : 'bg-slate-300'
-                    }`}>
+                    <div
+                      className={`w-4 h-4 rounded-full mr-2 flex items-center justify-center ${
+                        req.met ? "bg-green-500" : "bg-slate-300"
+                      }`}
+                    >
                       {req.met && <span className="text-white text-xs">✓</span>}
                     </div>
-                    <span className={req.met ? 'text-green-700' : 'text-slate-600'}>
+                    <span
+                      className={req.met ? "text-green-700" : "text-slate-600"}
+                    >
                       {req.text}
                     </span>
                   </div>
                 ))}
                 <div className="flex items-center text-sm">
-                  <div className={`w-4 h-4 rounded-full mr-2 flex items-center justify-center ${
-                    passwordsMatch ? 'bg-green-500' : 'bg-slate-300'
-                  }`}>
-                    {passwordsMatch && <span className="text-white text-xs">✓</span>}
+                  <div
+                    className={`w-4 h-4 rounded-full mr-2 flex items-center justify-center ${
+                      passwordsMatch ? "bg-green-500" : "bg-slate-300"
+                    }`}
+                  >
+                    {passwordsMatch && (
+                      <span className="text-white text-xs">✓</span>
+                    )}
                   </div>
-                  <span className={passwordsMatch ? 'text-green-700' : 'text-slate-600'}>
+                  <span
+                    className={
+                      passwordsMatch ? "text-green-700" : "text-slate-600"
+                    }
+                  >
                     Passwords match
                   </span>
                 </div>
@@ -255,9 +294,7 @@ export default function ResetPassword() {
             <Button
               type="submit"
               disabled={
-                resetMutation.isPending ||
-                !isPasswordValid ||
-                !passwordsMatch
+                resetMutation.isPending || !isPasswordValid || !passwordsMatch
               }
               className="w-full h-12 bg-gradient-to-r from-blue-600 to-orange-500 hover:from-blue-700 hover:to-orange-600"
             >
@@ -280,7 +317,8 @@ export default function ResetPassword() {
             <p className="text-sm text-blue-900 flex items-start">
               <Shield className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
               <span>
-                <strong>Security Tip:</strong> Use a unique password you don't use on other sites.
+                <strong>Security Tip:</strong> Use a unique password you don't
+                use on other sites.
               </span>
             </p>
           </div>
@@ -296,12 +334,13 @@ export default function ResetPassword() {
           <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <Shield className="w-10 h-10" />
           </div>
-          
+
           <h2 className="text-4xl font-bold text-center mb-6">
             Secure & Protected
           </h2>
           <p className="text-lg text-blue-100 text-center mb-12">
-            Your security is our top priority. We use industry-leading encryption to protect your data.
+            Your security is our top priority. We use industry-leading
+            encryption to protect your data.
           </p>
 
           {/* Security Features */}
@@ -313,7 +352,9 @@ export default function ResetPassword() {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">256-Bit Encryption</h3>
-                  <p className="text-sm text-blue-100">Bank-level security for all your data</p>
+                  <p className="text-sm text-blue-100">
+                    Bank-level security for all your data
+                  </p>
                 </div>
               </div>
             </div>
@@ -325,7 +366,9 @@ export default function ResetPassword() {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">GDPR Compliant</h3>
-                  <p className="text-sm text-blue-100">Your privacy is always protected</p>
+                  <p className="text-sm text-blue-100">
+                    Your privacy is always protected
+                  </p>
                 </div>
               </div>
             </div>
@@ -336,8 +379,12 @@ export default function ResetPassword() {
                   <Key className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-1">Secure Password Storage</h3>
-                  <p className="text-sm text-blue-100">Passwords are hashed and never stored in plain text</p>
+                  <h3 className="font-semibold mb-1">
+                    Secure Password Storage
+                  </h3>
+                  <p className="text-sm text-blue-100">
+                    Passwords are hashed and never stored in plain text
+                  </p>
                 </div>
               </div>
             </div>

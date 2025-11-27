@@ -1,6 +1,6 @@
-import { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { useMutation, useQuery} from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import {
   Mail,
@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function VerifyEmail() {
   usePageTitle("Email Verification");
@@ -63,11 +64,17 @@ export default function VerifyEmail() {
 
   const resendMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/auth/resend-verification", {
+      const url = getApiUrl("/api/auth/resend-verification");
+      console.log("🔍 [RESEND VERIFICATION] Posting to:", url);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email: user?.email }),
       });
+
+      console.log("📡 [RESEND VERIFICATION] Response:", res.status);
 
       if (!res.ok) {
         const error = await res.json();

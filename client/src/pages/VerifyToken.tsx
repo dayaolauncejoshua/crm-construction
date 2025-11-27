@@ -4,20 +4,30 @@ import { useRoute, useLocation } from "wouter";
 import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function VerifyToken() {
   usePageTitle("Verify Email");
 
   const [, params] = useRoute("/verify/:token");
   const [, setLocation] = useLocation(); // ✅ Add this
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error">(
+    "loading"
+  );
   const [message, setMessage] = useState("");
   const [countdown, setCountdown] = useState(3);
 
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        const res = await fetch(`/api/auth/verify/${params?.token}`);
+        const url = getApiUrl(`/api/auth/verify/${params?.token}`);
+        console.log("🔍 [VERIFY TOKEN] Fetching from:", url);
+
+        const res = await fetch(url, {
+          credentials: "include",
+        });
+
+        console.log("📡 [VERIFY TOKEN] Response:", res.status);
         const data = await res.json();
 
         if (res.ok) {
@@ -27,7 +37,7 @@ export default function VerifyToken() {
           // Notify other tabs about auth change
           localStorage.setItem("auth_updated", Date.now().toString());
           setTimeout(() => localStorage.removeItem("auth_updated"), 1000);
-          
+
           // ✅ Countdown timer - redirect to trial-unlock instead of dashboard
           const timer = setInterval(() => {
             setCountdown((prev) => {
@@ -65,7 +75,9 @@ export default function VerifyToken() {
               <span className="text-2xl">🏗️</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">AI Lead System</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                AI Lead System
+              </h1>
               <p className="text-sm text-slate-500">Email Verification</p>
             </div>
           </div>
@@ -98,10 +110,11 @@ export default function VerifyToken() {
                   <CheckCircle className="w-14 h-14 text-white" />
                 </div>
               </div>
-              
+
               <div className="mb-6">
                 <h2 className="text-3xl font-bold text-slate-900 mb-2 flex items-center justify-center gap-2">
-                  Email Verified! <Sparkles className="w-6 h-6 text-yellow-500" />
+                  Email Verified!{" "}
+                  <Sparkles className="w-6 h-6 text-yellow-500" />
                 </h2>
                 <p className="text-slate-600 text-lg">{message}</p>
               </div>
@@ -116,7 +129,11 @@ export default function VerifyToken() {
                 </p>
                 <div className="flex items-center justify-center space-x-2 text-sm text-slate-500">
                   <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                  <span>Redirecting in <strong className="text-blue-600">{countdown}</strong> seconds...</span>
+                  <span>
+                    Redirecting in{" "}
+                    <strong className="text-blue-600">{countdown}</strong>{" "}
+                    seconds...
+                  </span>
                 </div>
               </div>
 
@@ -141,7 +158,7 @@ export default function VerifyToken() {
                 Verification Failed
               </h2>
               <p className="text-slate-600 mb-8">{message}</p>
-              
+
               <div className="bg-red-50 rounded-xl p-6 mb-6 border border-red-200">
                 <p className="text-sm text-red-900 mb-4">
                   <strong>Common reasons:</strong>

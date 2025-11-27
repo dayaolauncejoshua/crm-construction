@@ -1,13 +1,14 @@
 import { useState, useEffect} from "react";
-import { useAuth } from "@/contexts/AuthContext"; // ✅ Using your auth context
+import { useAuth } from "@/contexts/AuthContext";
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle, Mail, X } from "lucide-react";
+import { getApiUrl } from "@/lib/api-config"; // ✅ ADD THIS IMPORT
 
 export default function VerificationBanner() {
-  const { user } = useAuth(); // ✅ Using your useAuth hook
+  const { user } = useAuth();
   const [dismissed, setDismissed] = useState(false);
 
-  //  Listen for verification in other tabs
+  // Listen for verification in other tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "auth_updated") {
@@ -23,11 +24,17 @@ export default function VerificationBanner() {
 
   const resendMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/auth/resend-verification", {
+      const url = getApiUrl("/api/auth/resend-verification"); // ✅ USE getApiUrl
+      console.log("🔍 [RESEND VERIFICATION] Posting to:", url);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ ADD THIS
         body: JSON.stringify({ email: user?.email }),
       });
+
+      console.log("📡 [RESEND VERIFICATION] Response:", res.status);
 
       if (!res.ok) {
         const error = await res.json();
