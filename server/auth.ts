@@ -397,18 +397,19 @@ router.get(
   })
 );
 
+
 // Google OAuth callback
 router.get(
   "/api/auth/google/callback",
   passport.authenticate("google", {
-    failureRedirect: "/login?error=google_auth_failed",
+    failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_auth_failed`,
   }),
   (req, res) => {
     const user = req.user as any;
     
     if (!user) {
       console.error("❌ No user returned from Google OAuth");
-      return res.redirect("/login?error=auth_failed");
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
     }
 
     // ✅ Get auth type and referrer
@@ -430,28 +431,30 @@ router.get(
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
-        return res.redirect("/login?error=session_failed");
+        return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_failed`);
       }
 
-      // ✅ Redirect with appropriate message
-      let redirectUrl = "/dashboard";
+      // ✅ Redirect to FRONTEND with appropriate message
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      let redirectPath = "/dashboard";
       
       switch (authType) {
         case 'new_oauth_signup':
-          redirectUrl += "?auth=signup_success";
+          redirectPath += "?auth=signup_success";
           break;
         case 'returning_oauth_login':
-          redirectUrl += "?auth=login_success";
+          redirectPath += "?auth=login_success";
           break;
         case 'oauth_account_linked':
-          redirectUrl += "?auth=account_linked";
+          redirectPath += "?auth=account_linked";
           break;
         default:
-          redirectUrl += "?auth=success";
+          redirectPath += "?auth=success";
       }
 
-      console.log(`✅ Google OAuth success, redirecting to: ${redirectUrl}`);
-      res.redirect(redirectUrl);
+      const fullRedirectUrl = `${frontendUrl}${redirectPath}`;
+      console.log(`✅ Google OAuth success, redirecting to: ${fullRedirectUrl}`);
+      res.redirect(fullRedirectUrl);
     });
   }
 );
