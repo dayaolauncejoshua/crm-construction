@@ -84,6 +84,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import LeadDetailsModal from "@/components/LeadDetailsModal";
 import AddLeadModal from "@/components/AddLeadModal";
+import { getApiUrl } from "@/lib/api-config";
 
 // Helper function to format relative time
 const getTimeAgo = (date: Date | string | null): string => {
@@ -234,7 +235,19 @@ export default function Leads() {
   const { data: leads, isLoading } = useQuery({
     queryKey: ["/api/leads", selectedClientId],
     queryFn: async () => {
-      const response = await fetch(`/api/leads/${selectedClientId}`);
+      const url = getApiUrl(`/api/leads/${selectedClientId}`);
+      console.log("🔍 [LEADS] Fetching from:", url);
+      
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      
+      console.log("📡 [LEADS] Response:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch leads: ${response.status}`);
+      }
+      
       return response.json();
     },
     enabled: !!selectedClientId,
@@ -247,7 +260,11 @@ export default function Leads() {
   const { data: bookingsData } = useQuery({
     queryKey: [`/api/bookings/${selectedClientId}`],
     queryFn: async () => {
-      const response = await fetch(`/api/bookings/${selectedClientId}`);
+      const url = getApiUrl(`/api/bookings/${selectedClientId}`);
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch bookings");
       return response.json();
     },
     enabled: !!selectedClientId,
@@ -259,7 +276,8 @@ export default function Leads() {
 
   const handleExportLeads = async () => {
     try {
-      const response = await fetch(`/api/leads/${selectedClientId}/export`, {
+      const url = getApiUrl(`/api/leads/${selectedClientId}/export`);
+      const response = await fetch(url, {
         credentials: "include",
       });
 
@@ -268,13 +286,13 @@ export default function Leads() {
       }
 
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = downloadUrl;
       a.download = `leads-export-${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(downloadUrl);
       document.body.removeChild(a);
 
       toast({
@@ -292,7 +310,8 @@ export default function Leads() {
 
   const deleteLeadMutation = useMutation({
     mutationFn: async (leadId: string) => {
-      const response = await fetch(`/api/leads/${leadId}`, {
+      const url = getApiUrl(`/api/leads/${leadId}`);
+      const response = await fetch(url, {
         method: "DELETE",
         credentials: "include",
       });
@@ -417,12 +436,21 @@ export default function Leads() {
 
       for (const conv of conversations) {
         try {
-          const response = await fetch(
-            `/api/conversations/${conv.id}/messages`
-          );
+          const url = getApiUrl(`/api/conversations/${conv.id}/messages`);
+          console.log(`🔍 [LEADS] Fetching messages from: ${url}`);
+          
+          const response = await fetch(url, {
+            credentials: "include",
+          });
+          
+          console.log(`📡 [LEADS] Messages response for ${conv.id}:`, response.status);
+          
           if (response.ok) {
             const messages = await response.json();
             counts[conv.id] = messages.length;
+          } else {
+            console.warn(`Failed to fetch messages for ${conv.id}: ${response.status}`);
+            counts[conv.id] = 0;
           }
         } catch (error) {
           console.error(

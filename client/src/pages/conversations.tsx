@@ -79,6 +79,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { getApiUrl } from "@/lib/api-config";
 
 // Date formatting helpers
 const formatDateDivider = (date: Date): string => {
@@ -401,9 +402,19 @@ export default function Conversations() {
     queryKey: ["/api/conversations", selectedConversation?.id, "messages"],
     enabled: !!selectedConversation?.id,
     queryFn: async () => {
-      const response = await fetch(
-        `/api/conversations/${selectedConversation.id}/messages`
-      );
+      const url = getApiUrl(`/api/conversations/${selectedConversation.id}/messages`);
+      console.log("🔍 [MESSAGES] Fetching from:", url);
+      
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      
+      console.log("📡 [MESSAGES] Response:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch messages: ${response.status}`);
+      }
+      
       const data = await response.json();
       return data.reverse();
     },
@@ -412,7 +423,11 @@ export default function Conversations() {
   const { data: allBookings = [] } = useQuery({
     queryKey: ["/api/bookings", selectedClientId],
     queryFn: async () => {
-      const response = await fetch(`/api/bookings/${selectedClientId}`);
+      const url = getApiUrl(`/api/bookings/${selectedClientId}`);
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch bookings");
       return response.json();
     },
     enabled: !!selectedClientId,
@@ -421,12 +436,11 @@ export default function Conversations() {
   const { data: pendingBookings = [] } = useQuery({
     queryKey: ["/api/bookings", selectedClientId, "pending"],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/bookings/${selectedClientId}/pending`,
-        {
-          credentials: "include",
-        }
-      );
+      const url = getApiUrl(`/api/bookings/${selectedClientId}/pending`);
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch pending bookings");
       return response.json();
     },
     enabled: !!selectedClientId,
@@ -435,13 +449,16 @@ export default function Conversations() {
 
   const markAsReadMutation = useMutation({
     mutationFn: async (conversationId: string) => {
-      const response = await fetch(
-        `/api/conversations/${conversationId}/read`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
+      const url = getApiUrl(`/api/conversations/${conversationId}/read`);
+      console.log("📖 [MARK READ] Posting to:", url);
+      
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+      });
+      
+      console.log("📡 [MARK READ] Response:", response.status);
+      
       if (!response.ok) throw new Error("Failed to mark as read");
       return response.json();
     },
@@ -496,20 +513,24 @@ export default function Conversations() {
     if (!selectedConversation) return;
     if (!isTyping) {
       setIsTyping(true);
-      fetch(`/api/conversations/${selectedConversation.id}/typing`, {
+      const url = getApiUrl(`/api/conversations/${selectedConversation.id}/typing`);
+      fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ isTyping: true }),
       }).catch((err) => console.error("Failed to send typing indicator:", err));
     }
+    
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+    
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       if (selectedConversation) {
-        fetch(`/api/conversations/${selectedConversation.id}/typing`, {
+        const url = getApiUrl(`/api/conversations/${selectedConversation.id}/typing`);
+        fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -644,7 +665,8 @@ export default function Conversations() {
 
   const bookMeetingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      const response = await fetch("/api/bookings/schedule", {
+      const url = getApiUrl("/api/bookings/schedule");
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1181,8 +1203,6 @@ export default function Conversations() {
 
     const conversationId = selectedConversation.id;
     const now = Date.now();
-
-    // ✅ SAFER: pull current into a local variable
     const lastMarked = lastMarkedConversationRef.current;
 
     if (
@@ -1200,6 +1220,7 @@ export default function Conversations() {
     const unreadMessages = messages.filter(
       (m: any) => m.sender === "lead" && !m.readAt
     );
+    
     if (unreadMessages.length === 0) {
       console.log("✅ No unread messages in conversation %s", conversationId);
       return;
@@ -1221,7 +1242,8 @@ export default function Conversations() {
         timestamp: Date.now(),
       };
 
-      fetch(`/api/conversations/${conversationId}/messages/read`, {
+      const url = getApiUrl(`/api/conversations/${conversationId}/messages/read`);
+      fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1256,7 +1278,8 @@ export default function Conversations() {
       selectedConversation?.lead?.id &&
       selectedConversation.lead.viewedAt === null
     ) {
-      fetch(`/api/leads/${selectedConversation.lead.id}/view`, {
+      const url = getApiUrl(`/api/leads/${selectedConversation.lead.id}/view`);
+      fetch(url, {
         method: "POST",
         credentials: "include",
       }).catch((err) => console.error("Failed to mark lead as viewed:", err));
@@ -1399,7 +1422,9 @@ export default function Conversations() {
     );
     setNewMessage(replacedContent);
     setShowTemplates(false);
-    await fetch(`/api/quick-replies/${template.id}/use`, {
+    
+    const url = getApiUrl(`/api/quick-replies/${template.id}/use`);
+    await fetch(url, {
       method: "POST",
       credentials: "include",
     });
@@ -1421,9 +1446,9 @@ export default function Conversations() {
 
   const handleApproveBooking = async (bookingId: string) => {
     setApprovingBookingId(bookingId);
-
     try {
-      const response = await fetch(`/api/bookings/${bookingId}/approve`, {
+      const url = getApiUrl(`/api/bookings/${bookingId}/approve`);
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
       });
@@ -1434,6 +1459,7 @@ export default function Conversations() {
         ["/api/bookings", selectedClientId, "pending"],
         (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
       );
+      
       await queryClient.invalidateQueries({
         queryKey: ["/api/bookings", selectedClientId, "pending"],
       });
@@ -1485,9 +1511,9 @@ export default function Conversations() {
 
   const handleDeclineBooking = async (bookingId: string) => {
     setDecliningBookingId(bookingId);
-
     try {
-      const response = await fetch(`/api/bookings/${bookingId}/decline`, {
+      const url = getApiUrl(`/api/bookings/${bookingId}/decline`);
+      const response = await fetch(url, {
         method: "POST",
         credentials: "include",
       });
@@ -1497,6 +1523,7 @@ export default function Conversations() {
         ["/api/bookings", selectedClientId, "pending"],
         (old: any[]) => old?.filter((b) => b.id !== bookingId) || []
       );
+      
       await queryClient.invalidateQueries({
         queryKey: ["/api/bookings", selectedClientId, "pending"],
       });
