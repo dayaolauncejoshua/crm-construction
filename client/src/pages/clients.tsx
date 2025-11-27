@@ -111,17 +111,19 @@ export default function Clients() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<any | null>(null);
+  
+  // ✅ ALL STATE HOOKS FIRST
   const [setupName, setSetupName] = useState("");
   const [setupIndustry, setSetupIndustry] = useState("");
   const [setupWebsite, setSetupWebsite] = useState("");
   const [setupEmail, setSetupEmail] = useState("");
   const [setupPhone, setSetupPhone] = useState("");
   const [setupWhatsappNumber, setSetupWhatsappNumber] = useState("");
-  const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] =
-    useState("");
+  const [setupWhatsappPhoneNumberId, setSetupWhatsappPhoneNumberId] = useState("");
   const [setupErrors, setSetupErrors] = useState<Record<string, string>>({});
 
   // Fetch clients
+  // ✅ QUERY HOOK
   const {
     data: clients,
     isLoading,
@@ -136,9 +138,14 @@ export default function Clients() {
         url = "/api/super-admin/clients";
       }
 
+      console.log("🔍 [CLIENTS] Fetching from:", url); // ✅ ADD THIS
+      console.log("🔍 [CLIENTS] User ID:", user.id); // ✅ ADD THIS
+
       const response = await fetch(url, {
         credentials: "include",
       });
+
+      console.log("🔍 [CLIENTS] Response status:", response.status); // ✅ ADD THIS
 
       if (response.status === 401) {
         window.location.href = "/login";
@@ -153,7 +160,9 @@ export default function Clients() {
         throw new Error("Failed to fetch clients");
       }
 
-      return response.json();
+      const data = await response.json();
+      console.log("✅ [CLIENTS] Received:", data.length, "clients"); // ✅ ADD THIS
+      return data;
     },
     enabled: !!user?.id,
     retry: false,
@@ -325,6 +334,39 @@ export default function Clients() {
     },
   });
 
+  // Fetch real stats for each client
+  const { data: clientStats } = useQuery({
+    queryKey: ["/api/clients/stats", user?.id],
+    queryFn: async () => {
+      if (!clients) return {};
+
+      const statsPromises = clients.map(async (client: any) => {
+        const response = await fetch(`/api/dashboard/${client.id}`, {
+          credentials: "include",
+        });
+        if (!response.ok) return { id: client.id, leads: 0, active: 0, hot: 0 };
+
+        const data = await response.json();
+        return {
+          id: client.id,
+          leads: data.kpis?.totalLeads || 0,
+          active:
+            data.conversations?.filter(
+              (c: any) => c.isAiHandled || !c.humanTakeoverAt
+            ).length || 0,
+          hot: data.hotLeads?.length || 0,
+        };
+      });
+
+      const stats = await Promise.all(statsPromises);
+      return stats.reduce((acc: any, stat: any) => {
+        acc[stat.id] = stat;
+        return acc;
+      }, {});
+    },
+    enabled: !!clients && clients.length > 0,
+  });
+
   const onSubmit = (data: CreateClientData) => {
     createClientMutation.mutate(data);
   };
@@ -398,7 +440,7 @@ export default function Clients() {
 
   const canCreateClient = user?.role !== "super_admin";
 
-  // Show error state
+  // ✅ NOW SAFE: Conditional returns AFTER all hooks
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -473,38 +515,7 @@ export default function Clients() {
     );
   }
 
-  // Fetch real stats for each client
-  const { data: clientStats } = useQuery({
-    queryKey: ["/api/clients/stats", user?.id],
-    queryFn: async () => {
-      if (!clients) return {};
-
-      const statsPromises = clients.map(async (client: any) => {
-        const response = await fetch(`/api/dashboard/${client.id}`, {
-          credentials: "include",
-        });
-        if (!response.ok) return { id: client.id, leads: 0, active: 0, hot: 0 };
-
-        const data = await response.json();
-        return {
-          id: client.id,
-          leads: data.kpis?.totalLeads || 0,
-          active:
-            data.conversations?.filter(
-              (c: any) => c.isAiHandled || !c.humanTakeoverAt
-            ).length || 0,
-          hot: data.hotLeads?.length || 0,
-        };
-      });
-
-      const stats = await Promise.all(statsPromises);
-      return stats.reduce((acc: any, stat: any) => {
-        acc[stat.id] = stat;
-        return acc;
-      }, {});
-    },
-    enabled: !!clients && clients.length > 0,
-  });
+  
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

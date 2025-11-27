@@ -65,6 +65,9 @@ function ProtectedRouter() {
       const response = await fetch(`/api/clients?userId=${user?.id}`, {
         credentials: "include",
       });
+
+      console.log("🔍 Fetching clients for userId:", user?.id); // ✅ ADD THIS
+      console.log("🔍 Response status:", response.status); // ✅ ADD THIS
       if (!response.ok) return [];
       return response.json();
     },
