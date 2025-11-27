@@ -1,3 +1,6 @@
+// client/src/components/AddLeadModal.tsx
+
+import { getApiUrl } from "@/lib/api-config"; // ✅ ADD THIS IMPORT
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,21 +63,31 @@ export default function AddLeadModal({ isOpen, onClose, clientId }: AddLeadModal
     return Object.keys(newErrors).length === 0;
   };
 
+  // ✅ NEW:
   const createLeadMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/leads", {
+      const url = getApiUrl("/api/leads");
+      console.log("🔍 [ADD LEAD] Posting to:", url);
+      console.log("📦 [ADD LEAD] Data:", data);
+      
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(data),
       });
 
+      console.log("📡 [ADD LEAD] Response:", response.status);
+
       if (!response.ok) {
         const error = await response.json();
+        console.error("❌ [ADD LEAD] Error:", error);
         throw new Error(error.message || "Failed to create lead");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log("✅ [ADD LEAD] Success:", result);
+      return result;
     },
     onSuccess: () => {
       toast({

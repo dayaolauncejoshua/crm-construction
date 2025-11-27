@@ -68,6 +68,7 @@ import {
   Search,
   MoreVertical,
 } from "lucide-react";
+import { getApiUrl } from "@/lib/api-config";
 
 export default function CalendarPage() {
   usePageTitle("Calendar & Bookings");
@@ -111,9 +112,14 @@ export default function CalendarPage() {
     queryFn: async () => {
       if (!selectedClientId) return [];
 
-      const response = await fetch(`/api/bookings/${selectedClientId}`, {
+      const url = getApiUrl(`/api/bookings/${selectedClientId}`);
+      console.log("🔍 [CALENDAR] Fetching bookings from:", url);
+
+      const response = await fetch(url, {
         credentials: "include",
       });
+
+      console.log("📡 [CALENDAR] Bookings response:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to fetch bookings");
@@ -152,19 +158,21 @@ export default function CalendarPage() {
       duration: number;
       notes?: string;
     }) => {
-      const response = await fetch(
-        `/api/bookings/${data.bookingId}/reschedule`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            scheduledFor: data.scheduledFor,
-            duration: data.duration,
-            notes: data.notes,
-          }),
-        }
-      );
+      const url = getApiUrl(`/api/bookings/${data.bookingId}/reschedule`);
+      console.log("🔍 [RESCHEDULE] Posting to:", url);
+
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          scheduledFor: data.scheduledFor,
+          duration: data.duration,
+          notes: data.notes,
+        }),
+      });
+
+      console.log("📡 [RESCHEDULE] Response:", response.status);
 
       const responseData = await response.json();
 
@@ -228,7 +236,10 @@ export default function CalendarPage() {
   // Cancel Booking mutation
   const cancelMutation = useMutation({
     mutationFn: async (data: { bookingId: string; reason?: string }) => {
-      const response = await fetch(`/api/bookings/${data.bookingId}/cancel`, {
+      const url = getApiUrl(`/api/bookings/${data.bookingId}/cancel`);
+      console.log("🔍 [CANCEL] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -236,6 +247,8 @@ export default function CalendarPage() {
           reason: data.reason,
         }),
       });
+
+      console.log("📡 [CANCEL] Response:", response.status);
 
       if (!response.ok) throw new Error("Failed to cancel booking");
       return response.json();
@@ -268,7 +281,10 @@ export default function CalendarPage() {
       status: string;
       notes?: string;
     }) => {
-      const response = await fetch(`/api/bookings/${data.bookingId}/status`, {
+      const url = getApiUrl(`/api/bookings/${data.bookingId}/status`);
+      console.log("🔍 [UPDATE STATUS] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -277,6 +293,8 @@ export default function CalendarPage() {
           notes: data.notes,
         }),
       });
+
+      console.log("📡 [UPDATE STATUS] Response:", response.status);
 
       if (!response.ok) throw new Error("Failed to update booking status");
       return response.json();
@@ -317,7 +335,10 @@ export default function CalendarPage() {
       notes?: string;
       meetingType: string;
     }) => {
-      const response = await fetch(`/api/bookings/${data.bookingId}/edit`, {
+      const url = getApiUrl(`/api/bookings/${data.bookingId}/edit`);
+      console.log("🔍 [EDIT BOOKING] Posting to:", url);
+
+      const response = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -328,6 +349,8 @@ export default function CalendarPage() {
           meetingType: data.meetingType,
         }),
       });
+
+      console.log("📡 [EDIT BOOKING] Response:", response.status);
 
       const responseData = await response.json();
 
@@ -397,9 +420,14 @@ export default function CalendarPage() {
         return;
       }
 
-      const response = await fetch(`/api/bookings/${selectedClientId}/export`, {
+      const apiUrl = getApiUrl(`/api/bookings/${selectedClientId}/export`);
+      console.log("🔍 [EXPORT] Fetching from:", apiUrl);
+
+      const response = await fetch(apiUrl, {
         credentials: "include",
       });
+
+      console.log("📡 [EXPORT] Response:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to export bookings");
@@ -518,8 +546,7 @@ export default function CalendarPage() {
   const showRateTrend =
     prevCompletedCount > 0 && prevTotalBookings > 0
       ? (
-          showRate -
-          Math.round((prevCompletedCount / prevTotalBookings) * 100)
+          showRate - Math.round((prevCompletedCount / prevTotalBookings) * 100)
         ).toFixed(1)
       : "0.0";
 
