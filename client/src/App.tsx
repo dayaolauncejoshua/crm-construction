@@ -118,7 +118,7 @@ function ProtectedRouter() {
     ).length || 0;
 
   // ✅ WebSocket - pass isAuthenticated
-  const { data: wsData } = useWebSocket(isAuthenticated);
+  const { data: wsData } = useWebSocket(isAuthenticated && !isLoading);
 
   useEffect(() => {
     if (!wsData || !selectedClientId || !isAuthenticated) return;

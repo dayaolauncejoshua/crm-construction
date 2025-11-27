@@ -140,7 +140,9 @@ export default function Clients() {
         url = "/api/super-admin/clients";
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: "include",
+      });
 
       if (response.status === 401) {
         window.location.href = "/login";
@@ -802,7 +804,9 @@ export default function Clients() {
                         <Building2 className="text-primary text-lg" />
                       </div>
                       <div>
-                        <CardTitle className="text-base">{client.name}</CardTitle>
+                        <CardTitle className="text-base">
+                          {client.name}
+                        </CardTitle>
                         <Badge variant="secondary" className="mt-1">
                           {client.industry}
                         </Badge>
