@@ -89,6 +89,7 @@ import {
 } from "lucide-react";
 import { useClient } from "@/contexts/ClientContext";
 import { Label } from "@radix-ui/react-dropdown-menu";
+import { getApiUrl } from "@/lib/api-config";
 
 const createVSLSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -129,17 +130,26 @@ export default function VSL() {
     },
   });
 
+  
   // Fetch VSLs (auto-refresh every 5 seconds)
-  const { data: vsls, isLoading } = useQuery({
-    queryKey: ["/api/vsls", selectedClientId],
-    enabled: !!selectedClientId,
-    queryFn: async () => {
-      const response = await fetch(`/api/vsls/${selectedClientId}`);
-      if (!response.ok) throw new Error("Failed to load VSLs");
-      return response.json();
-    },
-    refetchInterval: 5000,
-  });
+const { data: vsls, isLoading } = useQuery({
+  queryKey: ["/api/vsls", selectedClientId],
+  enabled: !!selectedClientId,
+  queryFn: async () => {
+    const url = getApiUrl(`/api/vsls/${selectedClientId}`);
+    console.log("🔍 [FETCH VSLS] Fetching from:", url);
+    
+    const response = await fetch(url, {
+      credentials: "include",
+    });
+    
+    console.log("📡 [FETCH VSLS] Response:", response.status);
+    
+    if (!response.ok) throw new Error("Failed to load VSLs");
+    return response.json();
+  },
+  refetchInterval: 5000,
+});
 
   // Create VSL Mutation
   const createVSLMutation = useMutation({

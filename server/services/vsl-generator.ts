@@ -1,36 +1,40 @@
 // server/services/vsl-generator.ts
-// ... (keep all your existing imports and code until the generateVSL method)
-
 import OpenAI from "openai";
-
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import fetch from "node-fetch";
 import { progressTracker } from "./progress-tracker.services";
 import { ConsoleLogger } from "../utils/console-logger.utils";
-import { cloudinaryService } from "server/services/cloudinary.service";
+import { cloudinaryService } from "./cloudinary.service";
 
-// Conditional FFmpeg loading - only loads when VSL generation is triggered
-let ffmpeg: any;
-let ffmpegPath: any;
-let ffprobePath: any;
+// ✅ FIX: Correct FFmpeg imports
+let ffmpeg: any = null;
+let ffmpegPath: string;
+let ffprobePath: string;
 
 async function initFFmpeg() {
   if (!ffmpeg) {
     try {
+      // Import the packages
       const fluentFfmpeg = await import("fluent-ffmpeg");
-      const installer = await import("@ffmpeg-installer/ffmpeg");
-      const probeInstaller = await import("@ffprobe-installer/ffprobe");
-      
+      const ffmpegInstaller = await import("@ffmpeg-installer/ffmpeg");
+      const ffprobeInstaller = await import("@ffprobe-installer/ffprobe");
+
+      // ✅ FIX: Get the default export from fluent-ffmpeg
       ffmpeg = fluentFfmpeg.default;
-      ffmpegPath = installer.default;
-      ffprobePath = probeInstaller.default;
-      
-      ffmpeg.setFfmpegPath(ffmpegPath.path);
-      ffmpeg.setFfprobePath(ffprobePath.path);
-      
+
+      // Get paths from installers
+      ffmpegPath = ffmpegInstaller.default.path;
+      ffprobePath = ffprobeInstaller.default.path;
+
+      // Set the paths on the imported ffmpeg function
+      ffmpeg.setFfmpegPath(ffmpegPath);
+      ffmpeg.setFfprobePath(ffprobePath);
+
       console.log("✅ FFmpeg initialized successfully");
+      console.log("   FFmpeg path:", ffmpegPath);
+      console.log("   FFprobe path:", ffprobePath);
     } catch (error) {
       console.error("❌ FFmpeg initialization failed:", error);
       throw new Error("FFmpeg not available - VSL generation disabled");
@@ -43,12 +47,15 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY2,
 });
 
+const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+
 interface VSLGenerationOptions {
   vslId: string;
   script: string;
   title: string;
   clientId: string;
   niche: string;
+  subtitles?: "none" | "traditional" | "karaoke";
 }
 
 interface Scene {
@@ -71,6 +78,11 @@ export class VSLGenerator {
     this.ensureDirectories();
   }
 
+  private async ensureDirectories() {
+    await fs.mkdir(this.outputDir, { recursive: true });
+    await fs.mkdir(this.tempDir, { recursive: true });
+  }
+
   private async generateVoiceover(
     script: string,
     outputPath: string,
@@ -80,27 +92,124 @@ export class VSLGenerator {
     logger.stage(
       "📊",
       "VOICEOVER",
-      `Script length: ${script.length} characters`
+      `Raw script length: ${script.length} characters`
     );
 
-    const mp3Response = await openai.audio.speech.create({
-      model: "tts-1-hd",
-      voice: "nova",
-      input: script,
-      speed: 1.0,
-    });
+    // ✅ Clean the script - remove production notes and formatting
+    let cleanScript = script
+      // Remove markdown headers
+      .replace(/^#+ .+$/gm, "")
+      // Remove B-ROLL tags
+      .replace(/\{B-ROLL:[^}]+\}/g, "")
+      // Remove TEXT ON SCREEN tags
+      .replace(/\{TEXT ON SCREEN:[^}]+\}/g, "")
+      // Remove timestamp markers
+      .replace(/\*\*\[[\d:]+\]\*\*/g, "")
+      // Remove PAUSE markers
+      .replace(/\(PAUSE\)/g, "")
+      // Remove markdown bold
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      // Remove production notes section
+      .replace(/---\s*\*\*WORD COUNT:[\s\S]*$/, '')
+      // Remove multiple newlines
+      .replace(/\n{3,}/g, "\n\n")
+      // Trim whitespace
+      .trim();
 
-    const buffer = Buffer.from(await mp3Response.arrayBuffer());
-    await fs.writeFile(outputPath, buffer);
+    logger.stage(
+      "✂️",
+      "VOICEOVER",
+      `Cleaned script length: ${cleanScript.length} characters`
+    );
+
+    // ✅ If still too long, split into chunks (OpenAI limit: 4096 chars)
+    const MAX_CHUNK_SIZE = 4000; // Leave some buffer
+    const chunks: string[] = [];
+
+    if (cleanScript.length > MAX_CHUNK_SIZE) {
+      logger.stage(
+        "✂️",
+        "VOICEOVER",
+        "Script exceeds limit, splitting into chunks..."
+      );
+
+      // Split by paragraphs
+      const paragraphs = cleanScript.split("\n\n");
+      let currentChunk = "";
+
+      for (const paragraph of paragraphs) {
+        if ((currentChunk + paragraph).length > MAX_CHUNK_SIZE) {
+          if (currentChunk) {
+            chunks.push(currentChunk.trim());
+            currentChunk = paragraph;
+          } else {
+            // Single paragraph too long, split by sentences
+            const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
+            for (const sentence of sentences) {
+              if ((currentChunk + sentence).length > MAX_CHUNK_SIZE) {
+                chunks.push(currentChunk.trim());
+                currentChunk = sentence;
+              } else {
+                currentChunk += " " + sentence;
+              }
+            }
+          }
+        } else {
+          currentChunk += (currentChunk ? "\n\n" : "") + paragraph;
+        }
+      }
+
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+      }
+
+      logger.success("VOICEOVER", `Split into ${chunks.length} chunks`);
+    } else {
+      chunks.push(cleanScript);
+    }
+
+    // ✅ Generate TTS for each chunk and concatenate
+    const audioBuffers: Buffer[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      logger.stage(
+        "🎤",
+        "VOICEOVER",
+        `Generating chunk ${i + 1}/${chunks.length} (${
+          chunks[i].length
+        } chars)...`
+      );
+
+      const mp3Response = await openai.audio.speech.create({
+        model: "tts-1-hd",
+        voice: "nova",
+        input: chunks[i],
+        speed: 1.0,
+      });
+
+      const buffer = Buffer.from(await mp3Response.arrayBuffer());
+      audioBuffers.push(buffer);
+
+      logger.success(
+        "VOICEOVER",
+        `Chunk ${i + 1}/${chunks.length} generated (${(
+          buffer.length / 1024
+        ).toFixed(2)} KB)`
+      );
+    }
+
+    // ✅ Concatenate all audio chunks
+    const finalBuffer = Buffer.concat(audioBuffers);
+    await fs.writeFile(outputPath, finalBuffer);
 
     logger.success(
       "VOICEOVER",
-      `Audio file saved: ${path.basename(outputPath)}`
+      `Final audio saved: ${path.basename(outputPath)}`
     );
     logger.stage(
       "📦",
       "VOICEOVER",
-      `File size: ${(buffer.length / 1024).toFixed(2)} KB`
+      `Total size: ${(finalBuffer.length / 1024).toFixed(2)} KB`
     );
   }
 
@@ -110,22 +219,27 @@ export class VSLGenerator {
   ): Promise<number> {
     logger.stage("⏱️", "ANALYSIS", "Analyzing audio duration...");
 
+    const ffmpegInstance = await initFFmpeg();
+
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(audioPath, (err, metadata) => {
-        if (err) {
-          logger.error("ANALYSIS", "Failed to get audio duration", err);
-          reject(err);
-        } else {
-          const duration = metadata.format.duration || 0;
-          logger.success(
-            "ANALYSIS",
-            `Audio duration: ${duration.toFixed(2)}s (${Math.floor(
-              duration / 60
-            )}m ${Math.floor(duration % 60)}s)`
-          );
-          resolve(duration);
+      (ffmpegInstance as any).ffprobe(
+        audioPath,
+        (err: Error | null, metadata: any) => {
+          if (err) {
+            logger.error("ANALYSIS", "Failed to get audio duration", err);
+            reject(err);
+          } else {
+            const duration = metadata.format.duration || 0;
+            logger.success(
+              "ANALYSIS",
+              `Audio duration: ${duration.toFixed(2)}s (${Math.floor(
+                duration / 60
+              )}m ${Math.floor(duration % 60)}s)`
+            );
+            resolve(duration);
+          }
         }
-      });
+      );
     });
   }
 
@@ -141,9 +255,13 @@ export class VSLGenerator {
 
     try {
       const audioFile = await fs.readFile(audioPath);
-      const file = new File([audioFile], path.basename(audioPath), {
-        type: "audio/mpeg",
-      });
+
+      // ✅ FIX 2: Proper File creation for Node.js Buffer
+      const file = new File(
+        [new Uint8Array(audioFile)], // Convert Buffer to Uint8Array
+        path.basename(audioPath),
+        { type: "audio/mpeg" }
+      );
 
       const transcription = await openai.audio.transcriptions.create({
         file: file,
@@ -183,6 +301,7 @@ export class VSLGenerator {
       return [];
     }
   }
+
   private async splitScriptIntoScenes(
     script: string,
     niche: string,
@@ -210,14 +329,13 @@ Return ONLY valid JSON in this format:
   "scenes": [
     {
       "title": "Scene Title",
-      "prompt": "Detailed DALL-E prompt for background image..."
-      "text": "Script text for this scene...",
+      "prompt": "Detailed DALL-E prompt for background image...",
+      "text": "Script text for this scene..."
     }
-    ]
+  ]
 }`,
           },
           {
-            // ...
             role: "user",
             content: `Niche: ${niche}\n\nScript:\n${script}\n\nCreate **10-15 short scenes** with engaging visuals that match the script narrative.`,
           },
@@ -225,7 +343,7 @@ Return ONLY valid JSON in this format:
         temperature: 0.7,
       });
 
-      const content = response.choices[0].message.content || "{}";
+      const content = response.choices[0]?.message?.content || "{}";
       const parsed = JSON.parse(content);
 
       if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
@@ -233,7 +351,7 @@ Return ONLY valid JSON in this format:
       }
 
       logger.success("AI ANALYSIS", `Created ${parsed.scenes.length} scenes`);
-      parsed.scenes.forEach((scene, i) => {
+      parsed.scenes.forEach((scene: Scene, i: number) => {
         logger.stage("📝", "AI ANALYSIS", `Scene ${i + 1}: "${scene.title}"`);
       });
 
@@ -246,6 +364,37 @@ Return ONLY valid JSON in this format:
       logger.error("AI ANALYSIS", "Error details", error);
       return this.fallbackSceneSplit(script, niche, logger);
     }
+  }
+
+  // ✅ FIX: Add missing fallback method
+  private fallbackSceneSplit(
+    script: string,
+    niche: string,
+    logger: ConsoleLogger
+  ): Scene[] {
+    logger.stage("🔄", "FALLBACK", "Using fallback scene splitting...");
+
+    // Split script into sentences
+    const sentences = script.match(/[^.!?]+[.!?]+/g) || [script];
+    const scenesPerGroup = Math.ceil(sentences.length / 12); // Aim for ~12 scenes
+
+    const scenes: Scene[] = [];
+
+    for (let i = 0; i < sentences.length; i += scenesPerGroup) {
+      const sceneText = sentences
+        .slice(i, i + scenesPerGroup)
+        .join(" ")
+        .trim();
+
+      scenes.push({
+        title: `Scene ${scenes.length + 1}`,
+        text: sceneText,
+        prompt: `Professional ${niche} business scene, modern office or work environment, clean corporate aesthetic, 16:9 aspect ratio`,
+      });
+    }
+
+    logger.success("FALLBACK", `Created ${scenes.length} fallback scenes`);
+    return scenes;
   }
 
   private async generateBackgroundImage(
@@ -274,8 +423,15 @@ Return ONLY valid JSON in this format:
 
       const generationTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
-      const imageUrl = response.data[0].url;
-      if (!imageUrl) throw new Error("No image URL received from OpenAI");
+      // ✅ FIX 3: Add proper null check
+      if (!response.data || response.data.length === 0) {
+        throw new Error("No image data received from OpenAI");
+      }
+
+      const imageUrl = response.data[0]?.url;
+      if (!imageUrl) {
+        throw new Error("No image URL received from OpenAI");
+      }
 
       logger.stage(
         "⬇️",
@@ -323,17 +479,18 @@ Return ONLY valid JSON in this format:
       `[${index + 1}] Creating scene: "${title}" (${Math.round(duration)}s)`
     );
 
+    const ffmpegInstance = await initFFmpeg();
+
     return new Promise((resolve, reject) => {
-      const ff = ffmpeg();
+      const ff = (ffmpegInstance as any)();
       const startTime = Date.now();
 
-      // Properly escape text for FFmpeg drawtext filter
-      // Replace problematic characters: single quotes, colons, backslashes
+      // Escape text for FFmpeg
       const escapedTitle = title
-        .replace(/\\/g, "\\\\\\\\") // Escape backslashes
-        .replace(/'/g, "'\\\\\\''") // Escape single quotes
-        .replace(/:/g, "\\:") // Escape colons
-        .replace(/%/g, "\\%"); // Escape percent signs
+        .replace(/\\/g, "\\\\\\\\")
+        .replace(/'/g, "'\\\\\\''")
+        .replace(/:/g, "\\:")
+        .replace(/%/g, "\\%");
 
       if (bgImagePath && bgImagePath !== "") {
         logger.stage(
@@ -342,7 +499,6 @@ Return ONLY valid JSON in this format:
           `[${index + 1}] Using generated image with zoom effect`
         );
 
-        // Calculate zoom duration in frames
         const zoomDuration = Math.ceil(duration * 30);
 
         ff.input(bgImagePath)
@@ -376,7 +532,7 @@ Return ONLY valid JSON in this format:
         "-r 30",
       ])
         .output(outputPath)
-        .on("progress", (p) => {
+        .on("progress", (p: any) => {
           if (p.percent && p.percent > 0 && p.percent % 25 === 0) {
             logger.stage(
               "⚙️",
@@ -393,7 +549,7 @@ Return ONLY valid JSON in this format:
           );
           resolve();
         })
-        .on("error", (err) => {
+        .on("error", (err: Error) => {
           logger.error(
             "SCENE VIDEO",
             `[${index + 1}] Scene creation failed`,
@@ -405,11 +561,6 @@ Return ONLY valid JSON in this format:
     });
   }
 
-  private async ensureDirectories() {
-    await fs.mkdir(this.outputDir, { recursive: true });
-    await fs.mkdir(this.tempDir, { recursive: true });
-  }
-
   private async generateKaraokeSubtitles(
     wordTimings: WordTiming[],
     outputPath: string,
@@ -417,22 +568,21 @@ Return ONLY valid JSON in this format:
   ): Promise<void> {
     logger.stage("🎤", "SUBTITLES", "Generating karaoke-style subtitles...");
 
-    // ASS file header with styling
     let assContent = `[Script Info]
-  Title: VSL Subtitles
-  ScriptType: v4.00+
-  WrapStyle: 0
-  PlayResX: 1920
-  PlayResY: 1080
-  ScaledBorderAndShadow: yes
-  
-  [V4+ Styles]
-  Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-  Style: Default,Arial,48,&H00FFFFFF,&H00FFFF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,50,50,80,1
-  
-  [Events]
-  Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-  `;
+Title: VSL Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1920
+PlayResY: 1080
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H00FFFF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,50,50,80,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
 
     if (wordTimings.length === 0) {
       logger.warning(
@@ -441,7 +591,6 @@ Return ONLY valid JSON in this format:
       );
       assContent += `Dialogue: 0,0:00:00.00,0:00:10.00,Default,,0,0,0,,No subtitles available\n`;
     } else {
-      // Group words into lines (max 6-8 words per line)
       const wordsPerLine = 7;
 
       for (let i = 0; i < wordTimings.length; i += wordsPerLine) {
@@ -449,10 +598,9 @@ Return ONLY valid JSON in this format:
         const startTime = lineWords[0].start;
         const endTime = lineWords[lineWords.length - 1].end;
 
-        // Build karaoke tags for each word
         let karaokeText = "";
         for (const word of lineWords) {
-          const duration = Math.round((word.end - word.start) * 100); // centiseconds
+          const duration = Math.round((word.end - word.start) * 100);
           karaokeText += `{\\k${duration}}${word.word} `;
         }
 
@@ -477,6 +625,99 @@ Return ONLY valid JSON in this format:
     );
   }
 
+  /**
+   * Generate traditional closed captions (phrase-by-phrase)
+   * Professional B2B style - clean and unobtrusive
+   */
+  private async generateTraditionalSubtitles(
+    wordTimings: WordTiming[],
+    outputPath: string,
+    logger: ConsoleLogger
+  ): Promise<void> {
+    logger.stage(
+      "📝",
+      "SUBTITLES",
+      "Generating traditional closed captions..."
+    );
+
+    try {
+      // Group words into phrases (3-7 seconds each, ~10-15 words)
+      const phrases: Array<{
+        start: number;
+        end: number;
+        text: string;
+      }> = [];
+
+      let currentPhrase: string[] = [];
+      let phraseStart = 0;
+      let lastEnd = 0;
+
+      for (let i = 0; i < wordTimings.length; i++) {
+        const word = wordTimings[i];
+        currentPhrase.push(word.word);
+        lastEnd = word.end;
+
+        // Create new phrase every ~10 words or ~5 seconds
+        const shouldBreak =
+          currentPhrase.length >= 10 ||
+          word.end - phraseStart >= 5 ||
+          i === wordTimings.length - 1;
+
+        if (shouldBreak) {
+          phrases.push({
+            start: phraseStart,
+            end: lastEnd,
+            text: currentPhrase.join(" "),
+          });
+
+          currentPhrase = [];
+          phraseStart = lastEnd;
+        }
+      }
+
+      // Generate SRT format (standard subtitle format)
+      let srtContent = "";
+      phrases.forEach((phrase, index) => {
+        const startTime = this.formatSRTTime(phrase.start);
+        const endTime = this.formatSRTTime(phrase.end);
+
+        srtContent += `${index + 1}\n`;
+        srtContent += `${startTime} --> ${endTime}\n`;
+        srtContent += `${phrase.text}\n\n`;
+      });
+
+      await fs.writeFile(outputPath, srtContent, "utf-8");
+
+      logger.success(
+        "SUBTITLES",
+        `Traditional subtitles created (${phrases.length} phrases)`
+      );
+    } catch (error) {
+      logger.error(
+        "SUBTITLES",
+        "Failed to create traditional subtitles",
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Format time for SRT subtitles (HH:MM:SS,mmm)
+   */
+  private formatSRTTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const millis = Math.floor((seconds % 1) * 1000);
+
+    return `${hours.toString().padStart(2, "0")}:${mins
+      .toString()
+      .padStart(2, "0")}:${secs.toString().padStart(2, "0")},${millis
+      .toString()
+      .padStart(3, "0")}`;
+  }
+
   private formatASSTime(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -495,10 +736,12 @@ Return ONLY valid JSON in this format:
   ): Promise<void> {
     logger.stage("📸", "THUMBNAIL", "Generating thumbnail from video...");
 
+    const ffmpegInstance = await initFFmpeg();
+
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
 
-      ffmpeg(videoPath)
+      (ffmpegInstance as any)(videoPath)
         .screenshots({
           timestamps: ["00:00:02"],
           filename: path.basename(thumbnailPath),
@@ -513,16 +756,19 @@ Return ONLY valid JSON in this format:
           );
           resolve();
         })
-        .on("error", (err) => {
+        .on("error", (err: Error) => {
           logger.error("THUMBNAIL", "Thumbnail generation failed", err);
           reject(err);
         });
     });
   }
+
   private async mergeScenesAndAudio(
     sceneVideos: string[],
     outputPath: string,
     audioPath: string,
+    subtitlePath: string,
+    subtitleType: "none" | "traditional" | "karaoke",
     logger: ConsoleLogger
   ): Promise<void> {
     logger.stage(
@@ -531,11 +777,12 @@ Return ONLY valid JSON in this format:
       `Concatenating ${sceneVideos.length} scenes with audio...`
     );
 
+    const ffmpegInstance = await initFFmpeg();
+
     return new Promise((resolve, reject) => {
-      const ff = ffmpeg();
+      const ff = (ffmpegInstance as any)();
       const startTime = Date.now();
 
-      // Add all scene videos as inputs
       sceneVideos.forEach((video, i) => {
         logger.stage(
           "📥",
@@ -545,31 +792,55 @@ Return ONLY valid JSON in this format:
         ff.input(video);
       });
 
-      // Add the audio track as the last input
       ff.input(audioPath);
       logger.stage("🎵", "MERGING", `Audio: ${path.basename(audioPath)}`);
 
-      // Filter to concatenate all video streams (remove trailing semicolon!)
       const filterComplex =
         sceneVideos.map((_, i) => `[${i}:v]`).join("") +
-        `concat=n=${sceneVideos.length}:v=1:a=0[v]`; // ← Removed the semicolon here
+        `concat=n=${sceneVideos.length}:v=1:a=0[v]`;
 
       logger.stage("🔧", "MERGING", "Applying video concatenation filter...");
 
-      ff.complexFilter(filterComplex)
-        .outputOptions([
-          "-map [v]",
-          `-map ${sceneVideos.length}:a`,
-          "-c:v libx264",
-          "-preset medium",
-          "-crf 23",
-          "-c:a aac",
-          "-b:a 192k",
-          "-pix_fmt yuv420p",
-          "-movflags +faststart",
-        ])
+      // ✅ Add subtitle filter if subtitles are enabled
+      let videoMap = "[v]";
+      if (subtitlePath && subtitleType !== "none") {
+        const subtitleFilter =
+          subtitleType === "traditional"
+            ? `subtitles=${subtitlePath.replace(
+                /\\/g,
+                "/"
+              )}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,BackColour=&H80000000,Bold=0,Alignment=2,MarginV=60'`
+            : `ass=${subtitlePath.replace(/\\/g, "/")}`;
+
+        ff.complexFilter([filterComplex, `[v]${subtitleFilter}[vout]`]);
+        videoMap = "[vout]";
+        logger.stage(
+          "📝",
+          "MERGING",
+          `Adding ${subtitleType} subtitles to video...`
+        );
+      } else {
+        ff.complexFilter(filterComplex);
+        logger.stage(
+          "🎬",
+          "MERGING",
+          "Merging without subtitles (clean look)..."
+        );
+      }
+
+      ff.outputOptions([
+        `-map ${videoMap}`,
+        `-map ${sceneVideos.length}:a`,
+        "-c:v libx264",
+        "-preset medium",
+        "-crf 23",
+        "-c:a aac",
+        "-b:a 192k",
+        "-pix_fmt yuv420p",
+        "-movflags +faststart",
+      ])
         .output(outputPath)
-        .on("progress", (p) => {
+        .on("progress", (p: any) => {
           if (p.percent && p.percent > 0) {
             logger.stage(
               "⚙️",
@@ -586,7 +857,7 @@ Return ONLY valid JSON in this format:
           );
           resolve();
         })
-        .on("error", (err) => {
+        .on("error", (err: Error) => {
           logger.error("MERGING", "Merge failed", err);
           reject(err);
         })
@@ -594,10 +865,9 @@ Return ONLY valid JSON in this format:
     });
   }
 
-  /** 🎬 MAIN: Generate complete multi-scene VSL */
   async generateVSL(options: VSLGenerationOptions) {
-     // Initialize FFmpeg before use
-  await initFFmpeg();
+    await initFFmpeg();
+
     console.log("📋 VSL Generator received options:", {
       vslId: options.vslId,
       title: options.title,
@@ -625,7 +895,7 @@ Return ONLY valid JSON in this format:
       await this.generateVoiceover(options.script, audioPath, logger);
       const totalDuration = await this.getAudioDuration(audioPath, logger);
 
-      // 1.5 Get word-level timings from Whisper
+      // 1.5 Get word-level timings
       const wordTimings = await this.getWordTimings(audioPath, logger);
 
       // 2. Split script into scenes
@@ -649,14 +919,15 @@ Return ONLY valid JSON in this format:
         `Each scene will be ~${sceneDuration.toFixed(1)}s long`
       );
 
-      // 3. Generate images for each scene
+      // 3. Generate images
       logger.stage(
         "🎨",
         "IMAGE GEN",
         `Starting generation of ${scenes.length} images...`
       );
       const sceneImages: string[] = [];
-      for (const [i, scene] of scenes.entries()) {
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
         const imageProgress = 20 + ((i + 1) / scenes.length) * 30;
         progressTracker.updateProgress({
           vslId: options.vslId,
@@ -677,7 +948,7 @@ Return ONLY valid JSON in this format:
       }
       logger.success("IMAGE GEN", `All ${scenes.length} images generated`);
 
-      // 4. Create individual scene videos
+      // 4. Create scene videos
       progressTracker.updateProgress({
         vslId: options.vslId,
         stage: "scenes-video",
@@ -722,20 +993,65 @@ Return ONLY valid JSON in this format:
         `All ${scenes.length} scene videos created`
       );
 
-      // 5. Generate karaoke subtitles
+      // 5. Generate subtitles (optional based on settings)
+      const subtitleOption = options.subtitles || "none"; // Default: no subtitles
+      let subtitlePath = "";
+
+      if (subtitleOption !== "none") {
+        progressTracker.updateProgress({
+          vslId: options.vslId,
+          stage: "subtitles",
+          progress: 82,
+          message: `Generating ${subtitleOption} subtitles...`,
+          status: "processing",
+        });
+
+        logger.stage(
+          "📝",
+          "SUBTITLES",
+          `Creating ${subtitleOption} subtitles...`
+        );
+
+        if (subtitleOption === "traditional") {
+          subtitlePath = path.join(this.tempDir, `${videoId}.srt`);
+          await this.generateTraditionalSubtitles(
+            wordTimings,
+            subtitlePath,
+            logger
+          );
+        } else if (subtitleOption === "karaoke") {
+          subtitlePath = path.join(this.tempDir, `${videoId}.ass`);
+          await this.generateKaraokeSubtitles(
+            wordTimings,
+            subtitlePath,
+            logger
+          );
+        }
+      } else {
+        logger.stage(
+          "📝",
+          "SUBTITLES",
+          "Skipping subtitles (clean professional look)"
+        );
+      }
+
+      // 6. Merge scenes with audio (and optional subtitles)
       progressTracker.updateProgress({
         vslId: options.vslId,
-        stage: "subtitles",
-        progress: 82,
-        message: "Generating karaoke subtitles...",
+        stage: "assembly",
+        progress: 85,
+        message: "Assembling final video...",
         status: "processing",
       });
 
-      const subtitlePath = path.join(this.tempDir, `${videoId}.ass`);
-      await this.generateKaraokeSubtitles(wordTimings, subtitlePath, logger);
-
-      // 6. Merge scenes with audio and karaoke subtitles
-      await this.mergeScenesAndAudio(sceneVideos, videoPath, audioPath, logger);
+      await this.mergeScenesAndAudio(
+        sceneVideos,
+        videoPath,
+        audioPath,
+        subtitlePath,
+        subtitleOption,
+        logger
+      );
 
       // 7. Generate thumbnail
       progressTracker.updateProgress({
@@ -748,7 +1064,7 @@ Return ONLY valid JSON in this format:
 
       await this.generateThumbnail(videoPath, thumbnailPath, logger);
 
-      // Upload to Cloudinary
+      // 8. Upload to Cloudinary
       progressTracker.updateProgress({
         vslId: options.vslId,
         stage: "upload",
@@ -763,7 +1079,6 @@ Return ONLY valid JSON in this format:
         videoPath,
         `vsl_${videoId}`
       );
-
       logger.success(
         "CLOUDINARY",
         `Video uploaded: ${videoUploadResult.secureUrl}`
@@ -779,13 +1094,12 @@ Return ONLY valid JSON in this format:
         thumbnailPath,
         `vsl_thumb_${videoId}`
       );
-
       logger.success(
         "CLOUDINARY",
         `Thumbnail uploaded: ${thumbnailUploadResult.secureUrl}`
       );
 
-      // 8. Cleanup temp files
+      // 9. Cleanup
       progressTracker.updateProgress({
         vslId: options.vslId,
         stage: "cleanup",
@@ -808,9 +1122,10 @@ Return ONLY valid JSON in this format:
         }
       }
 
-      // ⬇️ CHANGED: Also cleanup the final video and thumbnail from local storage
       await fs.unlink(audioPath).catch(() => {});
-      await fs.unlink(subtitlePath).catch(() => {});
+      if (subtitlePath) {
+        await fs.unlink(subtitlePath).catch(() => {});
+      }
       await fs.unlink(videoPath).catch(() => {});
       await fs.unlink(thumbnailPath).catch(() => {});
 
@@ -827,13 +1142,11 @@ Return ONLY valid JSON in this format:
 
       logger.complete(Math.round(totalDuration));
 
-      // ⬇️ CHANGED: Return Cloudinary URLs instead of local URLs
       return {
-        videoUrl: videoUploadResult.secureUrl, // ⬅️ Cloudinary URL
-        thumbnailUrl: thumbnailUploadResult.secureUrl, // ⬅️ Cloudinary URL
+        videoUrl: videoUploadResult.secureUrl,
+        thumbnailUrl: thumbnailUploadResult.secureUrl,
         duration: Math.round(totalDuration),
         cloudinaryPublicIds: {
-          // ⬅️ NEW: Store these for deletion later if needed
           video: videoUploadResult.publicId,
           thumbnail: thumbnailUploadResult.publicId,
         },

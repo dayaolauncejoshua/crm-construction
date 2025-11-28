@@ -1473,55 +1473,153 @@ Provide improvement opportunities, risks, timeline, and ROI estimate.`;
 export async function generateVSLScript(
   niche: string,
   data: {
-    targetAudience: string;
-    painPoints: string;
-    solution: string;
-    proofElements: string;
+    targetAudience?: string;
+    painPoints?: string;
+    solution?: string;
+    proofElements?: string;
   }
 ): Promise<string> {
+  console.log("🎬 Generating VSL script for niche:", niche);
+
+  const prompt = `You are a world-class direct-response copywriter specializing in B2B SaaS video sales letters for the Canadian market.
+
+Your task: Write a compelling 2-4 minute VSL script for an AI Lead Generation CRM targeting ${niche} businesses in Canada.
+
+## TARGET AUDIENCE
+${data.targetAudience || `${niche} business owners and managers in Canada`}
+
+## THEIR PAIN POINTS
+${data.painPoints || `Missing quality leads, slow response times, manual follow-ups, disorganized lead management, difficulty scaling operations`}
+
+## THE SOLUTION
+${data.solution || `AI-powered lead generation system that responds in under 2 minutes, automates follow-ups, qualifies leads, books meetings, and provides complete pipeline visibility`}
+
+## PROOF ELEMENTS
+${data.proofElements || `300% increase in qualified leads, 67% of conversations handled by AI, response time reduced from 4 hours to 0.3 minutes, proven results across Canadian construction and service businesses`}
+
+## VSL STRUCTURE (Exact Timestamps - Critical for Video Production)
+
+**[00:00-00:05] HOOK**
+- Start with a pattern interrupt: shocking statistic or relatable frustration
+- Make them think "Wait, that's exactly my problem"
+- Example: "Here's a question: How many leads did you lose last week because no one answered fast enough?"
+
+**[00:05-00:30] PROBLEM AGITATION**
+- Paint the "before" picture they're living right now
+- Make it emotional - tap into frustration, fear of missing out
+- Use specific scenarios they've experienced
+- Example: "You're on-site managing a crew. Phone rings. By the time you call back, they've already hired someone else."
+
+**[00:30-01:15] SOLUTION REVEAL**
+- Introduce the AI CRM as the hero
+- Paint the "after" picture - what life looks like with this system
+- Focus on BENEFITS not features (save time, make more money, reduce stress)
+- Use concrete examples and real scenarios
+
+**[01:15-02:00] HOW IT WORKS**
+- Simple 3-step process
+- Walk through a real scenario: Lead comes in → AI responds → Meeting booked
+- Keep it simple - don't overwhelm with tech details
+
+**[02:00-02:30] CREDIBILITY & SOCIAL PROOF**
+- Share real results with specific numbers
+- Create FOMO (others are already winning with this)
+- Build trust through proven track record
+
+**[02:30-03:00] OBJECTION HANDLING**
+- Address: Price (ROI + free trial), Complexity (fully automated), Fit (proven in their industry)
+- Preemptively answer "But what about..."
+
+**[03:00-03:30] CALL TO ACTION**
+- Clear next step (book free demo, start trial)
+- Create urgency (limited spots, bonus for quick action)
+- Risk reversal (money-back guarantee, no credit card)
+
+## WRITING STYLE REQUIREMENTS
+
+✅ CONVERSATIONAL: Write like you're talking to a friend over coffee, not giving a corporate presentation
+✅ SHORT SENTENCES: 8-15 words maximum. Punchy. Direct. Easy to follow.
+✅ CANADIAN ENGLISH: Professional North American business language, neutral accent-friendly
+✅ ACTIVE VOICE: "You'll save 10 hours" not "10 hours will be saved"
+✅ EMOTIONAL TRIGGERS: Tap into fear of missing out, desire for success, frustration relief
+✅ "YOU" LANGUAGE: Use "you" at least 3 times per paragraph - make it about THEM
+✅ CONCRETE EXAMPLES: "50 qualified leads per month" not "more leads"
+
+❌ NO CORPORATE SPEAK: Avoid "leverage," "synergy," "utilize," "solutions provider"
+❌ NO LONG PARAGRAPHS: Break it up. Keep it snappy.
+❌ NO PASSIVE VOICE: Be direct and clear.
+❌ NO SLANG OR REGIONAL EXPRESSIONS: Keep it professional and universally Canadian
+❌ NO EXCESSIVE SALES PRESSURE: Build value, don't force the sale
+
+## FORMATTING INSTRUCTIONS
+
+Use these markers for video production:
+
+- **[TIMESTAMP]** for timing (e.g., [00:00], [01:30])
+- **{B-ROLL: description}** for visual scene suggestions (e.g., {B-ROLL: Construction site, missed call notification})
+- **{TEXT ON SCREEN: "Quote"}** for key points to display as overlays (stats, key quotes)
+- **(PAUSE)** for dramatic effect before a reveal
+- Use **bold** for emphasis on key words
+
+## EXAMPLE OPENING
+
+[00:00] {B-ROLL: Construction site, phone ringing}
+"Here's a question: How many leads did you lose last week because no one answered fast enough?
+
+In construction, timing is everything. A homeowner calls three contractors. The first to respond gets the project 67% of the time.
+
+{TEXT ON SCREEN: "67% of projects go to whoever responds first"}
+
+But when you're on-site. In meetings. Managing crews. (PAUSE)
+
+...those calls go to voicemail.
+
+And by the time you call back? They've already hired someone else.
+
+Frustrating, right? Because it's not your fault. The problem is you don't have a system..."
+
+## TARGET LENGTH
+Write exactly 650-850 words (approximately 2-4 minutes when spoken naturally at conversational pace).
+
+## CRITICAL REMINDERS
+- Write for CANADIAN business owners (use CAD pricing references if needed)
+- Focus on TRANSFORMATION (before → after)
+- Tell a STORY, don't just list features
+- Create URGENCY through value, not pressure tactics
+- Make them feel UNDERSTOOD first, then offer the solution
+
+Now write the complete VSL script following this exact structure and style guide.`;
+
   try {
-    const prompt = `Create a compelling Video Sales Letter (VSL) script for a ${niche} business.
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4000,
+      temperature: 0.85,
+      system: `You are a world-class direct-response copywriter specializing in B2B video sales letters for the Canadian market. You understand how to write compelling, conversion-focused scripts that build trust and drive action. You write in clear, professional Canadian English that resonates with business owners across industries.`,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
 
-TARGET AUDIENCE: ${data.targetAudience}
-PAIN POINTS: ${data.painPoints}
-SOLUTION: ${data.solution}
-PROOF: ${data.proofElements}
+    const scriptContent =
+      response.content[0].type === "text" ? response.content[0].text : "";
 
-Create a 2-3 minute VSL script that follows this structure:
-1. HOOK (15 seconds): Powerful question or statement
-2. PROBLEM AGITATION (30 seconds): Amplify pain points
-3. SOLUTION INTRODUCTION (45 seconds): Present solution benefits
-4. PROOF & CREDIBILITY (30 seconds): Results, testimonials
-5. CALL TO ACTION (20 seconds): Clear next step with urgency
+    if (!scriptContent) {
+      throw new Error("Failed to generate VSL script - empty response");
+    }
 
-Requirements:
-- Conversational, engaging tone
-- Use "you" and "your"
-- Include specific numbers and results
-- Create urgency without being pushy
+    console.log("✅ VSL script generated successfully");
+    console.log("📊 Script length:", scriptContent.split(" ").length, "words");
 
-Write the complete script now:`;
-
-    const response = await callClaudeWithRetry(() =>
-      anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 2000,
-        temperature: 0.8,
-        system:
-          "You are an expert copywriter specializing in video sales letters. Write persuasive, benefit-driven scripts.",
-        messages: [{ role: "user", content: prompt }],
-      })
-    );
-
-    const content = response.content[0];
-    const script = content.type === "text" ? content.text : "";
-
-    console.log("✅ VSL script generated");
-
-    return script;
+    return scriptContent;
   } catch (error) {
-    console.error("Error generating VSL script:", error);
-    throw new Error("Failed to generate VSL script");
+    console.error("❌ Error generating VSL script:", error);
+    throw new Error(
+      `Failed to generate VSL script: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
   }
 }
 

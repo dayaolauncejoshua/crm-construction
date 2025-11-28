@@ -33,6 +33,7 @@ import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { normalizePhone, normalizeEmail } from "./utils/normalize";
 
+
 // Helper function to check if user owns the resource
 function checkOwnership(
   userRole: string,
@@ -110,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // app.use("/api/stripe", stripeWebhookRouter);
   const httpServer = createServer(app);
 
-  // app.use(vslapp);
+  app.use(vslapp);
 
   let wss: WebSocketServer | null = null;
   function broadcastUpdate(data: any) {

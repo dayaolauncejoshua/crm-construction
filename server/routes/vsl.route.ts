@@ -6,6 +6,7 @@ import {
   getClientId,
   getSingleVSL,
   updateVSL,
+  trackVSLView,
 } from "server/controllers/vsl.controller";
 
 const router = Router();
@@ -25,7 +26,7 @@ router.patch("/api/vsls/:vslId", updateVSL);
 // Delete VSL
 router.delete("/api/vsls/:vslId", deleteVSL);
 
-// Track VSL view
-router.post("/api/vsls/:vslId/view");
+// Track VSL view ✅ ADD THIS
+router.post("/api/vsls/:vslId/view", trackVSLView);
 
 export default router;

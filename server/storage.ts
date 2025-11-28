@@ -1821,10 +1821,7 @@ export class DatabaseStorage implements IStorage {
     return metrics;
   }
 
-  async createVSL(vsl: InsertVSL): Promise<VSL> {
-    const [newVSL] = await db.insert(vsls).values(vsl).returning();
-    return newVSL;
-  }
+
 
   // ============= BOOKING METHODS =============
 
@@ -2592,6 +2589,8 @@ async getRecentActivity(clientId: string): Promise<any[]> {
   }
 }
 
+  // ==================== VSL METHODS ====================
+
   // VSL operations
 
   async getVSL(vslId: string): Promise<VSL | undefined> {
@@ -2601,6 +2600,11 @@ async getRecentActivity(clientId: string): Promise<any[]> {
       .where(eq(vsls.id, vslId))
       .limit(1);
     return vsl;
+  }
+
+    async createVSL(vsl: InsertVSL): Promise<VSL> {
+    const [newVSL] = await db.insert(vsls).values(vsl).returning();
+    return newVSL;
   }
 
   async updateVSL(vslId: string, data: Partial<InsertVSL>): Promise<VSL> {
@@ -2624,6 +2628,15 @@ async getRecentActivity(clientId: string): Promise<any[]> {
       })
       .where(eq(vsls.id, vslId));
   }
+
+  async getVSLsByClient(clientId: string): Promise<VSL[]> {
+  const vslList = await db
+    .select()
+    .from(vsls)
+    .where(eq(vsls.clientId, clientId))
+    .orderBy(desc(vsls.createdAt));
+  return vslList;
+}
 
   // ==================== FOLLOW-UPS METHODS ====================
 
