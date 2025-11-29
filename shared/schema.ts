@@ -396,6 +396,10 @@ export const vsls = pgTable("vsls", {
     .notNull(),
   title: varchar("title").notNull(),
   script: text("script"),
+  targetDuration: varchar("target_duration").default("2min"), // 30s, 1min, 2min, 3min, 5min
+  subtitleType: varchar("subtitle_type", { 
+    enum: ["none", "traditional", "karaoke"] 
+  }).default("none"),
   videoUrl: varchar("video_url"),
   thumbnailUrl: varchar("thumbnail_url"),
   duration: integer("duration"), // in seconds

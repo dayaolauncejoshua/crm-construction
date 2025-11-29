@@ -1470,6 +1470,12 @@ Provide improvement opportunities, risks, timeline, and ROI estimate.`;
 // VSL SCRIPT GENERATION
 // ============================================
 
+export interface VSLScriptOptions {
+  duration?: "30s" | "1min" | "2min" | "3min" | "5min"; // Duration control
+  includeSubtitles?: boolean;
+  voiceStyle?: "professional" | "conversational" | "energetic";
+}
+
 export async function generateVSLScript(
   niche: string,
   data: {
@@ -1477,125 +1483,177 @@ export async function generateVSLScript(
     painPoints?: string;
     solution?: string;
     proofElements?: string;
+    duration?: "30s" | "1min" | "2min" | "3min" | "5min";
   }
 ): Promise<string> {
   console.log("🎬 Generating VSL script for niche:", niche);
 
+  // Duration-based word count targets
+  const durationSettings = {
+    "30s": { words: "120-150", sections: "Hook + Problem + CTA" },
+    "1min": { words: "150-180", sections: "Hook + Problem + Solution + CTA" },
+    "2min": {
+      words: "300-350",
+      sections: "Hook + Problem + Solution + Proof + CTA",
+    },
+    "3min": { words: "450-550", sections: "Full VSL with detailed proof" },
+    "5min": {
+      words: "750-900",
+      sections: "Deep-dive VSL with objection handling",
+    },
+  };
+
+  const selectedDuration = data.duration || "2min";
+  const settings = durationSettings[selectedDuration];
+
   const prompt = `You are a world-class direct-response copywriter specializing in B2B SaaS video sales letters for the Canadian market.
 
-Your task: Write a compelling 2-4 minute VSL script for an AI Lead Generation CRM targeting ${niche} businesses in Canada.
+⚠️ ⚠️ ⚠️ ABSOLUTE WORD COUNT LIMITS - NON-NEGOTIABLE ⚠️ ⚠️ ⚠️
 
-## TARGET AUDIENCE
-${data.targetAudience || `${niche} business owners and managers in Canada`}
+${
+  selectedDuration === "30s"
+    ? `**HARD LIMIT: 150 WORDS MAXIMUM**
+**TARGET: 120-140 words**
+**YOU WILL BE PENALIZED IF YOU EXCEED 150 WORDS**`
+    : selectedDuration === "1min"
+    ? `**HARD LIMIT: 180 WORDS MAXIMUM**
+**TARGET: 150-170 words**
+**YOU WILL BE PENALIZED IF YOU EXCEED 180 WORDS**`
+    : selectedDuration === "2min"
+    ? `**HARD LIMIT: 350 WORDS MAXIMUM**
+**TARGET: 300-330 words**
+**YOU WILL BE PENALIZED IF YOU EXCEED 350 WORDS**`
+    : selectedDuration === "3min"
+    ? `**HARD LIMIT: 550 WORDS MAXIMUM**
+**TARGET: 450-520 words**
+**YOU WILL BE PENALIZED IF YOU EXCEED 550 WORDS**`
+    : `**HARD LIMIT: 900 WORDS MAXIMUM**
+**TARGET: 750-850 words**
+**YOU WILL BE PENALIZED IF YOU EXCEED 900 WORDS**`
+}
 
-## THEIR PAIN POINTS
-${data.painPoints || `Missing quality leads, slow response times, manual follow-ups, disorganized lead management, difficulty scaling operations`}
+**MANDATORY PRE-SUBMISSION CHECK:**
+1. Count your words BEFORE submitting
+2. If over limit, CUT ruthlessly - remove examples, shorten sentences
+3. Quality over quantity - every word must earn its place
+4. Prioritize: Hook > Problem > CTA > Details
 
-## THE SOLUTION
-${data.solution || `AI-powered lead generation system that responds in under 2 minutes, automates follow-ups, qualifies leads, books meetings, and provides complete pipeline visibility`}
+🎯 **CRITICAL REQUIREMENTS - READ FIRST**
 
-## PROOF ELEMENTS
-${data.proofElements || `300% increase in qualified leads, 67% of conversations handled by AI, response time reduced from 4 hours to 0.3 minutes, proven results across Canadian construction and service businesses`}
+1. **LANGUAGE**: Use ONLY professional Canadian/American English. NO other languages.
+2. **DURATION**: Exactly ${selectedDuration} (${
+    settings.words
+  } words) - **STRICT LIMIT**
+3. **READABILITY**: All text overlays must be SHORT (3-5 words max), CLEAR, and IN ENGLISH
+4. **STRUCTURE**: Include only: ${settings.sections}
+5. **WORD COUNT**: You MUST stay under the hard limit or your script will be rejected
 
-## VSL STRUCTURE (Exact Timestamps - Critical for Video Production)
+## TARGET DETAILS
 
-**[00:00-00:05] HOOK**
-- Start with a pattern interrupt: shocking statistic or relatable frustration
-- Make them think "Wait, that's exactly my problem"
-- Example: "Here's a question: How many leads did you lose last week because no one answered fast enough?"
+**Niche**: ${niche}
+**Audience**: ${
+    data.targetAudience || `${niche} business owners and managers in Canada`
+  }
+**Pain Points**: ${
+    data.painPoints ||
+    `Missing quality leads, slow response times, manual follow-ups`
+  }
+**Solution**: ${
+    data.solution || `AI-powered lead generation system with instant response`
+  }
+**Proof**: ${
+    data.proofElements ||
+    `300% increase in qualified leads, 67% AI-handled conversations`
+  }
 
-**[00:05-00:30] PROBLEM AGITATION**
-- Paint the "before" picture they're living right now
-- Make it emotional - tap into frustration, fear of missing out
-- Use specific scenarios they've experienced
-- Example: "You're on-site managing a crew. Phone rings. By the time you call back, they've already hired someone else."
+## VSL STRUCTURE FOR ${selectedDuration.toUpperCase()}
 
-**[00:30-01:15] SOLUTION REVEAL**
-- Introduce the AI CRM as the hero
-- Paint the "after" picture - what life looks like with this system
-- Focus on BENEFITS not features (save time, make more money, reduce stress)
-- Use concrete examples and real scenarios
+${generateStructureGuide(selectedDuration)}
 
-**[01:15-02:00] HOW IT WORKS**
-- Simple 3-step process
-- Walk through a real scenario: Lead comes in → AI responds → Meeting booked
-- Keep it simple - don't overwhelm with tech details
+## TEXT OVERLAY RULES (CRITICAL FOR READABILITY)
 
-**[02:00-02:30] CREDIBILITY & SOCIAL PROOF**
-- Share real results with specific numbers
-- Create FOMO (others are already winning with this)
-- Build trust through proven track record
+✅ **DO:**
+- Keep text overlays SHORT: 3-5 words maximum
+- Use simple, impactful phrases
+- Examples: "67% Go To Fastest", "$10k Lost Weekly", "2-Minute Response"
+- Always in ENGLISH
+- High contrast (white text on dark, or vice versa)
 
-**[02:30-03:00] OBJECTION HANDLING**
-- Address: Price (ROI + free trial), Complexity (fully automated), Fit (proven in their industry)
-- Preemptively answer "But what about..."
+❌ **DON'T:**
+- Long sentences in text overlays
+- Technical jargon in overlays
+- Multiple lines of text
+- Non-English words or phrases
 
-**[03:00-03:30] CALL TO ACTION**
-- Clear next step (book free demo, start trial)
-- Create urgency (limited spots, bonus for quick action)
-- Risk reversal (money-back guarantee, no credit card)
+## TEXT OVERLAY FORMAT
 
-## WRITING STYLE REQUIREMENTS
+Use this EXACT format:
+{TEXT: "Short Phrase"} ← ALWAYS English, ALWAYS 3-5 words
 
-✅ CONVERSATIONAL: Write like you're talking to a friend over coffee, not giving a corporate presentation
-✅ SHORT SENTENCES: 8-15 words maximum. Punchy. Direct. Easy to follow.
-✅ CANADIAN ENGLISH: Professional North American business language, neutral accent-friendly
-✅ ACTIVE VOICE: "You'll save 10 hours" not "10 hours will be saved"
-✅ EMOTIONAL TRIGGERS: Tap into fear of missing out, desire for success, frustration relief
-✅ "YOU" LANGUAGE: Use "you" at least 3 times per paragraph - make it about THEM
-✅ CONCRETE EXAMPLES: "50 qualified leads per month" not "more leads"
+Examples:
+✅ {TEXT: "67% First Response Wins"}
+✅ {TEXT: "Save 10 Hours Weekly"}
+✅ {TEXT: "300% More Leads"}
 
-❌ NO CORPORATE SPEAK: Avoid "leverage," "synergy," "utilize," "solutions provider"
-❌ NO LONG PARAGRAPHS: Break it up. Keep it snappy.
-❌ NO PASSIVE VOICE: Be direct and clear.
-❌ NO SLANG OR REGIONAL EXPRESSIONS: Keep it professional and universally Canadian
-❌ NO EXCESSIVE SALES PRESSURE: Build value, don't force the sale
+❌ {TEXT: "According to our recent research, approximately 67% of all construction projects typically go to the contractor who responds first to the initial inquiry"}
+❌ {TEXT: "Vous perdez des clients"} (French - WRONG)
 
-## FORMATTING INSTRUCTIONS
+## B-ROLL DESCRIPTIONS
 
-Use these markers for video production:
+Keep descriptions simple and production-friendly:
+{B-ROLL: Simple scene description}
 
-- **[TIMESTAMP]** for timing (e.g., [00:00], [01:30])
-- **{B-ROLL: description}** for visual scene suggestions (e.g., {B-ROLL: Construction site, missed call notification})
-- **{TEXT ON SCREEN: "Quote"}** for key points to display as overlays (stats, key quotes)
-- **(PAUSE)** for dramatic effect before a reveal
-- Use **bold** for emphasis on key words
+Examples:
+✅ {B-ROLL: Phone ringing on construction site}
+✅ {B-ROLL: Calendar with booking confirmed}
+✅ {B-ROLL: Happy contractor shaking hands}
 
-## EXAMPLE OPENING
+## TIMING FORMAT
 
-[00:00] {B-ROLL: Construction site, phone ringing}
-"Here's a question: How many leads did you lose last week because no one answered fast enough?
+Use precise timestamps:
+[MM:SS] for each section
+Example: [00:00], [00:15], [00:30]
 
-In construction, timing is everything. A homeowner calls three contractors. The first to respond gets the project 67% of the time.
+## WRITING STYLE
 
-{TEXT ON SCREEN: "67% of projects go to whoever responds first"}
+✅ **Conversational Canadian English**: Professional but friendly
+✅ **Short sentences**: 8-12 words maximum  
+✅ **Active voice**: "You'll save 10 hours" not "10 hours will be saved"
+✅ **Concrete numbers**: "50 qualified leads" not "more leads"
+✅ **You-focused**: Use "you/your" 3x per paragraph
 
-But when you're on-site. In meetings. Managing crews. (PAUSE)
+❌ **NO corporate jargon**: Avoid "leverage," "synergy," "utilize"
+❌ **NO long paragraphs**: Break it up
+❌ **NO passive voice**: Be direct
 
-...those calls go to voicemail.
+## TARGET LENGTH - CRITICAL REMINDER
 
-And by the time you call back? They've already hired someone else.
-
-Frustrating, right? Because it's not your fault. The problem is you don't have a system..."
-
-## TARGET LENGTH
-Write exactly 650-850 words (approximately 2-4 minutes when spoken naturally at conversational pace).
+⚠️ Write EXACTLY ${settings.words} words for ${selectedDuration} duration.
+⚠️ At 150 words per minute speaking pace, this equals ${selectedDuration}.
+⚠️ COUNT YOUR WORDS before submitting - if over limit, CUT content.
 
 ## CRITICAL REMINDERS
-- Write for CANADIAN business owners (use CAD pricing references if needed)
-- Focus on TRANSFORMATION (before → after)
-- Tell a STORY, don't just list features
-- Create URGENCY through value, not pressure tactics
-- Make them feel UNDERSTOOD first, then offer the solution
 
-Now write the complete VSL script following this exact structure and style guide.`;
+1. **ENGLISH ONLY**: Every word, every text overlay, every phrase must be in English
+2. **SHORT TEXT**: Text overlays are 3-5 words MAX
+3. **EXACT DURATION**: Hit the ${
+    settings.words
+  } word count target - **DO NOT EXCEED**
+4. **CANADIAN MARKET**: Use CAD, Canadian business references
+5. **PROFESSIONAL TONE**: B2B, trustworthy, authoritative but approachable
+
+⚠️ FINAL WARNING: Scripts exceeding the word limit will cause videos longer than ${selectedDuration}. 
+Stay within ${settings.words} words. Quality beats quantity.
+
+Now write the complete ${selectedDuration} VSL script following this exact structure and style guide. 
+**COUNT YOUR WORDS AND ENSURE YOU'RE UNDER THE LIMIT BEFORE SUBMITTING.**`;
 
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      temperature: 0.85,
-      system: `You are a world-class direct-response copywriter specializing in B2B video sales letters for the Canadian market. You understand how to write compelling, conversion-focused scripts that build trust and drive action. You write in clear, professional Canadian English that resonates with business owners across industries.`,
+      max_tokens: selectedDuration === "5min" ? 5000 : 3000,
+      temperature: 0.6,
+      system: `You are a professional VSL copywriter who STRICTLY adheres to word count limits. You write ONLY in clear, professional Canadian/American English. You never use non-English words or phrases. You keep text overlays SHORT (3-5 words) for maximum readability. You COUNT YOUR WORDS before submitting and CUT ruthlessly if over the limit. You understand that exceeding word counts creates videos longer than the target duration, which is unacceptable. Quality over quantity - every word must earn its place.`,
       messages: [
         {
           role: "user",
@@ -1611,15 +1669,164 @@ Now write the complete VSL script following this exact structure and style guide
       throw new Error("Failed to generate VSL script - empty response");
     }
 
+    // ✅ POST-PROCESSING: Validate English-only
+    const hasNonEnglish = /[^\x00-\x7F]/g.test(scriptContent);
+    if (hasNonEnglish) {
+      console.warn("⚠️ Non-English characters detected in script");
+    }
+
+    // ✅ POST-PROCESSING: Validate word count
+    const actualWordCount = scriptContent
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length;
+    const maxWordCounts = {
+      "30s": 150,
+      "1min": 180,
+      "2min": 350,
+      "3min": 550,
+      "5min": 900,
+    };
+    const maxWords = maxWordCounts[selectedDuration];
+    const wordCountStatus =
+      actualWordCount <= maxWords ? "✅ PASS" : "⚠️ EXCEEDS LIMIT";
+
     console.log("✅ VSL script generated successfully");
-    console.log("📊 Script length:", scriptContent.split(" ").length, "words");
+    console.log("📊 Script details:", {
+      targetDuration: selectedDuration,
+      targetWords: settings.words,
+      actualWords: actualWordCount,
+      maxWords: maxWords,
+      status: wordCountStatus,
+      sections: settings.sections,
+    });
+
+    // ✅ Warning if script is too long
+    if (actualWordCount > maxWords) {
+      console.warn(
+        `⚠️ WARNING: Script is ${actualWordCount - maxWords} words over limit!`
+      );
+      console.warn(
+        `   Expected duration will be longer than ${selectedDuration}`
+      );
+      console.warn(
+        `   Actual words: ${actualWordCount} | Max allowed: ${maxWords}`
+      );
+    }
+
+    // ✅ Automatic truncation if severely over limit (optional - use with caution)
+    if (actualWordCount > maxWords * 1.3) {
+      console.error(
+        `❌ CRITICAL: Script is ${(
+          (actualWordCount / maxWords - 1) *
+          100
+        ).toFixed(0)}% over limit!`
+      );
+      console.warn(
+        `   This will produce a video significantly longer than ${selectedDuration}`
+      );
+      // Could implement automatic truncation here if needed
+    }
 
     return scriptContent;
   } catch (error) {
     console.error("❌ Error generating VSL script:", error);
     throw new Error(
-      `Failed to generate VSL script: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Failed to generate VSL script: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
     );
+  }
+}
+
+// ✅ NEW: Helper function for duration-specific structures
+function generateStructureGuide(duration: string): string {
+  switch (duration) {
+    case "30s":
+      return `**[00:00-00:10] HOOK**
+- Shocking stat or relatable pain point
+- Example: "67% of leads go to whoever responds first. How many did you lose?"
+
+**[00:10-00:20] PROBLEM**
+- Quick pain agitation
+- Example: "You're on-site. Phone rings. By the time you call back... they hired someone else."
+
+**[00:20-00:30] SOLUTION + CTA**
+- Instant solution reveal with clear action
+- Example: "AI responds in 0.3 minutes. Books meetings automatically. Start free trial."`;
+
+    case "1min":
+      return `**[00:00-00:15] HOOK**
+- Pattern interrupt with specific stat
+
+**[00:15-00:35] PROBLEM**
+- Paint the "before" picture they're living
+
+**[00:35-00:50] SOLUTION**
+- Reveal the AI CRM transformation
+
+**[00:50-01:00] CTA**
+- Clear next step with urgency`;
+
+    case "2min":
+      return `**[00:00-00:15] HOOK**
+- Shocking statistic or relatable frustration
+
+**[00:15-00:45] PROBLEM AGITATION**
+- Paint the "before" picture with emotional triggers
+
+**[00:45-01:20] SOLUTION REVEAL**
+- Introduce AI CRM as the hero
+- Paint "after" picture
+
+**[01:20-01:45] PROOF**
+- Real results with specific numbers
+
+**[01:45-02:00] CTA**
+- Clear next step with urgency`;
+
+    case "3min":
+      return `**[00:00-00:20] HOOK**
+- Compelling opening question or stat
+
+**[00:20-01:00] PROBLEM AGITATION**
+- Detailed pain scenarios
+
+**[01:00-01:40] SOLUTION REVEAL**
+- How AI CRM transforms their business
+
+**[01:40-02:10] HOW IT WORKS**
+- Simple 3-step process
+
+**[02:10-02:40] PROOF & CREDIBILITY**
+- Real results, social proof
+
+**[02:40-03:00] CTA**
+- Strong call to action`;
+
+    case "5min":
+      return `**[00:00-00:30] HOOK**
+- Extended pattern interrupt
+
+**[00:30-01:30] PROBLEM AGITATION**
+- Deep dive into pain points
+
+**[01:30-02:30] SOLUTION REVEAL**
+- Comprehensive transformation story
+
+**[02:30-03:15] HOW IT WORKS**
+- Detailed walkthrough
+
+**[03:15-04:00] PROOF & SOCIAL PROOF**
+- Multiple case studies
+
+**[04:00-04:30] OBJECTION HANDLING**
+- Address price, complexity, fit
+
+**[04:30-05:00] STRONG CTA**
+- Multiple calls to action with urgency`;
+
+    default:
+      return "Standard 2-minute structure";
   }
 }
 

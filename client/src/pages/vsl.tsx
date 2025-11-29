@@ -9,6 +9,7 @@ import {
   BreadcrumbSeparator,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
+import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { useState, useRef } from "react";
@@ -16,6 +17,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +40,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -63,6 +66,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Video,
@@ -84,16 +88,19 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useClient } from "@/contexts/ClientContext";
-import { Label } from "@radix-ui/react-dropdown-menu";
 import { getApiUrl } from "@/lib/api-config";
 
 const createVSLSchema = z.object({
   title: z.string().min(1, "Title is required"),
   niche: z.string().min(1, "Niche is required"),
+  targetDuration: z
+    .enum(["30s", "1min", "2min", "3min", "5min"])
+    .default("2min"),
   targetAudience: z.string().optional(),
   painPoints: z.string().optional(),
   solution: z.string().optional(),
   proofElements: z.string().optional(),
+  subtitleType: z.enum(["none", "traditional", "karaoke"]).default("none"),
 });
 
 type CreateVSLData = z.infer<typeof createVSLSchema>;
@@ -120,10 +127,12 @@ export default function VSL() {
     defaultValues: {
       title: "",
       niche: "",
+      targetDuration: "2min",
       targetAudience: "",
       painPoints: "",
       solution: "",
       proofElements: "",
+      subtitleType: "none",
     },
   });
 
@@ -372,6 +381,173 @@ export default function VSL() {
                               </SelectItem>
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="targetDuration"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">
+                            Video Duration
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value || "2min"}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="text-sm sm:text-base">
+                                <SelectValue placeholder="Select duration" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="30s">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">
+                                    30 seconds
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Quick elevator pitch
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="1min">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">1 minute</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Short intro
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="2min">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">
+                                    2 minutes ⭐
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Standard (Recommended)
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="3min">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">3 minutes</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Detailed presentation
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="5min">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">5 minutes</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Comprehensive deep dive
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="subtitleType"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-sm font-semibold">
+                            Subtitle Style 📝
+                          </FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="grid grid-cols-1 gap-3"
+                            >
+                              {/* No Subtitles Option */}
+                              <label
+                                htmlFor="subtitle-none"
+                                className={cn(
+                                  "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                  field.value === "none"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                )}
+                              >
+                                <RadioGroupItem
+                                  value="none"
+                                  id="subtitle-none"
+                                  className="mt-0.5 flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm text-slate-900">
+                                    No Subtitles (Clean Look)
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Professional appearance without text
+                                    overlays
+                                  </p>
+                                </div>
+                              </label>
+
+                              {/* Traditional Captions Option */}
+                              <label
+                                htmlFor="subtitle-traditional"
+                                className={cn(
+                                  "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                  field.value === "traditional"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                )}
+                              >
+                                <RadioGroupItem
+                                  value="traditional"
+                                  id="subtitle-traditional"
+                                  className="mt-0.5 flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm text-slate-900">
+                                    Traditional Captions
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Standard closed captions (phrase-by-phrase)
+                                  </p>
+                                </div>
+                              </label>
+
+                              {/* Karaoke Style Option */}
+                              <label
+                                htmlFor="subtitle-karaoke"
+                                className={cn(
+                                  "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                  field.value === "karaoke"
+                                    ? "border-primary bg-primary/5"
+                                    : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                )}
+                              >
+                                <RadioGroupItem
+                                  value="karaoke"
+                                  id="subtitle-karaoke"
+                                  className="mt-0.5 flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm text-slate-900 flex items-center gap-1.5">
+                                    Karaoke Style
+                                    <span className="text-yellow-500">⭐</span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Word-by-word highlighting (engaging &
+                                    dynamic)
+                                  </p>
+                                </div>
+                              </label>
+                            </RadioGroup>
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -784,14 +960,14 @@ export default function VSL() {
           </div>
         </DialogContent>
       </Dialog>
-{/* ✅ New Share Dialog Component */}
-{selectedVSL && (
-  <ShareVSLDialog
-    open={showShare}
-    onOpenChange={setShowShare}
-    vsl={selectedVSL}
-  />
-)}
+      {/* ✅ New Share Dialog Component */}
+      {selectedVSL && (
+        <ShareVSLDialog
+          open={showShare}
+          onOpenChange={setShowShare}
+          vsl={selectedVSL}
+        />
+      )}
       {/* ✅ Responsive Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="w-[95vw] max-w-md">

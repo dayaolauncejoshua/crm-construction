@@ -55,6 +55,7 @@ interface VSLGenerationOptions {
   title: string;
   clientId: string;
   niche: string;
+  targetDuration?: string;
   subtitles?: "none" | "traditional" | "karaoke";
 }
 
@@ -181,11 +182,11 @@ export class VSLGenerator {
       );
 
       const mp3Response = await openai.audio.speech.create({
-        model: "tts-1-hd",
-        voice: "nova",
-        input: chunks[i],
-        speed: 1.0,
-      });
+  model: "tts-1-hd",
+  voice: "nova",
+  input: chunks[i],
+  speed: 1.1, // ✅ 10% faster to match target duration better
+});
 
       const buffer = Buffer.from(await mp3Response.arrayBuffer());
       audioBuffers.push(buffer);
@@ -485,8 +486,14 @@ Return ONLY valid JSON in this format:
       const ff = (ffmpegInstance as any)();
       const startTime = Date.now();
 
-      // Escape text for FFmpeg
-      const escapedTitle = title
+      // ✅ FIX: Validate text is English-only (remove non-ASCII characters)
+      const cleanTitle = title
+        .replace(/[^\x00-\x7F]/g, '') // Remove non-ASCII
+        .substring(0, 50) // Limit length for safety
+        .trim();
+
+      // ✅ FIX: Improved text escaping for FFmpeg
+      const escapedTitle = cleanTitle
         .replace(/\\/g, "\\\\\\\\")
         .replace(/'/g, "'\\\\\\''")
         .replace(/:/g, "\\:")
@@ -496,20 +503,24 @@ Return ONLY valid JSON in this format:
         logger.stage(
           "🖼️",
           "SCENE VIDEO",
-          `[${index + 1}] Using generated image with zoom effect`
+          `[${index + 1}] Using generated image with smooth zoom`
         );
 
+        // ✅ FIX: Smoother zoom with lower rate to prevent vibration
         const zoomDuration = Math.ceil(duration * 30);
 
         ff.input(bgImagePath)
-          .loop(duration)
-          .videoFilters([
-            `zoompan=z='min(zoom+0.0015,1.2)':d=${zoomDuration}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080`,
-            `drawtext=text='${escapedTitle}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2:alpha='if(lt(t\\,1)\\,t\\,if(gt(t\\,${
-              duration - 1
-            })\\,${duration}-t\\,1))'`,
-            `vignette=angle=PI/4`,
-          ]);
+  .loop(duration)
+  .videoFilters([
+    // ✅ FIX: STATIC image with proper scaling (NO ZOOM - eliminates vibration)
+    `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080`,
+    
+    // ✅ Professional text overlay (same as before)
+    `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='${escapedTitle}':fontcolor=white:fontsize=56:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-200`,
+    
+    // ✅ Subtle vignette for depth
+    `vignette=angle=PI/4:mode=backward`,
+  ]);
       } else {
         logger.stage(
           "🎨",
@@ -519,17 +530,19 @@ Return ONLY valid JSON in this format:
         ff.input(`color=c=#1e3a8a:s=1920x1080:d=${duration}`)
           .inputFormat("lavfi")
           .videoFilters([
-            `drawtext=text='${escapedTitle}':fontcolor=white:fontsize=72:x=(w-text_w)/2:y=(h-text_h)/2`,
+            // ✅ FIX: Consistent text styling for fallback mode
+            `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='${escapedTitle}':fontcolor=white:fontsize=56:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2`,
           ]);
       }
 
       ff.outputOptions([
         `-t ${duration}`,
         "-c:v libx264",
-        "-preset medium",
-        "-crf 23",
+        "-preset medium", // ✅ Can change to "slow" for better quality but longer processing
+        "-crf 23", // ✅ Good quality (18-28 range, lower = better)
         "-pix_fmt yuv420p",
-        "-r 30",
+        "-r 30", // ✅ Consistent 30fps (prevents frame rate issues)
+        "-movflags +faststart", // ✅ Enable streaming playback
       ])
         .output(outputPath)
         .on("progress", (p: any) => {
@@ -872,6 +885,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       vslId: options.vslId,
       title: options.title,
       niche: options.niche,
+      targetDuration: options.targetDuration || "2min",
       hasScript: !!options.script,
     });
 

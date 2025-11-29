@@ -2593,8 +2593,6 @@ async getRecentActivity(clientId: string): Promise<any[]> {
 
   // ==================== VSL METHODS ====================
 
-  // VSL operations
-
   async getVSL(vslId: string): Promise<VSL | undefined> {
     const [vsl] = await db
       .select()
@@ -2604,10 +2602,22 @@ async getRecentActivity(clientId: string): Promise<any[]> {
     return vsl;
   }
 
-  async createVSL(vsl: InsertVSL): Promise<VSL> {
-    const [newVSL] = await db.insert(vsls).values(vsl).returning();
-    return newVSL;
-  }
+ async createVSL(vsl: InsertVSL): Promise<VSL> {
+ 
+  const vslData = {
+    ...vsl,
+    targetDuration: vsl.targetDuration || "2min",
+    subtitleType: vsl.subtitleType || "none",
+  };
+  
+  console.log(`📝 [STORAGE] Creating VSL with target duration: ${vslData.targetDuration}`);
+  
+  const [newVSL] = await db.insert(vsls).values(vslData).returning();
+  
+  console.log(`✅ [STORAGE] VSL created: ${newVSL.id} (${newVSL.targetDuration})`);
+  
+  return newVSL;
+}
 
   async updateVSL(vslId: string, data: Partial<InsertVSL>): Promise<VSL> {
     const [vsl] = await db
