@@ -230,3 +230,76 @@ async function generateVideoAsync(
     });
   }
 }
+
+// Track video play
+export const trackVSLPlay = async (req: Request, res: Response) => {
+  try {
+    const { vslId } = req.params;
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID required" });
+    }
+
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] as string;
+    const userAgent = req.headers['user-agent'];
+
+    await storage.trackVSLPlay({
+      vslId,
+      sessionId,
+      ipAddress,
+      userAgent,
+    });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("❌ Error tracking play:", error);
+    res.status(500).json({
+      message: "Failed to track play",
+      error: error.message,
+    });
+  }
+};
+
+// Track video progress
+export const trackVSLProgress = async (req: Request, res: Response) => {
+  try {
+    const { sessionId, watchTime, completionPercentage, completed } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID required" });
+    }
+
+    await storage.trackVSLProgress(
+      sessionId,
+      watchTime,
+      completionPercentage,
+      completed
+    );
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("❌ Error tracking progress:", error);
+    res.status(500).json({
+      message: "Failed to track progress",
+      error: error.message,
+    });
+  }
+};
+
+// Get VSL analytics
+export const getVSLAnalytics = async (req: Request, res: Response) => {
+  try {
+    const { vslId } = req.params;
+
+    const analytics = await storage.getVSLAnalytics(vslId);
+
+    res.json(analytics);
+  } catch (error: any) {
+    console.error("❌ Error fetching analytics:", error);
+    res.status(500).json({
+      message: "Failed to fetch analytics",
+      error: error.message,
+    });
+  }
+};

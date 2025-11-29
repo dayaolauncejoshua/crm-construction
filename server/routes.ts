@@ -2277,10 +2277,6 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
 
   // ======================== VIDEO SALES LETTER ROUTES  =====================================
 
-  // VSL Management
-
-  app.use(vslapp);
-  // Get all VSLs for a client
 
   // ======================= FOLLOW-UPS ROUTES ==============================================
 

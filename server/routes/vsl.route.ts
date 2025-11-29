@@ -7,26 +7,26 @@ import {
   getSingleVSL,
   updateVSL,
   trackVSLView,
+  trackVSLPlay, 
+  trackVSLProgress, 
+  getVSLAnalytics,
 } from "server/controllers/vsl.controller";
 
 const router = Router();
 
-// fetch clientID
+// ✅ ANALYTICS ROUTES FIRST (most specific)
+router.post("/api/vsls/:vslId/track-play", trackVSLPlay);
+router.post("/api/vsls/:vslId/track-progress", trackVSLProgress);
+router.get("/api/vsls/:vslId/analytics", getVSLAnalytics);
+router.post("/api/vsls/:vslId/view", trackVSLView);
+
+// ✅ CRUD ROUTES (less specific, come after)
 router.get("/api/vsls/:clientId", getClientId);
-
-// Create new VSL
 router.post("/api/vsls", createVSL);
-
-// Get single VSL
-router.get("/api/vsls/:clientId/:vslId", getSingleVSL);
-
-// Update VSL
 router.patch("/api/vsls/:vslId", updateVSL);
-
-// Delete VSL
 router.delete("/api/vsls/:vslId", deleteVSL);
 
-// Track VSL view ✅ ADD THIS
-router.post("/api/vsls/:vslId/view", trackVSLView);
+// ✅ MOST SPECIFIC LAST (two parameters)
+router.get("/api/vsls/:clientId/:vslId", getSingleVSL);
 
 export default router;

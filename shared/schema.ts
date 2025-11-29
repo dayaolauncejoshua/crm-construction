@@ -411,6 +411,24 @@ export const vsls = pgTable("vsls", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// VSL Analytics table - tracks video engagement
+export const vslAnalytics = pgTable("vsl_analytics", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  vslId: varchar("vsl_id")
+    .references(() => vsls.id, { onDelete: "cascade" })
+    .notNull(),
+  sessionId: varchar("session_id").notNull().unique(), 
+  watchTime: integer("watch_time").default(0), 
+  completed: boolean("completed").default(false), 
+  completionPercentage: integer("completion_percentage").default(0), 
+  ipAddress: varchar("ip_address"),
+  userAgent: varchar("user_agent"), 
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Bookings table
 export const bookings = pgTable("bookings", {
   id: varchar("id")
@@ -1000,6 +1018,8 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type VSL = typeof vsls.$inferSelect;
 export type InsertVSL = z.infer<typeof insertVslSchema>;
+export type VSLAnalytics = typeof vslAnalytics.$inferSelect;
+export type InsertVSLAnalytics = typeof vslAnalytics.$inferInsert;
 
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;

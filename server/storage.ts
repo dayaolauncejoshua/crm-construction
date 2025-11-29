@@ -7,6 +7,7 @@ import {
   conversations,
   messages,
   vsls,
+  vslAnalytics,
   bookings,
   analytics,
   trialActivations,
@@ -30,6 +31,7 @@ import {
   type InsertMessage,
   type VSL,
   type InsertVSL,
+  
   type Booking,
   type InsertBooking,
   type Analytics,
@@ -2602,7 +2604,7 @@ async getRecentActivity(clientId: string): Promise<any[]> {
     return vsl;
   }
 
-    async createVSL(vsl: InsertVSL): Promise<VSL> {
+  async createVSL(vsl: InsertVSL): Promise<VSL> {
     const [newVSL] = await db.insert(vsls).values(vsl).returning();
     return newVSL;
   }
@@ -2630,12 +2632,139 @@ async getRecentActivity(clientId: string): Promise<any[]> {
   }
 
   async getVSLsByClient(clientId: string): Promise<VSL[]> {
+  // Fetch all VSLs for the client
   const vslList = await db
     .select()
     .from(vsls)
     .where(eq(vsls.clientId, clientId))
     .orderBy(desc(vsls.createdAt));
-  return vslList;
+
+  // ✅ Fetch analytics for each VSL
+  const vslsWithAnalytics = await Promise.all(
+    vslList.map(async (vsl) => {
+      try {
+        const analytics = await this.getVSLAnalytics(vsl.id);
+        
+        return {
+          ...vsl,
+          // Add analytics fields
+          totalViews: analytics.totalViews,
+          completionRate: analytics.completionRate,
+          averageWatchTime: analytics.averageWatchTime,
+          totalWatchTime: analytics.totalWatchTime,
+          averageCompletionPercentage: analytics.averageCompletionPercentage,
+        } as VSL;
+      } catch (error) {
+        console.error(`❌ Failed to fetch analytics for VSL ${vsl.id}:`, error);
+        
+        // Return VSL with default analytics values if fetch fails
+        return {
+          ...vsl,
+          totalViews: 0,
+          completionRate: 0,
+          averageWatchTime: 0,
+          totalWatchTime: 0,
+          averageCompletionPercentage: 0,
+        } as VSL;
+      }
+    })
+  );
+
+  return vslsWithAnalytics;
+}
+
+// VSL Analytics Methods
+async trackVSLPlay(data: {
+  vslId: string;
+  sessionId: string;
+  ipAddress?: string;
+  userAgent?: string;
+}): Promise<void> {
+  console.log(`📊 [STORAGE] Tracking play for VSL: ${data.vslId}, Session: ${data.sessionId}`);
+  
+  await db
+    .insert(vslAnalytics)
+    .values({
+      vslId: data.vslId,
+      sessionId: data.sessionId,
+      ipAddress: data.ipAddress,
+      userAgent: data.userAgent,
+      watchTime: 0,
+      completionPercentage: 0,
+      completed: false,
+    })
+    .onConflictDoNothing(); 
+  
+  console.log(`✅ [STORAGE] Play tracked (or already exists)`);
+}
+
+async trackVSLProgress(
+  sessionId: string,
+  watchTime: number,
+  completionPercentage: number,
+  completed: boolean
+): Promise<void> {
+  await db
+    .update(vslAnalytics)
+    .set({
+      watchTime,
+      completionPercentage,
+      completed,
+      updatedAt: new Date(),
+    })
+    .where(eq(vslAnalytics.sessionId, sessionId));
+}
+
+async getVSLAnalytics(vslId: string): Promise<{
+  totalViews: number;
+  totalWatchTime: number;
+  averageWatchTime: number;
+  completionRate: number;
+  averageCompletionPercentage: number;
+}> {
+  console.log(`📊 [STORAGE] Fetching analytics for VSL: ${vslId}`);
+  
+  const analytics = await db
+    .select()
+    .from(vslAnalytics)
+    .where(eq(vslAnalytics.vslId, vslId));
+
+  console.log(`   Found ${analytics.length} total records`);
+
+  // ✅ FIX: Group by sessionId to get unique views
+  const uniqueSessions = new Map<string, typeof analytics[0]>();
+  
+  analytics.forEach((record) => {
+    const existing = uniqueSessions.get(record.sessionId);
+    
+    // Keep the record with the highest completion percentage (most recent)
+    if (!existing || (record.completionPercentage || 0) > (existing.completionPercentage || 0)) {
+      uniqueSessions.set(record.sessionId, record);
+    }
+  });
+
+  const uniqueAnalytics = Array.from(uniqueSessions.values());
+  console.log(`   Unique sessions: ${uniqueAnalytics.length}`);
+
+  const totalViews = uniqueAnalytics.length;
+  const totalWatchTime = uniqueAnalytics.reduce((sum, a) => sum + (a.watchTime || 0), 0);
+  const completedViews = uniqueAnalytics.filter((a) => a.completed).length;
+  const totalCompletionPercentage = uniqueAnalytics.reduce(
+    (sum, a) => sum + (a.completionPercentage || 0),
+    0
+  );
+
+  const result = {
+    totalViews,
+    totalWatchTime,
+    averageWatchTime: totalViews > 0 ? Math.round(totalWatchTime / totalViews) : 0,
+    completionRate: totalViews > 0 ? (completedViews / totalViews) * 100 : 0,
+    averageCompletionPercentage:
+      totalViews > 0 ? Math.round(totalCompletionPercentage / totalViews) : 0,
+  };
+
+  console.log(`✅ [STORAGE] Analytics calculated:`, result);
+  return result;
 }
 
   // ==================== FOLLOW-UPS METHODS ====================
