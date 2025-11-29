@@ -1,5 +1,6 @@
 // client/src/pages/vsl.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { ShareVSLDialog } from "@/components/ShareVSLDialog";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -242,23 +243,6 @@ export default function VSL() {
         description: "Your video is downloading...",
       });
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast({
-      title: "Copied!",
-      description: "Link copied to clipboard",
-    });
-  };
-
-  const getEmbedCode = (vsl: any) => {
-    if (!vsl || !vsl.videoUrl) {
-      return "<!-- Video URL not available yet -->";
-    }
-    return `<iframe src="${vsl.videoUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
   };
 
   if (isLoading) {
@@ -800,112 +784,14 @@ export default function VSL() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* ✅ Responsive Share Dialog */}
-      <Dialog open={showShare} onOpenChange={setShowShare}>
-        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto p-0">
-          <div className="p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">
-                Share VSL
-              </DialogTitle>
-              <DialogDescription>
-                Share this video with your audience
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              {/* Copy Link */}
-              <div>
-                <Label className="text-xs sm:text-sm font-medium mb-2 block">
-                  Video Link
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={selectedVSL?.videoUrl || ""}
-                    readOnly
-                    className="flex-1 text-xs sm:text-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(selectedVSL?.videoUrl || "")}
-                    className="flex-shrink-0"
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Embed Code */}
-              <div>
-                <Label className="text-xs sm:text-sm font-medium mb-2 block">
-                  Embed Code
-                </Label>
-                <div className="flex gap-2">
-                  <Textarea
-                    value={getEmbedCode(selectedVSL)}
-                    readOnly
-                    className="flex-1 font-mono text-[10px] sm:text-xs resize-none"
-                    rows={3}
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(getEmbedCode(selectedVSL))}
-                    className="flex-shrink-0"
-                  >
-                    <Code className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Social Share */}
-              <div>
-                <Label className="text-xs sm:text-sm font-medium mb-3 block">
-                  Share on Social Media
-                </Label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center py-2 sm:py-3 h-auto gap-1"
-                  >
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                    <span className="text-[10px] sm:text-xs">Facebook</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center py-2 sm:py-3 h-auto gap-1"
-                  >
-                    <Twitter className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
-                    <span className="text-[10px] sm:text-xs">Twitter</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center py-2 sm:py-3 h-auto gap-1"
-                  >
-                    <Linkedin className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700" />
-                    <span className="text-[10px] sm:text-xs">LinkedIn</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center py-2 sm:py-3 h-auto gap-1"
-                  >
-                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
-                    <span className="text-[10px] sm:text-xs">Email</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+{/* ✅ New Share Dialog Component */}
+{selectedVSL && (
+  <ShareVSLDialog
+    open={showShare}
+    onOpenChange={setShowShare}
+    vsl={selectedVSL}
+  />
+)}
       {/* ✅ Responsive Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="w-[95vw] max-w-md">
