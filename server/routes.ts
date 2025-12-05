@@ -1,5 +1,6 @@
 // server/routes.ts
-
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import stripeRouter from "./routes/stripe";
@@ -5001,6 +5002,175 @@ Could you suggest some alternative times that work for you? We'd love to find a 
       });
     }
   });
+
+  // ==================== PROFILE PICTURE ROUTES ====================
+
+// Configure multer for memory storage
+const profilePictureStorage = multer.memoryStorage();
+const profilePictureUpload = multer({
+  storage: profilePictureStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
+
+// 📤 Upload/Update Profile Picture
+app.post(
+  "/api/user/profile-picture",
+  requireAuth,
+  profilePictureUpload.single("profileImage"),
+  async (req, res) => {
+    try {
+      const userId = req.user!.id;
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      console.log("📤 [PROFILE PICTURE] Upload started for user:", userId);
+      console.log("  File size:", req.file.size, "bytes");
+      console.log("  File type:", req.file.mimetype);
+
+      // Get current user
+      const [currentUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId));
+
+      if (!currentUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Delete old Cloudinary image if exists
+      if (
+        currentUser.profileImageUrl &&
+        currentUser.profileImageUrl.includes("cloudinary.com")
+      ) {
+        try {
+          const urlParts = currentUser.profileImageUrl.split("/");
+          const publicIdWithExt = urlParts[urlParts.length - 1];
+          const publicId = `profile-pictures/${publicIdWithExt.split(".")[0]}`;
+          await cloudinary.uploader.destroy(publicId);
+          console.log("🗑️ Old image deleted:", publicId);
+        } catch (deleteError) {
+          console.warn("⚠️ Failed to delete old image:", deleteError);
+        }
+      }
+
+      // Upload to Cloudinary
+      const uploadPromise = new Promise<any>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: "profile-pictures",
+            transformation: [
+              { width: 400, height: 400, crop: "fill", gravity: "face" },
+              { quality: "auto" },
+              { fetch_format: "auto" },
+            ],
+            public_id: `user_${userId}_${Date.now()}`,
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        uploadStream.end(req.file!.buffer);
+      });
+
+      const uploadResult = await uploadPromise;
+
+      console.log("✅ Image uploaded to Cloudinary:", uploadResult.secure_url);
+
+      // Update database
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          profileImageUrl: uploadResult.secure_url,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      console.log("✅ Database updated with new profile picture");
+
+      res.json({
+        success: true,
+        profileImageUrl: updatedUser.profileImageUrl,
+        message: "Profile picture updated successfully",
+      });
+    } catch (error: any) {
+      console.error("❌ [PROFILE PICTURE] Upload error:", error);
+      res.status(500).json({
+        error: "Failed to upload profile picture",
+        details: error.message,
+      });
+    }
+  }
+);
+
+// 🗑️ Delete Profile Picture
+app.delete("/api/user/profile-picture", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+
+    console.log("🗑️ [PROFILE PICTURE] Delete started for user:", userId);
+
+    // Get current user
+    const [currentUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!currentUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Delete from Cloudinary if it's a Cloudinary image
+    if (
+      currentUser.profileImageUrl &&
+      currentUser.profileImageUrl.includes("cloudinary.com")
+    ) {
+      try {
+        const urlParts = currentUser.profileImageUrl.split("/");
+        const publicIdWithExt = urlParts[urlParts.length - 1];
+        const publicId = `profile-pictures/${publicIdWithExt.split(".")[0]}`;
+        await cloudinary.uploader.destroy(publicId);
+        console.log("✅ Cloudinary image deleted:", publicId);
+      } catch (deleteError) {
+        console.warn("⚠️ Failed to delete from Cloudinary:", deleteError);
+      }
+    }
+
+    // Update database
+    await db
+      .update(users)
+      .set({
+        profileImageUrl: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log("✅ Profile picture removed from database");
+
+    res.json({
+      success: true,
+      message: "Profile picture removed successfully",
+    });
+  } catch (error: any) {
+    console.error("❌ [PROFILE PICTURE] Delete error:", error);
+    res.status(500).json({
+      error: "Failed to remove profile picture",
+      details: error.message,
+    });
+  }
+});
 
   // ================================= ADVANCED ROUTES  ===============================
 
