@@ -173,6 +173,115 @@ export default function Settings() {
   const [deletionComplete, setDeletionComplete] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(5);
 
+  // Profile Picture Upload States
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isDeletingImage, setIsDeletingImage] = useState(false);
+
+  // Handle Profile Picture Upload
+  const handleProfilePictureUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please choose an image under 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please choose an image file (JPG, PNG, GIF, WEBP)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("profileImage", file);
+
+      const url = getApiUrl("/api/user/profile-picture");
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Upload failed");
+      }
+
+      const data = await response.json();
+
+      // Refresh user data to get new profile picture
+      await refreshUser();
+      refetchActivity();
+
+      toast({
+        title: "Success!",
+        description: "Profile picture updated successfully",
+      });
+    } catch (error: any) {
+      console.error("Profile picture upload error:", error);
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload profile picture",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false);
+      // Reset the input
+      event.target.value = "";
+    }
+  };
+
+  // Handle Profile Picture Delete
+  const handleProfilePictureDelete = async () => {
+    setIsDeletingImage(true);
+
+    try {
+      const url = getApiUrl("/api/user/profile-picture");
+      const response = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Delete failed");
+      }
+
+      // Refresh user data
+      await refreshUser();
+      refetchActivity();
+
+      toast({
+        title: "Success!",
+        description: "Profile picture removed successfully",
+      });
+    } catch (error: any) {
+      console.error("Profile picture delete error:", error);
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to remove profile picture",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingImage(false);
+    }
+  };
+
   // Individual toggle handlers for instant save (removed weeklyReports)
   const handleToggleEmailNotifications = async (checked: boolean) => {
     setEmailNotifications(checked);
@@ -879,35 +988,109 @@ export default function Settings() {
                           </AvatarFallback>
                         )}
                       </Avatar>
-                      <button className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+
+                      {/* Upload Button Overlay */}
+                      <label
+                        htmlFor="profile-picture-upload"
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      >
                         <Camera className="w-8 h-8 text-white" />
-                      </button>
+                      </label>
+                      <input
+                        id="profile-picture-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProfilePictureUpload}
+                        disabled={isUploadingImage}
+                        className="hidden"
+                      />
                     </div>
+
                     <div className="text-center space-y-2">
                       <p className="text-sm font-medium text-slate-900">
                         {user?.firstName} {user?.lastName}
                       </p>
                       <p className="text-xs text-slate-500">{user?.email}</p>
                     </div>
+
                     <div className="w-full space-y-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full gap-2"
-                      >
-                        <Camera className="w-4 h-4" />
-                        Upload Photo
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        Remove Photo
-                      </Button>
+                      {/* Upload Photo Button */}
+                      <label htmlFor="profile-picture-upload-button">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={isUploadingImage}
+                          onClick={() =>
+                            document
+                              .getElementById("profile-picture-upload")
+                              ?.click()
+                          }
+                          type="button"
+                        >
+                          {isUploadingImage ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="w-4 h-4" />
+                              Upload Photo
+                            </>
+                          )}
+                        </Button>
+                      </label>
+
+                      {/* Remove Photo Button */}
+                      {user?.profileImageUrl && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                              disabled={isDeletingImage}
+                            >
+                              {isDeletingImage ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  Removing...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Remove Photo
+                                </>
+                              )}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Remove Profile Picture?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to remove your profile
+                                picture? You can always upload a new one later.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleProfilePictureDelete}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Remove Photo
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </div>
+
                     <p className="text-xs text-slate-500 text-center">
-                      JPG, GIF or PNG. Max 2MB.
+                      JPG, GIF, PNG or WEBP. Max 5MB.
                     </p>
                   </CardContent>
                 </Card>

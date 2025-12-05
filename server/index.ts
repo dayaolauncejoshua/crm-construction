@@ -14,6 +14,7 @@ import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
 import browserTestRouter from "./routes/browser-test.route";
 import cors from "cors";
+import profilePictureRoutes from "./routes/profile-picture";
 
 // Import pool from db.ts
 import { pool } from "./db";
@@ -117,6 +118,7 @@ app.use(loadUser);
 app.use("/api/browser-test", browserTestRouter);
 app.use(authRouter);
 app.use(twoFactorRoutes);
+app.use(profilePictureRoutes);
 
 // Request logging
 app.use((req, res, next) => {

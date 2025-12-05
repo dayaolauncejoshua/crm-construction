@@ -216,16 +216,16 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-  {user?.profileImageUrl ? (
-    <AvatarImage
-      src={user.profileImageUrl}
-      alt={getUserDisplayName()}
-    />
-  ) : null}
-  <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
-    {getUserInitials()}
-  </AvatarFallback>
-</Avatar>
+                {user?.profileImageUrl ? (
+                  <AvatarImage
+                    src={user.profileImageUrl}
+                    alt={getUserDisplayName()}
+                  />
+                ) : null}
+                <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
+                  {getUserInitials()}
+                </AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-semibold text-slate-900 truncate">
                   {getUserDisplayName()}
@@ -270,13 +270,13 @@ export default function Navigation({
             <User className="w-4 h-4 mr-2" />
             <span>Profile & Settings</span>
           </DropdownMenuItem>
-          <DropdownMenuItem
+          {/* <DropdownMenuItem
             onClick={() => (window.location.href = "/subscription")}
             className="cursor-pointer"
           >
             <CreditCard className="w-4 h-4 mr-2" />
             <span>Subscription</span>
-          </DropdownMenuItem>
+          </DropdownMenuItem> */}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={onSignOut}
@@ -320,16 +320,16 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-  {user?.profileImageUrl ? (
-    <AvatarImage
-      src={user.profileImageUrl}
-      alt={getUserDisplayName()}
-    />
-  ) : null}
-  <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
-    {getUserInitials()}
-  </AvatarFallback>
-</Avatar>
+                {user?.profileImageUrl ? (
+                  <AvatarImage
+                    src={user.profileImageUrl}
+                    alt={getUserDisplayName()}
+                  />
+                ) : null}
+                <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
+                  {getUserInitials()}
+                </AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-semibold text-slate-900 truncate">
                   {getUserDisplayName()}
@@ -483,31 +483,95 @@ export default function Navigation({
           {/* Menu Items */}
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <div className="space-y-2">
-              {menuItems.map((item) => (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  onClick={closeMobileMenu}
-                  className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-                    isActive(item.path)
-                      ? "bg-blue-50 text-blue-700 border border-blue-200"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
-                    <span className="flex-shrink-0">{item.icon}</span>
-                    <span className="font-medium truncate">{item.label}</span>
+              {menuItems.map((item) => {
+                // Check if item is Beta feature
+                const isBetaFeature =
+                  item.path === "/subscription" || item.path === "/pricing";
+
+                return (
+                  <div key={item.path}>
+                    {isBetaFeature ? (
+                      // ✅ Beta features with tooltip (mobile)
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href={item.path}
+                              onClick={closeMobileMenu}
+                              className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                                isActive(item.path)
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                              }`}
+                            >
+                              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                                <span className="flex-shrink-0">
+                                  {item.icon}
+                                </span>
+                                <span className="font-medium truncate">
+                                  {item.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Beta Badge */}
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 hover:bg-amber-100"
+                                >
+                                  BETA
+                                </Badge>
+                                {item.badge && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {item.badge}
+                                  </Badge>
+                                )}
+                              </div>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-xs">
+                            <p className="font-semibold text-xs mb-1">
+                              Coming Soon - Beta Feature
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              This feature is under development and will be
+                              available soon.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      // ✅ Regular menu items (no tooltip)
+                      <Link
+                        href={item.path}
+                        onClick={closeMobileMenu}
+                        className={`flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+                          isActive(item.path)
+                            ? "bg-blue-50 text-blue-700 border border-blue-200"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3 min-w-0 flex-1">
+                          <span className="flex-shrink-0">{item.icon}</span>
+                          <span className="font-medium truncate">
+                            {item.label}
+                          </span>
+                        </div>
+                        {item.badge && (
+                          <Badge
+                            variant="secondary"
+                            className="text-xs ml-2 flex-shrink-0"
+                          >
+                            {item.badge}
+                          </Badge>
+                        )}
+                      </Link>
+                    )}
                   </div>
-                  {item.badge && (
-                    <Badge
-                      variant="secondary"
-                      className="text-xs ml-2 flex-shrink-0"
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
-                </Link>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -568,31 +632,91 @@ export default function Navigation({
         {/* Main Navigation Items */}
         <div className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-1">
-            {menuItems.map((item) => (
-              <li key={item.path}>
-                <Link href={item.path}>
-                  <Button
-                    variant={isActive(item.path) ? "default" : "ghost"}
-                    className={`w-full justify-start text-left ${
-                      isActive(item.path)
-                        ? "bg-primary text-primary-foreground"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span className="flex-shrink-0">{item.icon}</span>
-                    <span className="ml-3 flex-1 truncate">{item.label}</span>
-                    {item.badge && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-auto text-xs flex-shrink-0"
+            {menuItems.map((item) => {
+              // Check if item is Beta feature
+              const isBetaFeature =
+                item.path === "/subscription" || item.path === "/pricing";
+
+              return (
+                <li key={item.path}>
+                  {isBetaFeature ? (
+                    // ✅ Beta features with tooltip
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={item.path}>
+                            <Button
+                              variant={
+                                isActive(item.path) ? "default" : "ghost"
+                              }
+                              className={`w-full justify-start text-left relative ${
+                                isActive(item.path)
+                                  ? "bg-primary text-primary-foreground"
+                                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                              }`}
+                            >
+                              <span className="flex-shrink-0">{item.icon}</span>
+                              <span className="ml-3 flex-1 truncate">
+                                {item.label}
+                              </span>
+                              {/* Beta Badge */}
+                              <Badge
+                                variant="secondary"
+                                className="ml-auto text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 hover:bg-amber-100 flex-shrink-0"
+                              >
+                                BETA
+                              </Badge>
+                              {item.badge && (
+                                <Badge
+                                  variant="secondary"
+                                  className="ml-2 text-xs flex-shrink-0"
+                                >
+                                  {item.badge}
+                                </Badge>
+                              )}
+                            </Button>
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-xs">
+                          <p className="font-semibold text-xs mb-1">
+                            Coming Soon - Beta Feature
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            This feature is under development and will be
+                            available soon.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    // ✅ Regular menu items (no tooltip)
+                    <Link href={item.path}>
+                      <Button
+                        variant={isActive(item.path) ? "default" : "ghost"}
+                        className={`w-full justify-start text-left ${
+                          isActive(item.path)
+                            ? "bg-primary text-primary-foreground"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        }`}
                       >
-                        {item.badge}
-                      </Badge>
-                    )}
-                  </Button>
-                </Link>
-              </li>
-            ))}
+                        <span className="flex-shrink-0">{item.icon}</span>
+                        <span className="ml-3 flex-1 truncate">
+                          {item.label}
+                        </span>
+                        {item.badge && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto text-xs flex-shrink-0"
+                          >
+                            {item.badge}
+                          </Badge>
+                        )}
+                      </Button>
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
 
