@@ -1,13 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import cloudinary from "../config/cloudinary";
+import { v2 as cloudinary } from "cloudinary"; // ✅ Use cloudinary directly
 import { db } from "../db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const router = Router();
 
-// Configure multer for memory storage (we'll upload directly to Cloudinary)
+// Configure multer for memory storage
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
@@ -15,7 +15,6 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024, // 5MB max
   },
   fileFilter: (req, file, cb) => {
-    // Accept only images
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
@@ -44,7 +43,7 @@ router.post(
       console.log("  File size:", req.file.size, "bytes");
       console.log("  File type:", req.file.mimetype);
 
-      // Get current user to check for existing profile picture
+      // Get current user
       const [currentUser] = await db
         .select()
         .from(users)
@@ -54,22 +53,19 @@ router.post(
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Delete old Cloudinary image if it exists (and it's not a Google profile pic)
+      // Delete old Cloudinary image if exists
       if (
         currentUser.profileImageUrl &&
         currentUser.profileImageUrl.includes("cloudinary.com")
       ) {
         try {
-          // Extract public_id from Cloudinary URL
           const urlParts = currentUser.profileImageUrl.split("/");
           const publicIdWithExt = urlParts[urlParts.length - 1];
           const publicId = `profile-pictures/${publicIdWithExt.split(".")[0]}`;
-
           await cloudinary.uploader.destroy(publicId);
-          console.log("🗑️ Old Cloudinary image deleted:", publicId);
+          console.log("🗑️ Old image deleted:", publicId);
         } catch (deleteError) {
           console.warn("⚠️ Failed to delete old image:", deleteError);
-          // Continue anyway
         }
       }
 
@@ -90,7 +86,6 @@ router.post(
             else resolve(result);
           }
         );
-
         uploadStream.end(req.file!.buffer);
       });
 
@@ -98,7 +93,7 @@ router.post(
 
       console.log("✅ Image uploaded to Cloudinary:", uploadResult.secure_url);
 
-      // Update user profile picture in database
+      // Update database
       const [updatedUser] = await db
         .update(users)
         .set({
@@ -155,24 +150,21 @@ router.delete("/api/user/profile-picture", async (req, res) => {
         const urlParts = currentUser.profileImageUrl.split("/");
         const publicIdWithExt = urlParts[urlParts.length - 1];
         const publicId = `profile-pictures/${publicIdWithExt.split(".")[0]}`;
-
         await cloudinary.uploader.destroy(publicId);
         console.log("✅ Cloudinary image deleted:", publicId);
       } catch (deleteError) {
         console.warn("⚠️ Failed to delete from Cloudinary:", deleteError);
-        // Continue anyway
       }
     }
 
-    // Update database to remove profile picture
-    const [updatedUser] = await db
+    // Update database
+    await db
       .update(users)
       .set({
         profileImageUrl: null,
         updatedAt: new Date(),
       })
-      .where(eq(users.id, userId))
-      .returning();
+      .where(eq(users.id, userId));
 
     console.log("✅ Profile picture removed from database");
 
