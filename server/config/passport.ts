@@ -105,6 +105,7 @@ passport.use(
           await db
             .update(users)
             .set({
+              profileImageUrl: profile.photos?.[0]?.value,
               lastLoginAt: new Date(),
               loginCount: (existingUser.loginCount || 0) + 1,
               updatedAt: new Date(),

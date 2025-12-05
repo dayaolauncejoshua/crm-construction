@@ -336,6 +336,7 @@ router.get("/api/auth/me", async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         phone: user.phone,
+        profileImageUrl: user.profileImageUrl,
         role: user.role,
         emailVerified: user.emailVerified,
         isTrialActive: user.isTrialActive,

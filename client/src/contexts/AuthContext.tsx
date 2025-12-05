@@ -33,6 +33,7 @@ interface User {
   firstName: string | null;
   lastName: string | null;
   phone: string | null;
+  profileImageUrl: string | null;
   role: string;
   emailVerified?: boolean;
   isTrialActive?: boolean;

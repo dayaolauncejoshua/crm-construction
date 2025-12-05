@@ -114,14 +114,14 @@ export default function Settings() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // ✅ ADD THESE: Set Password States (for OAuth users)
+  // Set Password States (for OAuth users)
   const [oauthNewPassword, setOauthNewPassword] = useState("");
   const [oauthConfirmPassword, setOauthConfirmPassword] = useState("");
   const [showOauthNewPassword, setShowOauthNewPassword] = useState(false);
   const [showOauthConfirmPassword, setShowOauthConfirmPassword] =
     useState(false);
 
-  // Notification Preferences
+  // Notification Preferences (removed weeklyReports)
   const [emailNotifications, setEmailNotifications] = useState(
     user?.emailNotifications ?? true
   );
@@ -134,9 +134,6 @@ export default function Settings() {
   const [bookingNotifications, setBookingNotifications] = useState(
     user?.bookingNotifications ?? true
   );
-  const [weeklyReports, setWeeklyReports] = useState(
-    user?.weeklyReports ?? true
-  );
 
   useEffect(() => {
     if (user) {
@@ -144,13 +141,8 @@ export default function Settings() {
       setWhatsappNotifications(user.whatsappNotifications ?? false);
       setLeadNotifications(user.leadNotifications ?? true);
       setBookingNotifications(user.bookingNotifications ?? true);
-      setWeeklyReports(user.weeklyReports ?? true);
     }
   }, [user]);
-
-  // Regional Settings
-  const [timezone, setTimezone] = useState("America/New_York");
-  const [language, setLanguage] = useState("en");
 
   // 2FA Setup
   const [show2FASetupModal, setShow2FASetupModal] = useState(false);
@@ -181,7 +173,7 @@ export default function Settings() {
   const [deletionComplete, setDeletionComplete] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(5);
 
-  // ✅ NEW: Individual toggle handlers for instant save
+  // Individual toggle handlers for instant save (removed weeklyReports)
   const handleToggleEmailNotifications = async (checked: boolean) => {
     setEmailNotifications(checked);
     updatePreferencesMutation.mutate({
@@ -189,9 +181,6 @@ export default function Settings() {
       whatsappNotifications,
       leadNotifications,
       bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
     });
   };
 
@@ -202,9 +191,6 @@ export default function Settings() {
       whatsappNotifications: checked,
       leadNotifications,
       bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
     });
   };
 
@@ -215,9 +201,6 @@ export default function Settings() {
       whatsappNotifications,
       leadNotifications: checked,
       bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
     });
   };
 
@@ -228,22 +211,6 @@ export default function Settings() {
       whatsappNotifications,
       leadNotifications,
       bookingNotifications: checked,
-      weeklyReports,
-      timezone,
-      language,
-    });
-  };
-
-  const handleToggleWeeklyReports = async (checked: boolean) => {
-    setWeeklyReports(checked);
-    updatePreferencesMutation.mutate({
-      emailNotifications,
-      whatsappNotifications,
-      leadNotifications,
-      bookingNotifications,
-      weeklyReports: checked,
-      timezone,
-      language,
     });
   };
 
@@ -380,7 +347,7 @@ export default function Settings() {
     },
   });
 
-  // Update Preferences Mutation
+  // Update Preferences Mutation (removed weeklyReports, timezone, language)
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: any) => {
       const url = getApiUrl("/api/user/preferences");
@@ -433,7 +400,6 @@ export default function Settings() {
       const data = await response.json();
 
       if (!response.ok) {
-        // 🆕 Handle "already enabled" case
         if (data.alreadyEnabled) {
           throw new Error("2FA_ALREADY_ENABLED");
         }
@@ -588,11 +554,9 @@ export default function Settings() {
   // Enhanced Delete Account Mutation with Progress
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
-      // Show progress modal immediately
       setShowDeletionProgress(true);
       setDeletionStep(0);
 
-      // Simulate step progression for UX (actual deletion happens on backend)
       const steps = [
         "Verifying credentials...",
         "Canceling subscription...",
@@ -603,13 +567,11 @@ export default function Settings() {
         "Finalizing deletion...",
       ];
 
-      // Progress through steps with delays for UX
       for (let i = 0; i < steps.length; i++) {
         setDeletionStep(i);
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
 
-      // Make actual API call
       const url = getApiUrl("/api/user/delete-account");
       console.log("🔍 [DELETE ACCOUNT] Posting to:", url);
 
@@ -633,10 +595,9 @@ export default function Settings() {
       return response.json();
     },
     onSuccess: () => {
-      setDeletionStep(7); // Final step
+      setDeletionStep(7);
       setDeletionComplete(true);
 
-      // Start countdown
       let count = 5;
       const countdownInterval = setInterval(() => {
         count--;
@@ -752,19 +713,6 @@ export default function Settings() {
     changePasswordMutation.mutate({
       currentPassword,
       newPassword,
-    });
-  };
-
-  // Handle Preferences Update
-  const handleUpdatePreferences = () => {
-    updatePreferencesMutation.mutate({
-      emailNotifications,
-      whatsappNotifications,
-      leadNotifications,
-      bookingNotifications,
-      weeklyReports,
-      timezone,
-      language,
     });
   };
 
@@ -920,10 +868,16 @@ export default function Settings() {
                   <CardContent className="flex flex-col items-center space-y-4">
                     <div className="relative group">
                       <Avatar className="w-32 h-32 ring-4 ring-slate-100">
-                        <AvatarImage src="/placeholder-avatar.jpg" />
-                        <AvatarFallback className="bg-gradient-construction text-white text-3xl font-bold">
-                          {getUserInitials()}
-                        </AvatarFallback>
+                        {user?.profileImageUrl ? (
+                          <AvatarImage
+                            src={user.profileImageUrl}
+                            alt={`${user.firstName} ${user.lastName}`}
+                          />
+                        ) : (
+                          <AvatarFallback className="bg-gradient-construction text-white text-3xl font-bold">
+                            {getUserInitials()}
+                          </AvatarFallback>
+                        )}
                       </Avatar>
                       <button className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
                         <Camera className="w-8 h-8 text-white" />
@@ -1078,7 +1032,7 @@ export default function Settings() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* ========== CHANGE PASSWORD OR SET PASSWORD CARD ========== */}
               {(user as any)?.passwordHash ? (
-                // ✅ EXISTING: Change Password Card (for users with password)
+                // Change Password Card (for users with password)
                 <Card className="border-2">
                   <CardHeader>
                     <CardTitle className="text-lg">Change Password</CardTitle>
@@ -1242,7 +1196,7 @@ export default function Settings() {
                   </CardContent>
                 </Card>
               ) : (
-                // ✅ NEW: Set Password Card (for OAuth users without password)
+                // Set Password Card (for OAuth users without password)
                 <Card className="border-2">
                   <CardHeader>
                     <CardTitle className="text-lg">Set a Password</CardTitle>
@@ -1385,7 +1339,6 @@ export default function Settings() {
                     <div className="flex justify-end pt-4 border-t">
                       <Button
                         onClick={() => {
-                          // Validate password
                           const validation = validatePassword(oauthNewPassword);
                           if (!validation.valid) {
                             toast({
@@ -1396,7 +1349,6 @@ export default function Settings() {
                             return;
                           }
 
-                          // Check passwords match
                           if (oauthNewPassword !== oauthConfirmPassword) {
                             toast({
                               title: "Error",
@@ -1406,7 +1358,6 @@ export default function Settings() {
                             return;
                           }
 
-                          // Submit
                           setPasswordMutation.mutate({
                             newPassword: oauthNewPassword,
                           });
@@ -1436,7 +1387,7 @@ export default function Settings() {
                 </Card>
               )}
 
-              {/* 🆕 Two-Factor Authentication Card */}
+              {/* Two-Factor Authentication Card */}
               <Card className="border-2">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -1468,7 +1419,6 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* 🆕 ADD INSTRUCTIONS FOR RE-SETUP */}
                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="flex items-start gap-2">
                           <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -1750,9 +1700,6 @@ export default function Settings() {
                         <strong>Booking Proposals:</strong> When AI schedules a
                         meeting
                       </li>
-                      <li>
-                        <strong>Weekly Reports:</strong> Performance summaries
-                      </li>
                     </ul>
                   </div>
                 </CardContent>
@@ -1784,7 +1731,7 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={leadNotifications}
-                      onCheckedChange={setLeadNotifications}
+                      onCheckedChange={handleToggleLeadNotifications}
                       disabled={updatePreferencesMutation.isPending}
                       style={{ minHeight: "28px" }}
                     />
@@ -1811,48 +1758,6 @@ export default function Settings() {
                       style={{ minHeight: "28px" }}
                     />
                   </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                        <BarChart3 className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <Label>Weekly Reports</Label>
-                        <p className="text-sm text-slate-500">
-                          Performance summaries
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={weeklyReports}
-                      onCheckedChange={handleToggleWeeklyReports}
-                      disabled={updatePreferencesMutation.isPending}
-                      style={{ minHeight: "28px" }}
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-4 border-t">
-                    <Button
-                      onClick={handleUpdatePreferences}
-                      disabled={updatePreferencesMutation.isPending}
-                      className="bg-gradient-construction hover:opacity-90 text-white gap-2"
-                    >
-                      {updatePreferencesMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save Preferences
-                        </>
-                      )}
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1860,258 +1765,179 @@ export default function Settings() {
 
           {/* ========== PREFERENCES TAB ========== */}
           <TabsContent value="preferences" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Regional Settings */}
-              <Card className="border-2">
-                <CardHeader>
-                  <CardTitle className="text-lg">Regional Settings</CardTitle>
-                  <CardDescription>
-                    Configure timezone and language
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">Timezone</Label>
-                    <Select value={timezone} onValueChange={setTimezone}>
-                      <SelectTrigger id="timezone">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="America/New_York">
-                          Eastern Time (ET)
-                        </SelectItem>
-                        <SelectItem value="America/Chicago">
-                          Central Time (CT)
-                        </SelectItem>
-                        <SelectItem value="America/Denver">
-                          Mountain Time (MT)
-                        </SelectItem>
-                        <SelectItem value="America/Los_Angeles">
-                          Pacific Time (PT)
-                        </SelectItem>
-                        <SelectItem value="Europe/London">
-                          London (GMT)
-                        </SelectItem>
-                        <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
-                      </SelectContent>
-                    </Select>
+            {/* Only Danger Zone - No Regional Settings */}
+            <Card className="border-2 border-red-200 bg-red-50/50">
+              <CardHeader>
+                <CardTitle className="text-lg text-red-900 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription>Irreversible account actions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white rounded-lg border border-red-200">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-slate-900">
+                      Delete Account
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Permanently delete account and all data
+                    </p>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="language">Language</Label>
-                    <Select value={language} onValueChange={setLanguage}>
-                      <SelectTrigger id="language">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="en">English</SelectItem>
-                        <SelectItem value="es">Español</SelectItem>
-                        <SelectItem value="fr">Français</SelectItem>
-                        <SelectItem value="de">Deutsch</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex justify-end pt-4 border-t">
-                    <Button
-                      onClick={handleUpdatePreferences}
-                      disabled={updatePreferencesMutation.isPending}
-                      className="bg-gradient-construction hover:opacity-90 text-white gap-2"
-                    >
-                      {updatePreferencesMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save Settings
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Danger Zone */}
-              <Card className="border-2 border-red-200 bg-red-50/50">
-                <CardHeader>
-                  <CardTitle className="text-lg text-red-900 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    Danger Zone
-                  </CardTitle>
-                  <CardDescription>
-                    Irreversible account actions
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white rounded-lg border border-red-200">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-900">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="gap-2 flex-shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
                         Delete Account
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        Permanently delete account and all data
-                      </p>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="gap-2 flex-shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete Account
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="max-w-lg">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-                            <AlertCircle className="w-5 h-5" />
-                            Delete Account Permanently?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action <strong>cannot be undone</strong>. This
-                            will permanently delete your account and remove all
-                            your data.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="max-w-lg">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                          <AlertCircle className="w-5 h-5" />
+                          Delete Account Permanently?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action <strong>cannot be undone</strong>. This
+                          will permanently delete your account and remove all
+                          your data.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
 
-                        <div className="py-4 space-y-4">
-                          {/* Warning Box */}
-                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <p className="text-xs font-semibold text-red-900 mb-2">
-                              ⚠️ What will be deleted:
-                            </p>
-                            <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
-                              <li>All personal information</li>
-                              <li>All clients and leads</li>
-                              <li>All conversations and messages</li>
-                              <li>All bookings and calendar data</li>
-                              <li>All analytics and reports</li>
-                              <li>Payment and subscription history</li>
-                            </ul>
-                          </div>
-
-                          {/* Password Input - Only show if user has password */}
-                          {(user as any)?.passwordHash !== null &&
-                          (user as any)?.passwordHash !== undefined ? (
-                            <div className="space-y-2">
-                              <Label htmlFor="deletePassword">
-                                Confirm Password
-                              </Label>
-                              <Input
-                                id="deletePassword"
-                                type="password"
-                                value={deletePassword}
-                                onChange={(e) =>
-                                  setDeletePassword(e.target.value)
-                                }
-                                placeholder="Enter your password"
-                              />
-                            </div>
-                          ) : (
-                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                              <p className="text-sm text-blue-900">
-                                <strong>Note:</strong> You signed up with{" "}
-                                {(user as any)?.oauthProvider === "google"
-                                  ? "Google"
-                                  : "OAuth"}
-                                . No password verification required.
-                              </p>
-                            </div>
-                          )}
-
-                          {/* 2FA Input (conditional) */}
-                          {user?.twoFactorEnabled && (
-                            <div className="space-y-2">
-                              <Label htmlFor="delete2FACode">
-                                Two-Factor Code
-                              </Label>
-                              <Input
-                                id="delete2FACode"
-                                value={delete2FACode}
-                                onChange={(e) =>
-                                  setDelete2FACode(
-                                    e.target.value
-                                      .replace(/\D/g, "")
-                                      .slice(0, 6)
-                                  )
-                                }
-                                placeholder="000000"
-                                maxLength={6}
-                                className="text-center text-2xl tracking-widest font-mono"
-                              />
-                            </div>
-                          )}
-
-                          {/* Confirmation Checkbox */}
-                          <div className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              id="deleteConfirm"
-                              checked={deleteConfirmChecked}
-                              onChange={(e) =>
-                                setDeleteConfirmChecked(e.target.checked)
-                              }
-                              className="mt-1"
-                            />
-                            <Label
-                              htmlFor="deleteConfirm"
-                              className="text-sm cursor-pointer"
-                            >
-                              I understand this action is permanent and cannot
-                              be undone
-                            </Label>
-                          </div>
+                      <div className="py-4 space-y-4">
+                        {/* Warning Box */}
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-xs font-semibold text-red-900 mb-2">
+                            ⚠️ What will be deleted:
+                          </p>
+                          <ul className="text-xs text-red-800 space-y-1 list-disc list-inside">
+                            <li>All personal information</li>
+                            <li>All clients and leads</li>
+                            <li>All conversations and messages</li>
+                            <li>All bookings and calendar data</li>
+                            <li>All analytics and reports</li>
+                            <li>Payment and subscription history</li>
+                          </ul>
                         </div>
 
-                        <AlertDialogFooter>
-                          <AlertDialogCancel
-                            onClick={() => {
-                              setDeletePassword("");
-                              setDelete2FACode("");
-                              setDeleteConfirmChecked(false);
-                            }}
-                          >
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteAccountMutation.mutate()}
-                            disabled={
-                              ((user as any)?.passwordHash !== null &&
-                                (user as any)?.passwordHash !== undefined &&
-                                !deletePassword) || // Only require password if account has one
-                              !deleteConfirmChecked ||
-                              (user?.twoFactorEnabled &&
-                                delete2FACode.length !== 6) ||
-                              deleteAccountMutation.isPending
+                        {/* Password Input - Only show if user has password */}
+                        {(user as any)?.passwordHash !== null &&
+                        (user as any)?.passwordHash !== undefined ? (
+                          <div className="space-y-2">
+                            <Label htmlFor="deletePassword">
+                              Confirm Password
+                            </Label>
+                            <Input
+                              id="deletePassword"
+                              type="password"
+                              value={deletePassword}
+                              onChange={(e) =>
+                                setDeletePassword(e.target.value)
+                              }
+                              placeholder="Enter your password"
+                            />
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm text-blue-900">
+                              <strong>Note:</strong> You signed up with{" "}
+                              {(user as any)?.oauthProvider === "google"
+                                ? "Google"
+                                : "OAuth"}
+                              . No password verification required.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* 2FA Input (conditional) */}
+                        {user?.twoFactorEnabled && (
+                          <div className="space-y-2">
+                            <Label htmlFor="delete2FACode">
+                              Two-Factor Code
+                            </Label>
+                            <Input
+                              id="delete2FACode"
+                              value={delete2FACode}
+                              onChange={(e) =>
+                                setDelete2FACode(
+                                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                                )
+                              }
+                              placeholder="000000"
+                              maxLength={6}
+                              className="text-center text-2xl tracking-widest font-mono"
+                            />
+                          </div>
+                        )}
+
+                        {/* Confirmation Checkbox */}
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            id="deleteConfirm"
+                            checked={deleteConfirmChecked}
+                            onChange={(e) =>
+                              setDeleteConfirmChecked(e.target.checked)
                             }
-                            className="bg-red-600 hover:bg-red-700"
+                            className="mt-1"
+                          />
+                          <Label
+                            htmlFor="deleteConfirm"
+                            className="text-sm cursor-pointer"
                           >
-                            {deleteAccountMutation.isPending ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                Deleting...
-                              </>
-                            ) : (
-                              "Delete My Account"
-                            )}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                            I understand this action is permanent and cannot be
+                            undone
+                          </Label>
+                        </div>
+                      </div>
+
+                      <AlertDialogFooter>
+                        <AlertDialogCancel
+                          onClick={() => {
+                            setDeletePassword("");
+                            setDelete2FACode("");
+                            setDeleteConfirmChecked(false);
+                          }}
+                        >
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteAccountMutation.mutate()}
+                          disabled={
+                            ((user as any)?.passwordHash !== null &&
+                              (user as any)?.passwordHash !== undefined &&
+                              !deletePassword) ||
+                            !deleteConfirmChecked ||
+                            (user?.twoFactorEnabled &&
+                              delete2FACode.length !== 6) ||
+                            deleteAccountMutation.isPending
+                          }
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          {deleteAccountMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              Deleting...
+                            </>
+                          ) : (
+                            "Delete My Account"
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
 
-      {/* 🆕 2FA Setup Modal */}
+      {/* 2FA Setup Modal */}
       <Dialog open={show2FASetupModal} onOpenChange={setShow2FASetupModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -2122,7 +1948,6 @@ export default function Settings() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* 🆕 ADD WARNING ABOUT MULTIPLE ENTRIES */}
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -2137,7 +1962,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* QR Code */}
             <div className="flex justify-center p-4 bg-white border-2 border-slate-200 rounded-lg">
               {qrCode ? (
                 <img src={qrCode} alt="2FA QR Code" className="w-48 h-48" />
@@ -2148,7 +1972,6 @@ export default function Settings() {
               )}
             </div>
 
-            {/* Manual Entry */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
               <p className="text-xs font-semibold text-slate-700 mb-1">
                 Can't scan? Enter this code manually:
@@ -2158,7 +1981,6 @@ export default function Settings() {
               </code>
             </div>
 
-            {/* Verification Code Input */}
             <div className="space-y-2">
               <Label htmlFor="verificationCode">
                 Enter 6-digit code from your app
@@ -2177,7 +1999,6 @@ export default function Settings() {
               />
             </div>
 
-            {/* Info */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -2188,7 +2009,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -2223,7 +2043,7 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
 
-      {/* 🆕 Backup Codes Modal */}
+      {/* Backup Codes Modal */}
       <Dialog open={showBackupCodes} onOpenChange={setShowBackupCodes}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -2237,7 +2057,6 @@ export default function Settings() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Warning */}
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
@@ -2248,7 +2067,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Backup Codes */}
             <div className="p-4 bg-slate-900 rounded-lg">
               <div className="grid grid-cols-2 gap-2">
                 {backupCodes.map((code, index) => (
@@ -2259,7 +2077,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -2290,8 +2107,7 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
 
-      {/* 🆕 Disable 2FA Dialog */}
-
+      {/* Disable 2FA Dialog */}
       <AlertDialog
         open={show2FADisableDialog}
         onOpenChange={setShow2FADisableDialog}
@@ -2309,7 +2125,6 @@ export default function Settings() {
           </AlertDialogHeader>
 
           <div className="py-4 space-y-4">
-            {/* ✅ Security Notice */}
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-start gap-2">
                 <Shield className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -2326,7 +2141,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* ✅ Password Input (only if account has password) */}
             {(user as any)?.passwordHash && (
               <div className="space-y-2">
                 <Label htmlFor="disablePassword">Password</Label>
@@ -2340,7 +2154,6 @@ export default function Settings() {
               </div>
             )}
 
-            {/* ✅ 2FA Code Input (REQUIRED for ALL accounts) */}
             <div className="space-y-2">
               <Label htmlFor="disable2FACode">Current 2FA Code</Label>
               <Input
@@ -2375,8 +2188,8 @@ export default function Settings() {
                 disable2FAMutation.mutate();
               }}
               disabled={
-                ((user as any)?.passwordHash && !disablePassword) || // Password required if account has one
-                disable2FACode.length !== 6 || // 2FA code always required
+                ((user as any)?.passwordHash && !disablePassword) ||
+                disable2FACode.length !== 6 ||
                 disable2FAMutation.isPending
               }
               className="bg-red-600 hover:bg-red-700"
@@ -2394,13 +2207,12 @@ export default function Settings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ✅ NEW: Regenerate Backup Codes Modal */}
+      {/* Regenerate Backup Codes Modal */}
       <Dialog
         open={showRegenerateModal}
         onOpenChange={(open) => {
           setShowRegenerateModal(open);
           if (!open) {
-            // Reset on close
             setRegenerateStep("input");
             setRegeneratePassword("");
             setRegenerate2FACode("");
@@ -2410,7 +2222,6 @@ export default function Settings() {
       >
         <DialogContent className="max-w-md">
           {regenerateStep === "input" ? (
-            // ========== STEP 1: INPUT CREDENTIALS ==========
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -2423,7 +2234,6 @@ export default function Settings() {
               </DialogHeader>
 
               <div className="space-y-4">
-                {/* ⚠️ Warning Box */}
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -2438,7 +2248,6 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Security Notice */}
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <Shield className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -2455,7 +2264,6 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Password Input (conditional) */}
                 {(user as any)?.passwordHash && (
                   <div className="space-y-2">
                     <Label htmlFor="regeneratePassword">Password</Label>
@@ -2469,7 +2277,6 @@ export default function Settings() {
                   </div>
                 )}
 
-                {/* 2FA Code Input (REQUIRED) */}
                 <div className="space-y-2">
                   <Label htmlFor="regenerate2FACode">Current 2FA Code</Label>
                   <Input
@@ -2489,7 +2296,6 @@ export default function Settings() {
                   </p>
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3 pt-2">
                   <Button
                     variant="outline"
@@ -2535,7 +2341,6 @@ export default function Settings() {
               </div>
             </>
           ) : (
-            // ========== STEP 2: DISPLAY NEW CODES ==========
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -2548,7 +2353,6 @@ export default function Settings() {
               </DialogHeader>
 
               <div className="space-y-4">
-                {/* Success Message */}
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
@@ -2562,7 +2366,6 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Warning */}
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
@@ -2576,7 +2379,6 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Backup Codes Display */}
                 <div className="p-4 bg-slate-900 rounded-lg">
                   <div className="grid grid-cols-2 gap-2">
                     {backupCodes.map((code, index) => (
@@ -2590,7 +2392,6 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3">
                   <Button
                     variant="outline"
@@ -2621,7 +2422,6 @@ export default function Settings() {
                   </Button>
                 </div>
 
-                {/* Optional: Download as file */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -2654,7 +2454,7 @@ export default function Settings() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ NEW: Deletion Progress Modal */}
+      {/* Deletion Progress Modal */}
       <Dialog open={showDeletionProgress} onOpenChange={() => {}}>
         <DialogContent
           className="max-w-md"
@@ -2685,7 +2485,6 @@ export default function Settings() {
           <div className="py-6 space-y-4">
             {!deletionComplete ? (
               <>
-                {/* Progress Steps */}
                 <div className="space-y-3">
                   {[
                     { icon: Shield, text: "Verifying credentials" },
@@ -2744,7 +2543,6 @@ export default function Settings() {
                   })}
                 </div>
 
-                {/* Progress Bar */}
                 <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-500 ease-out"
@@ -2754,7 +2552,6 @@ export default function Settings() {
               </>
             ) : (
               <>
-                {/* Completion Screen */}
                 <div className="text-center space-y-4">
                   <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
                     <CheckCircle2 className="w-10 h-10 text-green-600" />
@@ -2777,7 +2574,6 @@ export default function Settings() {
                     </p>
                   </div>
 
-                  {/* Countdown */}
                   <div className="pt-4 space-y-2">
                     <div className="flex items-center justify-center gap-2 text-slate-600">
                       <RefreshCw className="w-4 h-4 animate-spin" />

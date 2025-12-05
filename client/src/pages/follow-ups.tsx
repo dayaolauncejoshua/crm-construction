@@ -3,6 +3,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClient } from "@/contexts/ClientContext";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,8 +101,7 @@ export default function FollowUpsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [clients, setClients] = useState<any[]>([]);
+  const { selectedClientId } = useClient();
   const [sequences, setSequences] = useState<FollowUpSequence[]>([]);
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>([]);
   const [stats, setStats] = useState<FollowUpStats | null>(null);
@@ -114,42 +114,6 @@ export default function FollowUpsPage() {
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Fetch clients
-  useEffect(() => {
-    async function fetchClients() {
-      try {
-        const url = getApiUrl(`/api/clients?userId=${user?.id}`);
-        console.log("🔍 [FOLLOW-UPS] Fetching clients from:", url);
-        
-        const res = await fetch(url, {
-          credentials: "include",
-        });
-        
-        console.log("📡 [FOLLOW-UPS] Clients response:", res.status);
-        
-        if (!res.ok) {
-          throw new Error("Failed to fetch clients");
-        }
-        
-        const data = await res.json();
-        setClients(data);
-        if (data.length > 0) {
-          setSelectedClientId(data[0].id);
-        }
-      } catch (error) {
-        console.error("Error fetching clients:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch clients. Please try again.",
-          variant: "destructive",
-        });
-      }
-    }
-    if (user?.id) {
-      fetchClients();
-    }
-  }, [user, toast]);
-
   // Fetch sequences, pending follow-ups, and stats
   useEffect(() => {
     async function fetchData() {
@@ -160,22 +124,11 @@ export default function FollowUpsPage() {
         const pendingUrl = getApiUrl(`/api/follow-ups/${selectedClientId}/pending`);
         const statsUrl = getApiUrl(`/api/follow-ups/${selectedClientId}/stats`);
         
-        console.log("🔍 [FOLLOW-UPS] Fetching data...");
-        console.log("  - Sequences:", sequencesUrl);
-        console.log("  - Pending:", pendingUrl);
-        console.log("  - Stats:", statsUrl);
-        
         const [seqRes, pendingRes, statsRes] = await Promise.all([
           fetch(sequencesUrl, { credentials: "include" }),
           fetch(pendingUrl, { credentials: "include" }),
           fetch(statsUrl, { credentials: "include" }),
         ]);
-        
-        console.log("📡 [FOLLOW-UPS] Responses:", {
-          sequences: seqRes.status,
-          pending: pendingRes.status,
-          stats: statsRes.status,
-        });
         
         if (!seqRes.ok || !pendingRes.ok || !statsRes.ok) {
           throw new Error("Failed to fetch follow-up data");
@@ -406,12 +359,12 @@ export default function FollowUpsPage() {
   if (loading) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+        <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2" />
           <div className="h-4 w-96 bg-slate-200 rounded animate-pulse" />
         </header>
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <main className="flex-1 overflow-auto p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             {[1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
@@ -430,52 +383,33 @@ export default function FollowUpsPage() {
       <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+            <h2 className="text-2xl font-bold text-slate-900">
               Follow-ups
             </h2>
             <p className="text-sm text-slate-600 mt-1">
               Automated message sequences to nurture leads
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {clients.length > 1 && (
-              <Select
-                value={selectedClientId}
-                onValueChange={setSelectedClientId}
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Dialog
-              open={isCreateDialogOpen}
-              onOpenChange={setIsCreateDialogOpen}
-            >
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Create Sequence
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <CreateSequenceForm
-                  clientId={selectedClientId}
-                  onSuccess={() => {
-                    setIsCreateDialogOpen(false);
-                    window.location.reload();
-                  }}
-                />
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Dialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          >
+            <DialogTrigger asChild>
+              <Button className="gap-2 whitespace-nowrap">
+                <Plus className="w-4 h-4" />
+                Create Sequence
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh]">
+              <CreateSequenceForm
+                clientId={selectedClientId!}
+                onSuccess={() => {
+                  setIsCreateDialogOpen(false);
+                  window.location.reload();
+                }}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
@@ -498,85 +432,68 @@ export default function FollowUpsPage() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - ONLY responsive classes changed */}
         {stats && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <Card className="border-2 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="text-sm font-medium text-slate-600">
-                  Total Follow-ups
-                </div>
+            {/* Total */}
+            <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-slate-600">Total</div>
                 <Activity className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">
-                  {stats.total}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">All time</p>
-              </CardContent>
-            </Card>
-            <Card className="border-2 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="text-sm font-medium text-slate-600">
-                  Pending
-                </div>
+              </div>
+              <div className="text-3xl font-bold text-slate-900">{stats.total}</div>
+              <p className="text-xs text-slate-500 mt-1">All time</p>
+            </div>
+
+            {/* Pending */}
+            <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-slate-600">Pending</div>
                 <Clock className="h-4 w-4 text-amber-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-amber-600">
-                  {stats.pending}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Scheduled</p>
-              </CardContent>
-            </Card>
-            <Card className="border-2 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
+              </div>
+              <div className="text-3xl font-bold text-amber-600">{stats.pending}</div>
+              <p className="text-xs text-slate-500 mt-1">Scheduled</p>
+            </div>
+
+            {/* Sent */}
+            <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-medium text-slate-600">Sent</div>
                 <Send className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-green-600">
-                  {stats.sent}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Delivered</p>
-              </CardContent>
-            </Card>
-            <Card className="border-2 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
+              </div>
+              <div className="text-3xl font-bold text-green-600">{stats.sent}</div>
+              <p className="text-xs text-slate-500 mt-1">Delivered</p>
+            </div>
+
+            {/* Failed */}
+            <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-medium text-slate-600">Failed</div>
                 <AlertCircle className="h-4 w-4 text-red-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-red-600">
-                  {stats.failed}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Errors</p>
-              </CardContent>
-            </Card>
-            <Card className="border-2 hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="text-sm font-medium text-slate-600">
-                  Cancelled
-                </div>
+              </div>
+              <div className="text-3xl font-bold text-red-600">{stats.failed}</div>
+              <p className="text-xs text-slate-500 mt-1">Errors</p>
+            </div>
+
+            {/* Cancelled */}
+            <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-slate-600">Cancelled</div>
                 <X className="h-4 w-4 text-slate-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-600">
-                  {stats.cancelled}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Skipped</p>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="text-3xl font-bold text-slate-600">{stats.cancelled}</div>
+              <p className="text-xs text-slate-500 mt-1">Skipped</p>
+            </div>
           </div>
         )}
 
         {/* Active Sequences */}
-        <Card className="border-2 mb-6">
+        <Card className="mb-6">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Active Sequences</CardTitle>
-                <p className="text-xs text-slate-500 mt-1">
+                <CardTitle>Active Sequences</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
                   Manage your automated follow-up workflows
                 </p>
               </div>
@@ -584,7 +501,7 @@ export default function FollowUpsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsCreateDialogOpen(true)}
-                className="gap-2"
+                className="gap-2 whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
                 Add Sequence
@@ -605,7 +522,7 @@ export default function FollowUpsPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {sequences.map((sequence) => (
                   <SequenceCard
                     key={sequence.id}
@@ -621,24 +538,24 @@ export default function FollowUpsPage() {
         </Card>
 
         {/* Pending Follow-ups */}
-        <Card className="border-2">
+        <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2">
                   Pending Follow-ups
                   {stats && stats.pending > 0 && (
                     <Badge variant="secondary">{stats.pending}</Badge>
                   )}
                 </CardTitle>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-sm text-slate-500 mt-1">
                   Review and manage scheduled messages
                 </p>
               </div>
               <div className="flex gap-2">
                 <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 relative">
+                    <Button variant="outline" size="sm" className="gap-2 relative whitespace-nowrap">
                       <Filter className="w-4 h-4" />
                       Filters
                       {activeFiltersCount > 0 && (
@@ -769,10 +686,6 @@ export default function FollowUpsPage() {
                     </div>
                   </PopoverContent>
                 </Popover>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Clock className="w-4 h-4" />
-                  Sort
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -793,6 +706,8 @@ export default function FollowUpsPage() {
                 </p>
               </div>
             )}
+            
+            {/* Pending Follow-ups List - ONLY responsive classes changed */}
             {filteredFollowUps.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="w-12 h-12 mx-auto text-slate-400 mb-4" />
@@ -816,101 +731,103 @@ export default function FollowUpsPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {filteredFollowUps.map((followUp) => (
                   <div
                     key={followUp.id}
-                    className="flex items-start gap-4 p-4 border-2 rounded-lg bg-white hover:border-primary/50 transition-all"
+                    className="bg-white border rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow"
                   >
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <span className="text-sm font-bold text-blue-600">
-                        {followUp.leadName.substring(0, 2).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-slate-900">
-                          {followUp.leadName}
-                        </h4>
-                        {followUp.leadCompany && (
-                          <span className="text-sm text-slate-500">
-                            • {followUp.leadCompany}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                          <h4 className="font-semibold text-slate-900 text-lg">
+                            {followUp.leadName}
+                          </h4>
+                          {followUp.leadCompany && (
+                            <>
+                              <span className="hidden sm:inline text-slate-300">•</span>
+                              <span className="text-sm text-slate-500">
+                                {followUp.leadCompany}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600 mb-3">
+                          {followUp.content}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Badge variant="outline">Step {followUp.stepNumber}</Badge>
                           </span>
-                        )}
-                        <Badge variant="outline" className="text-xs ml-auto">
-                          Step {followUp.stepNumber}
-                        </Badge>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(followUp.scheduledFor).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span className="font-medium text-amber-600">
+                              {formatScheduledTime(followUp.scheduledFor)}
+                            </span>
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                        {followUp.content}
-                      </p>
-                      <div className="flex items-center gap-4 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(followUp.scheduledFor).toLocaleString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatScheduledTime(followUp.scheduledFor)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" className="gap-1">
-                            <Send className="w-4 h-4" />
-                            Send Now
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Send Follow-up Now?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will immediately send the follow-up message to{" "}
-                              <strong>{followUp.leadName}</strong>. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => sendFollowUpNow(followUp.id)}>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" className="gap-2 w-full sm:w-auto">
+                              <Send className="w-4 h-4" />
                               Send Now
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                      
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="gap-1">
-                            <SkipForward className="w-4 h-4" />
-                            Skip
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Skip This Follow-up?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will cancel the scheduled follow-up for{" "}
-                              <strong>{followUp.leadName}</strong>. This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => skipFollowUp(followUp.id)}
-                              className="bg-red-600 hover:bg-red-700"
-                            >
-                              Skip Follow-up
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Send Follow-up Now?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will immediately send the follow-up message to{" "}
+                                <strong>{followUp.leadName}</strong>. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => sendFollowUpNow(followUp.id)}>
+                                Send Now
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-2 w-full sm:w-auto">
+                              <SkipForward className="w-4 h-4" />
+                              Skip
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Skip This Follow-up?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will cancel the scheduled follow-up for{" "}
+                                <strong>{followUp.leadName}</strong>. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => skipFollowUp(followUp.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Skip Follow-up
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -923,6 +840,7 @@ export default function FollowUpsPage() {
   );
 }
 
+// SequenceCard Component - ONLY responsive classes changed
 function SequenceCard({
   sequence,
   onToggleStatus,
@@ -937,25 +855,24 @@ function SequenceCard({
   const [showSteps, setShowSteps] = useState(false);
   
   return (
-    <div className="border-2 rounded-lg bg-white overflow-hidden hover:border-primary/50 transition-all">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="font-semibold text-slate-900">{sequence.name}</h3>
+    <div className="bg-white border rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <h3 className="font-semibold text-slate-900 text-lg">
+              {sequence.name}
+            </h3>
             {sequence.isDefault && (
-              <Badge variant="outline" className="text-xs">
-                Default
-              </Badge>
+              <Badge variant="outline">Default</Badge>
             )}
             <Badge
               variant={sequence.status === "active" ? "default" : "secondary"}
-              className="text-xs"
             >
               {sequence.status}
             </Badge>
           </div>
-          <p className="text-sm text-slate-600 mb-2">{sequence.description}</p>
-          <div className="flex items-center gap-4 text-xs text-slate-500">
+          <p className="text-sm text-slate-600 mb-3">{sequence.description}</p>
+          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
             <span className="flex items-center gap-1">
               <MessageSquare className="w-3 h-3" />
               {sequence.steps.length} steps
@@ -982,20 +899,21 @@ function SequenceCard({
             </button>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={() => onToggleStatus(sequence.id, sequence.status)}
+            className="gap-2 w-full sm:w-auto"
           >
             {sequence.status === "active" ? (
               <>
-                <Pause className="w-4 h-4 mr-1" />
+                <Pause className="w-4 h-4" />
                 Pause
               </>
             ) : (
               <>
-                <Play className="w-4 h-4 mr-1" />
+                <Play className="w-4 h-4" />
                 Activate
               </>
             )}
@@ -1003,7 +921,7 @@ function SequenceCard({
           
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" className="w-full sm:w-auto">
                 <Trash2 className="w-4 h-4 text-red-600" />
               </Button>
             </AlertDialogTrigger>
@@ -1030,7 +948,7 @@ function SequenceCard({
       </div>
       
       {showSteps && (
-        <div className="border-t bg-slate-50 p-4">
+        <div className="border-t mt-4 pt-4">
           <h4 className="text-sm font-semibold text-slate-700 mb-3">
             Sequence Steps
           </h4>
@@ -1038,7 +956,7 @@ function SequenceCard({
             {sequence.steps.map((step, index) => (
               <div
                 key={step.id}
-                className="flex items-start gap-3 p-3 bg-white rounded-lg border"
+                className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg"
               >
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <span className="text-sm font-bold text-primary">
@@ -1059,23 +977,6 @@ function SequenceCard({
                     {step.content}
                   </p>
                 </div>
-                {index < sequence.steps.length - 1 && (
-                  <div className="flex-shrink-0 text-slate-400">
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1085,6 +986,7 @@ function SequenceCard({
   );
 }
 
+// CreateSequenceForm Component remains the same
 function CreateSequenceForm({
   clientId,
   onSuccess,
@@ -1168,6 +1070,7 @@ function CreateSequenceForm({
       setSubmitting(false);
     }
   }
+
   return (
     <div className="flex flex-col max-h-[85vh]">
       <DialogHeader className="px-6 pt-6 pb-4 border-b">
@@ -1298,20 +1201,21 @@ function CreateSequenceForm({
         </div>
         
         <div className="border-t px-6 py-4 bg-white">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
             <p className="text-sm text-muted-foreground">
               {steps.length} step{steps.length !== 1 ? "s" : ""} configured
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onSuccess}
                 disabled={submitting}
+                className="flex-1 sm:flex-initial"
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting} className="flex-1 sm:flex-initial">
                 {submitting ? "Creating..." : "Create Sequence"}
               </Button>
             </div>

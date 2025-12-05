@@ -216,14 +216,16 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-                <AvatarImage
-                  src="/placeholder-avatar.jpg"
-                  alt={getUserDisplayName()}
-                />
-                <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
-                  {getUserInitials()}
-                </AvatarFallback>
-              </Avatar>
+  {user?.profileImageUrl ? (
+    <AvatarImage
+      src={user.profileImageUrl}
+      alt={getUserDisplayName()}
+    />
+  ) : null}
+  <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
+    {getUserInitials()}
+  </AvatarFallback>
+</Avatar>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-semibold text-slate-900 truncate">
                   {getUserDisplayName()}
@@ -318,14 +320,16 @@ export default function Navigation({
           >
             <div className="flex items-center space-x-3 w-full">
               <Avatar className="w-9 h-9 ring-2 ring-slate-200">
-                <AvatarImage
-                  src="/placeholder-avatar.jpg"
-                  alt={getUserDisplayName()}
-                />
-                <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
-                  {getUserInitials()}
-                </AvatarFallback>
-              </Avatar>
+  {user?.profileImageUrl ? (
+    <AvatarImage
+      src={user.profileImageUrl}
+      alt={getUserDisplayName()}
+    />
+  ) : null}
+  <AvatarFallback className="bg-gradient-construction text-white text-sm font-semibold">
+    {getUserInitials()}
+  </AvatarFallback>
+</Avatar>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-semibold text-slate-900 truncate">
                   {getUserDisplayName()}
