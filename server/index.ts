@@ -16,6 +16,9 @@ import browserTestRouter from "./routes/browser-test.route";
 import cors from "cors";
 import profilePictureRoutes from "./routes/profile-picture";
 
+console.log("📸 Profile Picture Routes:", profilePictureRoutes); // ✅ Add this
+console.log("📸 Route stack length:", profilePictureRoutes.stack?.length);
+
 // Import pool from db.ts
 import { pool } from "./db";
 
@@ -180,6 +183,22 @@ app.use((req, res, next) => {
   }
 
  const server = await registerRoutes(app);
+
+ console.log("\n📋 ========== REGISTERED ROUTES ==========");
+app._router.stack.forEach((middleware: any) => {
+  if (middleware.route) {
+    const methods = Object.keys(middleware.route.methods).join(", ").toUpperCase();
+    console.log(`  ${methods} ${middleware.route.path}`);
+  } else if (middleware.name === "router") {
+    middleware.handle.stack.forEach((handler: any) => {
+      if (handler.route) {
+        const methods = Object.keys(handler.route.methods).join(", ").toUpperCase();
+        console.log(`  ${methods} ${handler.route.path}`);
+      }
+    });
+  }
+});
+console.log("📋 ========================================\n");
 
   // Error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
