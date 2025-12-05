@@ -102,14 +102,32 @@ passport.use(
         if (existingUser) {
           console.log("✅ Existing Google user found:", existingUser.email);
 
+          // ✅ Prepare update data
+          const updateData: any = {
+            lastLoginAt: new Date(),
+            loginCount: (existingUser.loginCount || 0) + 1,
+            updatedAt: new Date(),
+          };
+
+          // ✅ Only update profile picture if:
+          // 1. User has NO profile picture, OR
+          // 2. Current profile picture is still from Google (not uploaded)
+          const hasCustomImage =
+            existingUser.profileImageUrl &&
+            existingUser.profileImageUrl.includes("cloudinary.com");
+
+          if (!hasCustomImage) {
+            // User has no image or still using Google image - update it
+            updateData.profileImageUrl = profile.photos?.[0]?.value; // ✅ Correct
+            console.log("🖼️ Updating profile picture from Google");
+          } else {
+            // User has custom uploaded image - don't touch it
+            console.log("🖼️ Keeping custom uploaded profile picture");
+          }
+
           await db
             .update(users)
-            .set({
-              profileImageUrl: profile.photos?.[0]?.value,
-              lastLoginAt: new Date(),
-              loginCount: (existingUser.loginCount || 0) + 1,
-              updatedAt: new Date(),
-            })
+            .set(updateData)
             .where(eq(users.id, existingUser.id));
 
           // ✅ Mark as returning user
