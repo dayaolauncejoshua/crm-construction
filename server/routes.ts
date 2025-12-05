@@ -33,6 +33,7 @@ import { vslGenerator } from "./services/vsl-generator";
 import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { normalizePhone, normalizeEmail } from "./utils/normalize";
+import { cloudinaryService } from "./services/cloudinary.service";
 
 
 // Helper function to check if user owns the resource
@@ -2278,19 +2279,221 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
 
   // ======================== VIDEO SALES LETTER ROUTES  =====================================
 
-  // VSL Analytics Routes - Track video plays and progress
+  // ✅ GET all VSLs for a client
+  app.get("/api/vsls/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      console.log("📋 Fetching VSLs for client:", clientId);
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const vsls = await storage.getVSLsByClient(clientId);
+      res.json(vsls);
+    } catch (error: any) {
+      console.error("❌ Error fetching VSLs:", error);
+      res.status(500).json({
+        message: "Failed to fetch VSLs",
+        error: error.message,
+      });
+    }
+  });
+
+  // ✅ CREATE new VSL
+  app.post("/api/vsls", requireAuth, async (req, res) => {
+    try {
+      const {
+        title,
+        niche,
+        clientId,
+        targetDuration,
+        subtitleType,
+        targetAudience,
+        painPoints,
+        solution,
+        proofElements,
+      } = req.body;
+
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Validate and normalize duration
+      const validDurations = ["30s", "1min", "2min", "3min", "5min"] as const;
+      const normalizedDuration = validDurations.includes(targetDuration)
+        ? targetDuration
+        : "2min";
+
+      const validSubtitleTypes = ["none", "traditional", "karaoke"] as const;
+      const normalizedSubtitleType = validSubtitleTypes.includes(subtitleType)
+        ? subtitleType
+        : "none";
+
+      console.log("🎬 Creating new VSL:", {
+        title,
+        niche,
+        clientId,
+        targetDuration: normalizedDuration,
+      });
+
+      // Validate required fields
+      if (!title || !niche || !clientId) {
+        return res.status(400).json({
+          message: "Missing required fields: title, niche, clientId",
+        });
+      }
+
+      // Generate script
+      console.log(`📝 Generating ${normalizedDuration} VSL script...`);
+
+      const script = await generateVSLScript(niche, {
+        targetAudience: targetAudience || `${niche} business owners`,
+        painPoints: painPoints || `Common challenges in ${niche}`,
+        solution: solution || "AI-powered lead generation system",
+        proofElements: proofElements || "Proven results and case studies",
+        duration: normalizedDuration,
+      });
+
+      const wordCount = script.split(/\s+/).filter((w) => w.length > 0).length;
+      console.log("✅ Script generated:", script.substring(0, 100) + "...");
+      console.log(
+        `📊 Script length: ${wordCount} words for ${normalizedDuration}`
+      );
+
+      // Create VSL record
+      const vsl = await storage.createVSL({
+        clientId,
+        title,
+        script,
+        targetDuration: normalizedDuration,
+        subtitleType: normalizedSubtitleType,
+        isActive: true,
+      });
+
+      console.log("✅ VSL record created:", vsl.id);
+
+      // Start video generation in background
+      generateVideoInBackground(
+        vsl.id,
+        script,
+        title,
+        clientId,
+        niche,
+        normalizedDuration,
+        normalizedSubtitleType
+      );
+
+      res.json({
+        success: true,
+        vsl,
+        message: `VSL creation started. ${normalizedDuration} video will be ready in 5-10 minutes.`,
+      });
+    } catch (error: any) {
+      console.error("❌ Error creating VSL:", error);
+      res.status(500).json({
+        message: "Failed to create VSL",
+        error: error.message,
+      });
+    }
+  });
+
+  // ✅ UPDATE VSL
+  app.patch("/api/vsls/:vslId", requireAuth, async (req, res) => {
+    try {
+      const { vslId } = req.params;
+      const updateData = req.body;
+
+      console.log(`📝 Updating VSL: ${vslId}`);
+
+      const updatedVSL = await storage.updateVSL(vslId, updateData);
+      res.json(updatedVSL);
+    } catch (error: any) {
+      console.error("❌ Error updating VSL:", error);
+      res.status(500).json({
+        message: "Failed to update VSL",
+        error: error.message,
+      });
+    }
+  });
+
+  // ✅ DELETE VSL
+  app.delete("/api/vsls/:vslId", requireAuth, async (req, res) => {
+    try {
+      const { vslId } = req.params;
+
+      console.log(`🗑️ Deleting VSL: ${vslId}`);
+
+      const vsl = await storage.getVSL(vslId);
+      if (!vsl) {
+        return res.status(404).json({ message: "VSL not found" });
+      }
+
+      // Delete from Cloudinary if exists
+      if (vsl.cloudinaryVideoId) {
+        try {
+          await cloudinaryService.deleteResource(vsl.cloudinaryVideoId, "video");
+          console.log("✅ Video deleted from Cloudinary");
+        } catch (error) {
+          console.error("⚠️ Failed to delete video:", error);
+        }
+      }
+
+      if (vsl.cloudinaryThumbnailId) {
+        try {
+          await cloudinaryService.deleteResource(
+            vsl.cloudinaryThumbnailId,
+            "image"
+          );
+          console.log("✅ Thumbnail deleted from Cloudinary");
+        } catch (error) {
+          console.error("⚠️ Failed to delete thumbnail:", error);
+        }
+      }
+
+      await storage.deleteVSL(vslId);
+      res.json({ success: true, message: "VSL deleted successfully" });
+    } catch (error: any) {
+      console.error("❌ Error deleting VSL:", error);
+      res.status(500).json({
+        message: "Failed to delete VSL",
+        error: error.message,
+      });
+    }
+  });
+
+  // ✅ ANALYTICS ROUTES
   app.post("/api/vsls/:vslId/track-play", async (req, res) => {
     try {
       const { vslId } = req.params;
       const { sessionId } = req.body;
 
+      if (!sessionId) {
+        return res.status(400).json({ message: "Session ID required" });
+      }
+
       console.log(`📊 [VSL] Tracking play for VSL: ${vslId}, Session: ${sessionId}`);
+
+      const ipAddress = req.ip || (req.headers["x-forwarded-for"] as string);
+      const userAgent = req.headers["user-agent"];
 
       await storage.trackVSLPlay({
         vslId,
         sessionId,
-        ipAddress: req.ip,
-        userAgent: req.headers["user-agent"],
+        ipAddress,
+        userAgent,
       });
 
       console.log(`✅ [VSL] Play tracked successfully`);
@@ -2304,6 +2507,10 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
   app.post("/api/vsls/:vslId/track-progress", async (req, res) => {
     try {
       const { sessionId, watchTime, completionPercentage, completed } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).json({ message: "Session ID required" });
+      }
 
       console.log(`📊 [VSL] Tracking progress: ${completionPercentage}% completed`);
 
@@ -2337,6 +2544,48 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ✅ Background video generation helper function
+  async function generateVideoInBackground(
+    vslId: string,
+    script: string,
+    title: string,
+    clientId: string,
+    niche: string,
+    targetDuration: string,
+    subtitleType: string
+  ) {
+    try {
+      console.log(
+        `🎥 Starting background video generation for VSL: ${vslId} (${targetDuration})`
+      );
+
+      const result = await vslGenerator.generateVSL({
+        vslId,
+        script,
+        title,
+        clientId,
+        niche,
+        targetDuration,
+        subtitles: subtitleType as "none" | "traditional" | "karaoke",
+      });
+
+      await storage.updateVSL(vslId, {
+        videoUrl: result.videoUrl,
+        thumbnailUrl: result.thumbnailUrl,
+        duration: result.duration,
+        cloudinaryVideoId: result.cloudinaryPublicIds?.video,
+        cloudinaryThumbnailId: result.cloudinaryPublicIds?.thumbnail,
+      });
+
+      console.log(
+        `✅ Video generation complete for VSL: ${vslId} (actual duration: ${result.duration}s)`
+      );
+    } catch (error) {
+      console.error(`❌ Video generation failed for VSL: ${vslId}`, error);
+      await storage.updateVSL(vslId, { isActive: false });
+    }
+  }
 
 
   // ======================= FOLLOW-UPS ROUTES ==============================================
