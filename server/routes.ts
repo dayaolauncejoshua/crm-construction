@@ -2277,204 +2277,54 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
     }
   });
 
-  // ======================== VIDEO SALES LETTER ROUTES  =====================================
-
-  // ✅ GET all VSLs for a client
-  app.get("/api/vsls/:clientId", requireAuth, async (req, res) => {
+   // ======================== VSL HELPER FUNCTION =====================================
+  
+  async function generateVideoInBackground(
+    vslId: string,
+    script: string,
+    title: string,
+    clientId: string,
+    niche: string,
+    targetDuration: string,
+    subtitleType: string
+  ) {
     try {
-      const { clientId } = req.params;
-      const requestUser = req.user!;
-
-      console.log("📋 Fetching VSLs for client:", clientId);
-
-      // Verify ownership
-      if (requestUser.role !== "super_admin") {
-        const client = await storage.getClient(clientId);
-        if (!client || client.userId !== requestUser.id) {
-          return res.status(403).json({ message: "Access denied" });
-        }
-      }
-
-      const vsls = await storage.getVSLsByClient(clientId);
-      res.json(vsls);
-    } catch (error: any) {
-      console.error("❌ Error fetching VSLs:", error);
-      res.status(500).json({
-        message: "Failed to fetch VSLs",
-        error: error.message,
-      });
-    }
-  });
-
-  // ✅ CREATE new VSL
-  app.post("/api/vsls", requireAuth, async (req, res) => {
-    try {
-      const {
-        title,
-        niche,
-        clientId,
-        targetDuration,
-        subtitleType,
-        targetAudience,
-        painPoints,
-        solution,
-        proofElements,
-      } = req.body;
-
-      const requestUser = req.user!;
-
-      // Verify ownership
-      if (requestUser.role !== "super_admin") {
-        const client = await storage.getClient(clientId);
-        if (!client || client.userId !== requestUser.id) {
-          return res.status(403).json({ message: "Access denied" });
-        }
-      }
-
-      // Validate and normalize duration
-      const validDurations = ["30s", "1min", "2min", "3min", "5min"] as const;
-      const normalizedDuration = validDurations.includes(targetDuration)
-        ? targetDuration
-        : "2min";
-
-      const validSubtitleTypes = ["none", "traditional", "karaoke"] as const;
-      const normalizedSubtitleType = validSubtitleTypes.includes(subtitleType)
-        ? subtitleType
-        : "none";
-
-      console.log("🎬 Creating new VSL:", {
-        title,
-        niche,
-        clientId,
-        targetDuration: normalizedDuration,
-      });
-
-      // Validate required fields
-      if (!title || !niche || !clientId) {
-        return res.status(400).json({
-          message: "Missing required fields: title, niche, clientId",
-        });
-      }
-
-      // Generate script
-      console.log(`📝 Generating ${normalizedDuration} VSL script...`);
-
-      const script = await generateVSLScript(niche, {
-        targetAudience: targetAudience || `${niche} business owners`,
-        painPoints: painPoints || `Common challenges in ${niche}`,
-        solution: solution || "AI-powered lead generation system",
-        proofElements: proofElements || "Proven results and case studies",
-        duration: normalizedDuration,
-      });
-
-      const wordCount = script.split(/\s+/).filter((w) => w.length > 0).length;
-      console.log("✅ Script generated:", script.substring(0, 100) + "...");
       console.log(
-        `📊 Script length: ${wordCount} words for ${normalizedDuration}`
+        `🎥 Starting background video generation for VSL: ${vslId} (${targetDuration})`
       );
 
-      // Create VSL record
-      const vsl = await storage.createVSL({
-        clientId,
-        title,
-        script,
-        targetDuration: normalizedDuration,
-        subtitleType: normalizedSubtitleType,
-        isActive: true,
-      });
-
-      console.log("✅ VSL record created:", vsl.id);
-
-      // Start video generation in background
-      generateVideoInBackground(
-        vsl.id,
+      const result = await vslGenerator.generateVSL({
+        vslId,
         script,
         title,
         clientId,
         niche,
-        normalizedDuration,
-        normalizedSubtitleType
+        targetDuration,
+        subtitles: subtitleType as "none" | "traditional" | "karaoke",
+      });
+
+      await storage.updateVSL(vslId, {
+        videoUrl: result.videoUrl,
+        thumbnailUrl: result.thumbnailUrl,
+        duration: result.duration,
+        cloudinaryVideoId: result.cloudinaryPublicIds?.video,
+        cloudinaryThumbnailId: result.cloudinaryPublicIds?.thumbnail,
+      });
+
+      console.log(
+        `✅ Video generation complete for VSL: ${vslId} (actual duration: ${result.duration}s)`
       );
-
-      res.json({
-        success: true,
-        vsl,
-        message: `VSL creation started. ${normalizedDuration} video will be ready in 5-10 minutes.`,
-      });
-    } catch (error: any) {
-      console.error("❌ Error creating VSL:", error);
-      res.status(500).json({
-        message: "Failed to create VSL",
-        error: error.message,
-      });
+    } catch (error) {
+      console.error(`❌ Video generation failed for VSL: ${vslId}`, error);
+      await storage.updateVSL(vslId, { isActive: false });
     }
-  });
+  }
 
-  // ✅ UPDATE VSL
-  app.patch("/api/vsls/:vslId", requireAuth, async (req, res) => {
-    try {
-      const { vslId } = req.params;
-      const updateData = req.body;
+ 
+    // ======================== VIDEO SALES LETTER ROUTES =====================================
 
-      console.log(`📝 Updating VSL: ${vslId}`);
-
-      const updatedVSL = await storage.updateVSL(vslId, updateData);
-      res.json(updatedVSL);
-    } catch (error: any) {
-      console.error("❌ Error updating VSL:", error);
-      res.status(500).json({
-        message: "Failed to update VSL",
-        error: error.message,
-      });
-    }
-  });
-
-  // ✅ DELETE VSL
-  app.delete("/api/vsls/:vslId", requireAuth, async (req, res) => {
-    try {
-      const { vslId } = req.params;
-
-      console.log(`🗑️ Deleting VSL: ${vslId}`);
-
-      const vsl = await storage.getVSL(vslId);
-      if (!vsl) {
-        return res.status(404).json({ message: "VSL not found" });
-      }
-
-      // Delete from Cloudinary if exists
-      if (vsl.cloudinaryVideoId) {
-        try {
-          await cloudinaryService.deleteResource(vsl.cloudinaryVideoId, "video");
-          console.log("✅ Video deleted from Cloudinary");
-        } catch (error) {
-          console.error("⚠️ Failed to delete video:", error);
-        }
-      }
-
-      if (vsl.cloudinaryThumbnailId) {
-        try {
-          await cloudinaryService.deleteResource(
-            vsl.cloudinaryThumbnailId,
-            "image"
-          );
-          console.log("✅ Thumbnail deleted from Cloudinary");
-        } catch (error) {
-          console.error("⚠️ Failed to delete thumbnail:", error);
-        }
-      }
-
-      await storage.deleteVSL(vslId);
-      res.json({ success: true, message: "VSL deleted successfully" });
-    } catch (error: any) {
-      console.error("❌ Error deleting VSL:", error);
-      res.status(500).json({
-        message: "Failed to delete VSL",
-        error: error.message,
-      });
-    }
-  });
-
-  // ✅ ANALYTICS ROUTES
+  // ✅ ANALYTICS ROUTES FIRST (most specific paths)
+  
   app.post("/api/vsls/:vslId/track-play", async (req, res) => {
     try {
       const { vslId } = req.params;
@@ -2545,47 +2395,210 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
     }
   });
 
-  // ✅ Background video generation helper function
-  async function generateVideoInBackground(
-    vslId: string,
-    script: string,
-    title: string,
-    clientId: string,
-    niche: string,
-    targetDuration: string,
-    subtitleType: string
-  ) {
+  app.post("/api/vsls/:vslId/view", async (req, res) => {
     try {
+      const { vslId } = req.params;
+      await storage.incrementVSLViews(vslId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ [VSL] Error tracking view:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ✅ CRUD ROUTES (less specific)
+
+  app.post("/api/vsls", requireAuth, async (req, res) => {
+    try {
+      const {
+        title,
+        niche,
+        clientId,
+        targetDuration,
+        subtitleType,
+        targetAudience,
+        painPoints,
+        solution,
+        proofElements,
+      } = req.body;
+
+      const requestUser = req.user!;
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Validate and normalize
+      const validDurations = ["30s", "1min", "2min", "3min", "5min"] as const;
+      const normalizedDuration = validDurations.includes(targetDuration)
+        ? targetDuration
+        : "2min";
+
+      const validSubtitleTypes = ["none", "traditional", "karaoke"] as const;
+      const normalizedSubtitleType = validSubtitleTypes.includes(subtitleType)
+        ? subtitleType
+        : "none";
+
+      console.log("🎬 Creating new VSL:", {
+        title,
+        niche,
+        clientId,
+        targetDuration: normalizedDuration,
+      });
+
+      if (!title || !niche || !clientId) {
+        return res.status(400).json({
+          message: "Missing required fields: title, niche, clientId",
+        });
+      }
+
+      // Generate script
+      console.log(`📝 Generating ${normalizedDuration} VSL script...`);
+
+      const script = await generateVSLScript(niche, {
+        targetAudience: targetAudience || `${niche} business owners`,
+        painPoints: painPoints || `Common challenges in ${niche}`,
+        solution: solution || "AI-powered lead generation system",
+        proofElements: proofElements || "Proven results and case studies",
+        duration: normalizedDuration,
+      });
+
+      const wordCount = script.split(/\s+/).filter((w) => w.length > 0).length;
+      console.log("✅ Script generated:", script.substring(0, 100) + "...");
       console.log(
-        `🎥 Starting background video generation for VSL: ${vslId} (${targetDuration})`
+        `📊 Script length: ${wordCount} words for ${normalizedDuration}`
       );
 
-      const result = await vslGenerator.generateVSL({
-        vslId,
+      // Create VSL record
+      const vsl = await storage.createVSL({
+        clientId,
+        title,
+        script,
+        targetDuration: normalizedDuration,
+        subtitleType: normalizedSubtitleType,
+        isActive: true,
+      });
+
+      console.log("✅ VSL record created:", vsl.id);
+
+      // Start video generation in background
+      generateVideoInBackground(
+        vsl.id,
         script,
         title,
         clientId,
         niche,
-        targetDuration,
-        subtitles: subtitleType as "none" | "traditional" | "karaoke",
-      });
-
-      await storage.updateVSL(vslId, {
-        videoUrl: result.videoUrl,
-        thumbnailUrl: result.thumbnailUrl,
-        duration: result.duration,
-        cloudinaryVideoId: result.cloudinaryPublicIds?.video,
-        cloudinaryThumbnailId: result.cloudinaryPublicIds?.thumbnail,
-      });
-
-      console.log(
-        `✅ Video generation complete for VSL: ${vslId} (actual duration: ${result.duration}s)`
+        normalizedDuration,
+        normalizedSubtitleType
       );
-    } catch (error) {
-      console.error(`❌ Video generation failed for VSL: ${vslId}`, error);
-      await storage.updateVSL(vslId, { isActive: false });
+
+      res.json({
+        success: true,
+        vsl,
+        message: `VSL creation started. ${normalizedDuration} video will be ready in 5-10 minutes.`,
+      });
+    } catch (error: any) {
+      console.error("❌ Error creating VSL:", error);
+      res.status(500).json({
+        message: "Failed to create VSL",
+        error: error.message,
+      });
     }
-  }
+  });
+
+  app.patch("/api/vsls/:vslId", requireAuth, async (req, res) => {
+    try {
+      const { vslId } = req.params;
+      const updateData = req.body;
+
+      console.log(`📝 Updating VSL: ${vslId}`);
+
+      const updatedVSL = await storage.updateVSL(vslId, updateData);
+      res.json(updatedVSL);
+    } catch (error: any) {
+      console.error("❌ Error updating VSL:", error);
+      res.status(500).json({
+        message: "Failed to update VSL",
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete("/api/vsls/:vslId", requireAuth, async (req, res) => {
+    try {
+      const { vslId } = req.params;
+
+      console.log(`🗑️ Deleting VSL: ${vslId}`);
+
+      const vsl = await storage.getVSL(vslId);
+      if (!vsl) {
+        return res.status(404).json({ message: "VSL not found" });
+      }
+
+      // Delete from Cloudinary
+      if (vsl.cloudinaryVideoId) {
+        try {
+          await cloudinaryService.deleteResource(vsl.cloudinaryVideoId, "video");
+          console.log("✅ Video deleted from Cloudinary");
+        } catch (error) {
+          console.error("⚠️ Failed to delete video:", error);
+        }
+      }
+
+      if (vsl.cloudinaryThumbnailId) {
+        try {
+          await cloudinaryService.deleteResource(
+            vsl.cloudinaryThumbnailId,
+            "image"
+          );
+          console.log("✅ Thumbnail deleted from Cloudinary");
+        } catch (error) {
+          console.error("⚠️ Failed to delete thumbnail:", error);
+        }
+      }
+
+      await storage.deleteVSL(vslId);
+      res.json({ success: true, message: "VSL deleted successfully" });
+    } catch (error: any) {
+      console.error("❌ Error deleting VSL:", error);
+      res.status(500).json({
+        message: "Failed to delete VSL",
+        error: error.message,
+      });
+    }
+  });
+
+  // ✅ GET ROUTE LAST (most general pattern)
+  
+  app.get("/api/vsls/:clientId", requireAuth, async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const requestUser = req.user!;
+
+      console.log("📋 Fetching VSLs for client:", clientId);
+
+      // Verify ownership
+      if (requestUser.role !== "super_admin") {
+        const client = await storage.getClient(clientId);
+        if (!client || client.userId !== requestUser.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const vsls = await storage.getVSLsByClient(clientId);
+      res.json(vsls);
+    } catch (error: any) {
+      console.error("❌ Error fetching VSLs:", error);
+      res.status(500).json({
+        message: "Failed to fetch VSLs",
+        error: error.message,
+      });
+    }
+  });
 
 
   // ======================= FOLLOW-UPS ROUTES ==============================================

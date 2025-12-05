@@ -12,7 +12,6 @@ import path from "path";
 import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
-import browserTestRouter from "./routes/browser-test.route";
 import cors from "cors";
 
 // Import pool from db.ts
@@ -114,7 +113,6 @@ app.use(passport.session());
 app.use(loadUser);
 
 // Routes
-app.use("/api/browser-test", browserTestRouter);
 app.use(authRouter);
 app.use(twoFactorRoutes);
 
