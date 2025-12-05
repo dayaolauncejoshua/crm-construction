@@ -2278,6 +2278,66 @@ Reply with the details and I'll connect you with our team right away! 🏗️`;
 
   // ======================== VIDEO SALES LETTER ROUTES  =====================================
 
+  // VSL Analytics Routes - Track video plays and progress
+  app.post("/api/vsls/:vslId/track-play", async (req, res) => {
+    try {
+      const { vslId } = req.params;
+      const { sessionId } = req.body;
+
+      console.log(`📊 [VSL] Tracking play for VSL: ${vslId}, Session: ${sessionId}`);
+
+      await storage.trackVSLPlay({
+        vslId,
+        sessionId,
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      console.log(`✅ [VSL] Play tracked successfully`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ [VSL] Error tracking play:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/vsls/:vslId/track-progress", async (req, res) => {
+    try {
+      const { sessionId, watchTime, completionPercentage, completed } = req.body;
+
+      console.log(`📊 [VSL] Tracking progress: ${completionPercentage}% completed`);
+
+      await storage.trackVSLProgress(
+        sessionId,
+        watchTime,
+        completionPercentage,
+        completed
+      );
+
+      console.log(`✅ [VSL] Progress tracked successfully`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("❌ [VSL] Error tracking progress:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/vsls/:vslId/analytics", async (req, res) => {
+    try {
+      const { vslId } = req.params;
+
+      console.log(`📊 [VSL] Fetching analytics for: ${vslId}`);
+
+      const analytics = await storage.getVSLAnalytics(vslId);
+
+      console.log(`✅ [VSL] Analytics fetched:`, analytics);
+      res.json(analytics);
+    } catch (error: any) {
+      console.error("❌ [VSL] Error fetching analytics:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
 
   // ======================= FOLLOW-UPS ROUTES ==============================================
 
