@@ -289,23 +289,424 @@ export default function VSL() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* ✅ Responsive Header */}
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+        {/* DESKTOP HEADER (md and up) */}
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Title Section */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                VSL Generator
+              </h2>
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                Create automated video sales letters for your clients
+              </p>
+            </div>
+
+            {/* Right: Action Button */}
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              <Dialog
+                open={showCreateDialog}
+                onOpenChange={setShowCreateDialog}
+              >
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-white hover:bg-primary/90">
+                    <Wand2 className="w-4 h-4 mr-2" />
+                    <span className="hidden lg:inline">Generate VSL</span>
+                    <span className="lg:hidden">Create VSL</span>
+                  </Button>
+                </DialogTrigger>
+                {/* ✅ Responsive Dialog */}
+                <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+                  <div className="p-4 sm:p-6">
+                    <DialogHeader>
+                      <DialogTitle className="text-lg sm:text-xl">
+                        Generate New VSL
+                      </DialogTitle>
+                    </DialogHeader>
+                    <Form {...form}>
+                      <form
+                        onSubmit={form.handleSubmit(onSubmit)}
+                        className="space-y-4 mt-4"
+                      >
+                        <FormField
+                          control={form.control}
+                          name="title"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                VSL Title
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="e.g., Construction Lead Generation VSL"
+                                  {...field}
+                                  className="text-sm sm:text-base"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="niche"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Target Niche
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="text-sm sm:text-base">
+                                    <SelectValue placeholder="Select target niche" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="construction">
+                                    Construction Companies
+                                  </SelectItem>
+                                  <SelectItem value="agency">
+                                    Marketing Agencies
+                                  </SelectItem>
+                                  <SelectItem value="medspa">
+                                    Medical Spas
+                                  </SelectItem>
+                                  <SelectItem value="realestate">
+                                    Real Estate
+                                  </SelectItem>
+                                  <SelectItem value="automotive">
+                                    Automotive
+                                  </SelectItem>
+                                  <SelectItem value="finance">
+                                    Finance
+                                  </SelectItem>
+                                  <SelectItem value="healthcare">
+                                    Healthcare
+                                  </SelectItem>
+                                  <SelectItem value="legal">
+                                    Legal Services
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="targetDuration"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Video Duration
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value || "2min"}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="text-sm sm:text-base">
+                                    <SelectValue placeholder="Select duration" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="30s">
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-medium">
+                                        30 seconds
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Quick elevator pitch
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="1min">
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-medium">
+                                        1 minute
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Short intro
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="2min">
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-medium">
+                                        2 minutes ⭐
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Standard (Recommended)
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="3min">
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-medium">
+                                        3 minutes
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Detailed presentation
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="5min">
+                                    <div className="flex flex-col items-start">
+                                      <span className="font-medium">
+                                        5 minutes
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Comprehensive deep dive
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="subtitleType"
+                          render={({ field }) => (
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-sm font-semibold">
+                                Subtitle Style 📝
+                              </FormLabel>
+                              <FormControl>
+                                <RadioGroup
+                                  onValueChange={field.onChange}
+                                  defaultValue={field.value}
+                                  className="grid grid-cols-1 gap-3"
+                                >
+                                  {/* No Subtitles Option */}
+                                  <label
+                                    htmlFor="subtitle-none"
+                                    className={cn(
+                                      "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                      field.value === "none"
+                                        ? "border-primary bg-primary/5"
+                                        : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <RadioGroupItem
+                                      value="none"
+                                      id="subtitle-none"
+                                      className="mt-0.5 flex-shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-slate-900">
+                                        No Subtitles (Clean Look)
+                                      </div>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Professional appearance without text
+                                        overlays
+                                      </p>
+                                    </div>
+                                  </label>
+
+                                  {/* Traditional Captions Option */}
+                                  <label
+                                    htmlFor="subtitle-traditional"
+                                    className={cn(
+                                      "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                      field.value === "traditional"
+                                        ? "border-primary bg-primary/5"
+                                        : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <RadioGroupItem
+                                      value="traditional"
+                                      id="subtitle-traditional"
+                                      className="mt-0.5 flex-shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-slate-900">
+                                        Traditional Captions
+                                      </div>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Standard closed captions
+                                        (phrase-by-phrase)
+                                      </p>
+                                    </div>
+                                  </label>
+
+                                  {/* Karaoke Style Option */}
+                                  <label
+                                    htmlFor="subtitle-karaoke"
+                                    className={cn(
+                                      "relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all",
+                                      field.value === "karaoke"
+                                        ? "border-primary bg-primary/5"
+                                        : "border-slate-200 hover:border-primary/50 hover:bg-slate-50"
+                                    )}
+                                  >
+                                    <RadioGroupItem
+                                      value="karaoke"
+                                      id="subtitle-karaoke"
+                                      className="mt-0.5 flex-shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-slate-900 flex items-center gap-1.5">
+                                        Karaoke Style
+                                        <span className="text-yellow-500">
+                                          ⭐
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Word-by-word highlighting (engaging &
+                                        dynamic)
+                                      </p>
+                                    </div>
+                                  </label>
+                                </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="targetAudience"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Target Audience (Optional)
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="e.g., Construction company owners with 10-50 employees"
+                                  {...field}
+                                  className="text-sm sm:text-base"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="painPoints"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Main Pain Points (Optional)
+                              </FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="e.g., Struggling to get quality leads, losing projects to competitors"
+                                  rows={3}
+                                  {...field}
+                                  className="text-sm sm:text-base resize-none"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="solution"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Solution Overview (Optional)
+                              </FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="e.g., AI-powered lead system that responds in under 2 minutes"
+                                  rows={3}
+                                  {...field}
+                                  className="text-sm sm:text-base resize-none"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="proofElements"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-sm">
+                                Proof Elements (Optional)
+                              </FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="e.g., 300% increase in leads, 50+ happy clients"
+                                  rows={3}
+                                  {...field}
+                                  className="text-sm sm:text-base resize-none"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* ✅ Responsive Button Group */}
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowCreateDialog(false)}
+                            className="w-full sm:w-auto"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={createVSLMutation.isPending}
+                            className="bg-primary text-white hover:bg-primary/90 w-full sm:w-auto"
+                          >
+                            {createVSLMutation.isPending
+                              ? "Generating..."
+                              : "Generate VSL"}
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+        </div>
+        {/* MOBILE/TABLET HEADER (below md) */}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          {/* Row 1: Title */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
               VSL Generator
             </h2>
-            <p className="text-sm sm:text-base text-slate-600 mt-1">
-              Create automated video sales letters for your clients
+            <p className="text-xs text-slate-600 mt-0.5 truncate">
+              Create video sales letters
             </p>
           </div>
+
+          {/* Row 2: Action Button */}
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-white hover:bg-primary/90 w-full sm:w-auto">
+              <Button
+                size="sm"
+                className="bg-primary text-white hover:bg-primary/90 w-full"
+              >
                 <Wand2 className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Generate VSL</span>
-                <span className="sm:hidden">Create VSL</span>
+                Generate VSL
               </Button>
             </DialogTrigger>
             {/* ✅ Responsive Dialog */}
@@ -781,7 +1182,7 @@ export default function VSL() {
                   <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
                     <div>
                       <div className="text-base sm:text-lg font-semibold text-slate-900">
-                        {vsl.totalViews || 0} 
+                        {vsl.totalViews || 0}
                       </div>
                       <div className="text-[10px] sm:text-xs text-slate-500">
                         Views

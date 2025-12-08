@@ -888,17 +888,32 @@ export default function Settings() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex-shrink-0 shadow-sm">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+        {/* DESKTOP HEADER (md and up) */}
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Title Section */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
                 Profile & Settings
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
                 Manage your account settings and preferences
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* MOBILE/TABLET HEADER (below md) */}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          {/* Row 1: Title */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              Profile & Settings
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5 truncate">
+              Manage your account
+            </p>
           </div>
         </div>
       </header>

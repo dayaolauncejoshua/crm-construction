@@ -835,20 +835,48 @@ export default function CalendarPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+        {/* DESKTOP HEADER (md and up) */}
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Title Section */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                Calendar & Bookings
+              </h2>
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                Manage your appointments and meetings
+              </p>
+            </div>
+
+            {/* Right: Export Button */}
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              <Button variant="outline" onClick={handleExportBookings}>
+                <Download className="w-4 h-4 mr-2" />
+                <span className="hidden lg:inline">Export Schedule</span>
+                <span className="lg:hidden">Export</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* MOBILE/TABLET HEADER (below md) */}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          {/* Row 1: Title */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
               Calendar & Bookings
             </h2>
-            <p className="text-sm sm:text-base text-slate-600">
-              Manage your appointments and meetings
+            <p className="text-xs text-slate-600 mt-0.5 truncate">
+              Manage appointments
             </p>
           </div>
+
+          {/* Row 2: Export Button */}
           <Button
             variant="outline"
-            className="w-full sm:w-auto"
             onClick={handleExportBookings}
+            className="w-full"
           >
             <Download className="w-4 h-4 mr-2" />
             Export Schedule
@@ -1006,14 +1034,14 @@ export default function CalendarPage() {
             <TabsList className="bg-transparent h-auto p-0 border-0">
               <TabsTrigger
                 value="calendar"
-                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-slate-900 after:transition-all rounded-none"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
                 <CalendarIcon className="w-4 h-4 mr-2" />
                 <span>Calendar</span>
               </TabsTrigger>
               <TabsTrigger
                 value="bookings"
-                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-slate-900 after:transition-all rounded-none"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
                 <Users className="w-4 h-4 mr-2" />
                 <span>Bookings</span>

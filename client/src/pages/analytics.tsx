@@ -112,24 +112,26 @@ export default function Analytics() {
         throw new Error("No client selected");
       }
 
-      const url = getApiUrl(`/api/analytics/${selectedClientId}?timeRange=${timeRange}`);
+      const url = getApiUrl(
+        `/api/analytics/${selectedClientId}?timeRange=${timeRange}`
+      );
       console.log("🔍 [ANALYTICS] Fetching from:", url);
-      
+
       const response = await fetch(url, {
         credentials: "include",
       });
-      
+
       console.log("📡 [ANALYTICS] Response:", response.status);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error("❌ [ANALYTICS] Error:", errorText);
         throw new Error(`Failed to fetch analytics: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("✅ [ANALYTICS] Data loaded:", data);
-      
+
       return data;
     },
     enabled: !!selectedClientId,
@@ -207,19 +209,62 @@ export default function Analytics() {
   if (!analyticsData || analyticsData.summary.totalLeads === 0) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+        <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+          {/* DESKTOP HEADER (md and up) */}
+          <div className="hidden md:block px-4 lg:px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              {/* Left: Title Section */}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                  Analytics & Reporting
+                </h2>
+                <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                  Data-driven insights for optimization
+                </p>
+              </div>
+
+              {/* Right: Time Range + Refresh */}
+              <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+                <Select value={timeRange} onValueChange={setTimeRange}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="30">Last 30 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
+                  />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* MOBILE/TABLET HEADER (below md) */}
+          <div className="md:hidden px-4 py-3 space-y-3">
+            {/* Row 1: Title */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
                 Analytics & Reporting
               </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Data-driven insights for optimization
+              <p className="text-xs text-slate-600 mt-0.5 truncate">
+                Data-driven insights
               </p>
             </div>
-            <div className="flex items-center gap-3">
+
+            {/* Row 2: Controls */}
+            <div className="flex gap-2">
               <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="flex-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -233,6 +278,7 @@ export default function Analytics() {
                 size="sm"
                 onClick={() => refetch()}
                 disabled={isFetching}
+                className="flex-shrink-0"
               >
                 <RefreshCw
                   className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
@@ -352,19 +398,62 @@ export default function Analytics() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+        {/* DESKTOP HEADER (md and up) */}
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Title Section */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                Analytics & Reporting
+              </h2>
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                Data-driven insights for optimization
+              </p>
+            </div>
+
+            {/* Right: Time Range + Refresh */}
+            <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+              <Select value={timeRange} onValueChange={setTimeRange}>
+                <SelectTrigger className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching}
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* MOBILE/TABLET HEADER (below md) */}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          {/* Row 1: Title */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
               Analytics & Reporting
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Data-driven insights for optimization
+            <p className="text-xs text-slate-600 mt-0.5 truncate">
+              Data-driven insights
             </p>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Row 2: Controls */}
+          <div className="flex gap-2">
             <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="flex-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -373,8 +462,16 @@ export default function Analytics() {
                 <SelectItem value="90">Last 90 days</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw className="w-4 h-4" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="flex-shrink-0"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
         </div>
@@ -469,34 +566,32 @@ export default function Analytics() {
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
           {/* Tab Navigation with Underline Style */}
-          <div className="border-b border-slate-200 pb-0 mb-6">
-            <div className="flex gap-6 overflow-x-auto">
-              <TabsList className="bg-transparent h-auto p-0 gap-6 border-0">
-                <TabsTrigger
-                  value="overview"
-                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
-                >
-                  <Activity className="w-4 h-4 mr-2" />
-                  <span>Overview</span>
-                </TabsTrigger>
+          <div className="border-b border-slate-200">
+            <TabsList className="bg-transparent h-auto p-0 border-0">
+              <TabsTrigger
+                value="overview"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
+              >
+                <Activity className="w-4 h-4 mr-2" />
+                <span>Overview</span>
+              </TabsTrigger>
 
-                <TabsTrigger
-                  value="performance"
-                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
-                >
-                  <Target className="w-4 h-4 mr-2" />
-                  <span>Performance</span>
-                </TabsTrigger>
+              <TabsTrigger
+                value="performance"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
+              >
+                <Target className="w-4 h-4 mr-2" />
+                <span>Performance</span>
+              </TabsTrigger>
 
-                <TabsTrigger
-                  value="ai"
-                  className="relative bg-transparent border-0 shadow-none px-1 pb-3 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-[-1px] after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all"
-                >
-                  <Brain className="w-4 h-4 mr-2" />
-                  <span>AI Insights</span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
+              <TabsTrigger
+                value="ai"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                <span>AI Insights</span>
+              </TabsTrigger>
+            </TabsList>
           </div>
 
           {/* ========== OVERVIEW TAB ========== */}

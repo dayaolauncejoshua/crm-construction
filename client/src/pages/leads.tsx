@@ -237,17 +237,17 @@ export default function Leads() {
     queryFn: async () => {
       const url = getApiUrl(`/api/leads/${selectedClientId}`);
       console.log("🔍 [LEADS] Fetching from:", url);
-      
+
       const response = await fetch(url, {
         credentials: "include",
       });
-      
+
       console.log("📡 [LEADS] Response:", response.status);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch leads: ${response.status}`);
       }
-      
+
       return response.json();
     },
     enabled: !!selectedClientId,
@@ -438,18 +438,23 @@ export default function Leads() {
         try {
           const url = getApiUrl(`/api/conversations/${conv.id}/messages`);
           console.log(`🔍 [LEADS] Fetching messages from: ${url}`);
-          
+
           const response = await fetch(url, {
             credentials: "include",
           });
-          
-          console.log(`📡 [LEADS] Messages response for ${conv.id}:`, response.status);
-          
+
+          console.log(
+            `📡 [LEADS] Messages response for ${conv.id}:`,
+            response.status
+          );
+
           if (response.ok) {
             const messages = await response.json();
             counts[conv.id] = messages.length;
           } else {
-            console.warn(`Failed to fetch messages for ${conv.id}: ${response.status}`);
+            console.warn(
+              `Failed to fetch messages for ${conv.id}: ${response.status}`
+            );
             counts[conv.id] = 0;
           }
         } catch (error) {
@@ -636,35 +641,71 @@ export default function Leads() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-              Lead Management
-            </h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Track, manage, and convert your sales leads
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportLeads}
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              className="bg-primary hover:bg-primary/90"
-              onClick={() => setShowAddLeadModal(true)}
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add Lead
-            </Button>
-          </div>
-        </div>
-      </header>
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+  {/* DESKTOP HEADER (md and up) */}
+  <div className="hidden md:block px-4 lg:px-6 py-4">
+    <div className="flex items-center justify-between gap-4">
+      {/* Left: Title Section */}
+      <div className="flex-1 min-w-0">
+        <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+          Lead Management
+        </h2>
+        <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+          Track, manage, and convert your sales leads
+        </p>
+      </div>
+
+      {/* Right: Action Buttons */}
+      <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+        <Button variant="outline" size="sm" onClick={handleExportLeads}>
+          <Download className="w-4 h-4" />
+        </Button>
+        <Button
+          size="sm"
+          className="bg-primary hover:bg-primary/90"
+          onClick={() => setShowAddLeadModal(true)}
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          <span className="hidden lg:inline">Add Lead</span>
+          <span className="lg:hidden">Add</span>
+        </Button>
+      </div>
+    </div>
+  </div>
+
+  {/* MOBILE/TABLET HEADER (below md) */}
+  <div className="md:hidden px-4 py-3 space-y-3">
+    {/* Row 1: Title */}
+    <div className="flex-1 min-w-0">
+      <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+        Lead Management
+      </h2>
+      <p className="text-xs text-slate-600 mt-0.5 truncate">
+        Track and convert leads
+      </p>
+    </div>
+
+    {/* Row 2: Action Buttons */}
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleExportLeads}
+        className="flex-shrink-0"
+      >
+        <Download className="w-4 h-4" />
+      </Button>
+      <Button
+        size="sm"
+        className="bg-primary hover:bg-primary/90 flex-1"
+        onClick={() => setShowAddLeadModal(true)}
+      >
+        <UserPlus className="w-4 h-4 mr-2" />
+        Add Lead
+      </Button>
+    </div>
+  </div>
+</header>
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-4 sm:p-6">
@@ -770,88 +811,52 @@ export default function Leads() {
           className="space-y-6"
         >
           {/* Tab Navigation with Underline Style */}
-          <div className="border-b border-slate-200 pb-0 mb-6">
-            <div className="flex gap-6 overflow-x-auto">
-              <button
-                onClick={() => setActiveTab("all")}
-                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeTab === "all"
-                    ? "text-slate-900 font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+          <div className="border-b border-slate-200">
+            <TabsList className="bg-transparent h-auto p-0 border-0">
+              <TabsTrigger
+                value="all"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  <span>All Leads</span>
-                  <Badge variant="secondary" className="ml-1">
-                    {allLeads.length}
-                  </Badge>
-                </div>
-                {activeTab === "all" && (
-                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                )}
-              </button>
+                <User className="w-4 h-4 mr-2" />
+                <span>All Leads</span>
+                <Badge variant="secondary" className="ml-2">
+                  {allLeads.length}
+                </Badge>
+              </TabsTrigger>
 
-              <button
-                onClick={() => setActiveTab("hot")}
-                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeTab === "hot"
-                    ? "text-slate-900 font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+              <TabsTrigger
+                value="hot"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
-                <div className="flex items-center gap-2">
-                  <Flame className="w-4 h-4" />
-                  <span>Hot</span>
-                  <Badge variant="secondary" className="ml-1">
-                    {hotLeads.length}
-                  </Badge>
-                </div>
-                {activeTab === "hot" && (
-                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                )}
-              </button>
+                <Flame className="w-4 h-4 mr-2" />
+                <span>Hot</span>
+                <Badge variant="secondary" className="ml-2">
+                  {hotLeads.length}
+                </Badge>
+              </TabsTrigger>
 
-              <button
-                onClick={() => setActiveTab("warm")}
-                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeTab === "warm"
-                    ? "text-slate-900 font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+              <TabsTrigger
+                value="warm"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
-                <div className="flex items-center gap-2">
-                  <Wind className="w-4 h-4" />
-                  <span>Warm</span>
-                  <Badge variant="secondary" className="ml-1">
-                    {warmLeads.length}
-                  </Badge>
-                </div>
-                {activeTab === "warm" && (
-                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                )}
-              </button>
+                <Wind className="w-4 h-4 mr-2" />
+                <span>Warm</span>
+                <Badge variant="secondary" className="ml-2">
+                  {warmLeads.length}
+                </Badge>
+              </TabsTrigger>
 
-              <button
-                onClick={() => setActiveTab("cold")}
-                className={`relative bg-transparent border-0 shadow-none px-1 pb-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeTab === "cold"
-                    ? "text-slate-900 font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+              <TabsTrigger
+                value="cold"
+                className="relative bg-transparent border-0 shadow-none px-4 pb-3 pt-0 text-slate-600 hover:text-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:font-semibold data-[state=active]:shadow-none transition-colors after:content-[''] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-transparent data-[state=active]:after:bg-construction after:transition-all rounded-none"
               >
-                <div className="flex items-center gap-2">
-                  <Snowflake className="w-4 h-4" />
-                  <span>Cold</span>
-                  <Badge variant="secondary" className="ml-1">
-                    {coldLeads.length}
-                  </Badge>
-                </div>
-                {activeTab === "cold" && (
-                  <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-construction" />
-                )}
-              </button>
-            </div>
+                <Snowflake className="w-4 h-4 mr-2" />
+                <span>Cold</span>
+                <Badge variant="secondary" className="ml-2">
+                  {coldLeads.length}
+                </Badge>
+              </TabsTrigger>
+            </TabsList>
           </div>
 
           {/* Filters Row */}

@@ -516,42 +516,42 @@ export default function Clients() {
   }
 
   
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-              {user?.role === "super_admin"
-                ? "All Clients (View Only)"
-                : "Client Management"}
-            </h2>
-            <p className="text-sm text-slate-600">
-              {user?.role === "super_admin"
-                ? "View all clients across the platform"
-                : "Manage your business clients and their settings"}
-            </p>
-          </div>
+     <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+  {/* DESKTOP HEADER (md and up) */}
+  <div className="hidden md:block px-4 lg:px-6 py-4">
+    <div className="flex items-center justify-between gap-4">
+      {/* Left: Title Section */}
+      <div className="flex-1 min-w-0">
+        <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+          {user?.role === "super_admin"
+            ? "All Clients (View Only)"
+            : "Client Management"}
+        </h2>
+        <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+          {user?.role === "super_admin"
+            ? "View all clients across the platform"
+            : "Manage your business clients and their settings"}
+        </p>
+      </div>
 
-          <div className="flex items-center gap-2">
-            {/* ✅ FIX 1: Export Button */}
-            <Button variant="outline" size="sm" onClick={handleExportClients}>
-              <Download className="w-4 h-4" />
-            </Button>
+      {/* Right: Action Buttons */}
+      <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+        <Button variant="outline" size="sm" onClick={handleExportClients}>
+          <Download className="w-4 h-4" />
+        </Button>
 
-            {canCreateClient && (
-              <Dialog
-                open={showCreateDialog}
-                onOpenChange={setShowCreateDialog}
-              >
-                <DialogTrigger asChild>
-                  <Button className="bg-primary text-white hover:bg-primary/90">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Client
-                  </Button>
-                </DialogTrigger>
+        {canCreateClient && (
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-white hover:bg-primary/90">
+                <Plus className="w-4 h-4 mr-2" />
+                <span className="hidden lg:inline">Add Client</span>
+                <span className="lg:hidden">Add</span>
+              </Button>
+            </DialogTrigger>
                 <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>
                     <DialogTitle>Create New Client</DialogTitle>
@@ -752,6 +752,244 @@ export default function Clients() {
             )}
           </div>
         </div>
+        </div>
+        {/* MOBILE/TABLET HEADER (below md) */}
+  <div className="md:hidden px-4 py-3 space-y-3">
+    {/* Row 1: Title */}
+    <div className="flex-1 min-w-0">
+      <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+        {user?.role === "super_admin" ? "All Clients" : "Client Management"}
+      </h2>
+      <p className="text-xs text-slate-600 mt-0.5 truncate">
+        {user?.role === "super_admin"
+          ? "View all platform clients"
+          : "Manage your clients"}
+      </p>
+    </div>
+
+    {/* Row 2: Action Buttons */}
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleExportClients}
+        className="flex-shrink-0"
+      >
+        <Download className="w-4 h-4" />
+      </Button>
+
+      {canCreateClient && (
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogTrigger asChild>
+            <Button
+              size="sm"
+              className="bg-primary text-white hover:bg-primary/90 flex-1"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Client
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Client</DialogTitle>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form
+                      onSubmit={form.handleSubmit(onSubmit)}
+                      className="space-y-4"
+                    >
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Company Name{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Enter company name"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="industry"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Industry <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select industry" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="construction">
+                                  Construction
+                                </SelectItem>
+                                <SelectItem value="agency">
+                                  Marketing Agency
+                                </SelectItem>
+                                <SelectItem value="medspa">
+                                  Medical Spa
+                                </SelectItem>
+                                <SelectItem value="realestate">
+                                  Real Estate
+                                </SelectItem>
+                                <SelectItem value="automotive">
+                                  Automotive
+                                </SelectItem>
+                                <SelectItem value="finance">Finance</SelectItem>
+                                <SelectItem value="healthcare">
+                                  Healthcare
+                                </SelectItem>
+                                <SelectItem value="legal">Legal</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="website"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                Website <span className="text-red-500">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="https://example.com"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="phone"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                Phone <span className="text-red-500">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="+1 (555) 123-4567"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Email <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="contact@company.com"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="whatsappNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              WhatsApp Business Number{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="+1 (555) 123-4567"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="whatsappPhoneNumberId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              WhatsApp Phone Number ID{" "}
+                              <span className="text-red-500">*</span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="808896282312368" {...field} />
+                            </FormControl>
+                            <p className="text-xs text-slate-500 mt-1">
+                              From Meta Business Suite → WhatsApp → API Setup.
+                              Leave blank to use global setting.
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="flex justify-end space-x-3 pt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowCreateDialog(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={createClientMutation.isPending}
+                          className="bg-primary text-white hover:bg-primary/90"
+                        >
+                          {createClientMutation.isPending
+                            ? "Creating..."
+                            : "Create Client"}
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </div>
+        
       </header>
 
       {/* Main Content */}

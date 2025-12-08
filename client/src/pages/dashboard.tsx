@@ -934,7 +934,7 @@ export default function Dashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={160}>
+                      <ResponsiveContainer width="100%" height={180}>
                         <PieChart>
                           <Pie
                             data={temperatureData}
@@ -983,7 +983,7 @@ export default function Dashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={140}>
+                      <ResponsiveContainer width="100%" height={160}>
                         <AreaChart data={aiResponseTimeData}>
                           <defs>
                             <linearGradient
@@ -1086,11 +1086,17 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* RIGHT COLUMN - EQUAL HEIGHT SCROLLABLE CARDS */}
-              <div className="flex flex-col space-y-6 h-full">
-                {/* NEEDS ATTENTION - SCROLLABLE, TAKES 50% HEIGHT */}
-                <Card className="border-l-4 border-l-construction flex-1 flex flex-col overflow-hidden">
-                  <CardHeader className="flex-shrink-0">
+              {/* RIGHT COLUMN - FIXED HEIGHT SCROLLABLE CARDS */}
+              <div className="flex flex-col space-y-6">
+                {/* NEEDS ATTENTION - MATCHES LEAD GENERATION CHART HEIGHT */}
+                <Card
+                  className="border-l-4 border-l-construction flex flex-col overflow-hidden"
+                  style={{ height: "372px" }}
+                >
+                  <CardHeader
+                    className="flex-shrink-0"
+                    style={{ height: "96px" }}
+                  >
                     <CardTitle className="text-base flex items-center">
                       <Flame className="w-5 h-5 text-construction mr-2" />
                       Needs Attention
@@ -1164,8 +1170,11 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                {/* RECENT ACTIVITY - SCROLLABLE, TAKES 50% HEIGHT */}
-                <Card className="border-l-4 border-l-primary flex-1 flex flex-col overflow-hidden">
+                {/* RECENT ACTIVITY - MATCHES TEMPERATURE/AI RESPONSE CHART HEIGHT */}
+                <Card
+                  className="border-l-4 border-l-construction flex flex-col overflow-hidden"
+                  style={{ height: "330px" }}
+                >
                   <CardHeader className="flex-shrink-0">
                     <CardTitle className="text-base">Recent Activity</CardTitle>
                   </CardHeader>
