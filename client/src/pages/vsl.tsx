@@ -781,7 +781,7 @@ export default function VSL() {
                   <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
                     <div>
                       <div className="text-base sm:text-lg font-semibold text-slate-900">
-                        {vsl.viewCount || 0}
+                        {vsl.totalViews || 0} 
                       </div>
                       <div className="text-[10px] sm:text-xs text-slate-500">
                         Views
@@ -1202,6 +1202,7 @@ export default function VSL() {
     const { data: analytics, isLoading } = useQuery({
       queryKey: [`/api/vsls/${vsl?.id}/analytics`],
       enabled: !!vsl?.id,
+      refetchInterval: 5000,
       queryFn: async () => {
         const url = getApiUrl(`/api/vsls/${vsl.id}/analytics`);
         const response = await fetch(url, { credentials: "include" });
