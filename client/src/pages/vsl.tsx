@@ -1066,7 +1066,9 @@ export default function VSL() {
       console.log("🎬 [VIDEO] Play event triggered for VSL:", vsl.id);
       console.log("📍 [VIDEO] Session ID:", sessionId);
       try {
-        const response = await fetch(`/api/vsls/${vsl.id}/track-play`, {
+        // ✅ FIX: Use getApiUrl() to point to backend
+        const url = getApiUrl(`/api/vsls/${vsl.id}/track-play`);
+        const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId }),
@@ -1111,7 +1113,9 @@ export default function VSL() {
         );
 
         try {
-          const response = await fetch(`/api/vsls/${vsl.id}/track-progress`, {
+          // ✅ FIX: Use getApiUrl() to point to backend
+          const url = getApiUrl(`/api/vsls/${vsl.id}/track-progress`);
+          const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1149,7 +1153,9 @@ export default function VSL() {
       console.log("🎉 [VIDEO] Video ended - tracking 100% completion");
 
       try {
-        const response = await fetch(`/api/vsls/${vsl.id}/track-progress`, {
+        // ✅ FIX: Use getApiUrl() to point to backend
+        const url = getApiUrl(`/api/vsls/${vsl.id}/track-progress`);
+        const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
