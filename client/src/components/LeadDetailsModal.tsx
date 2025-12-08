@@ -307,7 +307,7 @@ export default function LeadDetailsModal({
                         {lead.email}
                       </span>
                     </div>
-                    <Button
+                    {/* <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 shrink-0"
@@ -316,7 +316,7 @@ export default function LeadDetailsModal({
                       }
                     >
                       <Send className="w-3 h-3" />
-                    </Button>
+                    </Button> */}
                   </div>
 
                   {lead.phone && (
@@ -327,7 +327,7 @@ export default function LeadDetailsModal({
                           {lead.phone}
                         </span>
                       </div>
-                      <Button
+                      {/* <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 shrink-0"
@@ -336,7 +336,7 @@ export default function LeadDetailsModal({
                         }
                       >
                         <Phone className="w-3 h-3" />
-                      </Button>
+                      </Button> */}
                     </div>
                   )}
                 </div>

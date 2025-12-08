@@ -76,6 +76,10 @@ import {
   Download,
   Trash2,
   Loader2,
+  Flame,
+  Activity,
+  User,
+  Clock
 } from "lucide-react";
 import { getApiUrl } from "@/lib/api-config";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1013,179 +1017,134 @@ export default function Clients() {
         </Breadcrumb>
 
         {!clients || clients.length === 0 ? (
-          <div className="text-center py-12">
-            <Building2 className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-base font-semibold text-slate-900 mb-2">
-              {user?.role === "super_admin"
-                ? "No Clients Yet"
-                : "No Clients Yet"}
-            </h3>
-            <p className="text-slate-600 mb-6">
-              {user?.role === "super_admin"
-                ? "Users haven't created any clients yet"
-                : "Get started by adding your first client"}
-            </p>
-            {canCreateClient && (
-              <Button
-                onClick={() => setShowCreateDialog(true)}
-                className="bg-primary text-white hover:bg-primary/90"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First Client
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clients.map((client: any) => (
-              <Card
-                key={client.id}
-                className="hover:shadow-md transition-shadow"
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <Building2 className="text-primary text-lg" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">
-                          {client.name}
-                        </CardTitle>
-                        <Badge variant="secondary" className="mt-1">
-                          {client.industry}
-                        </Badge>
-                        {user?.role === "super_admin" && client.user && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Owner: {client.user.email}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+  <div className="text-center py-12">
+    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <Building2 className="w-8 h-8 text-slate-400" />
+    </div>
+    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+      {user?.role === "super_admin" ? "No Clients Yet" : "No Clients Yet"}
+    </h3>
+    <p className="text-slate-600 mb-6">
+      {user?.role === "super_admin"
+        ? "Users haven't created any clients yet"
+        : "Get started by adding your first client"}
+    </p>
+    {canCreateClient && (
+      <Button
+        onClick={() => setShowCreateDialog(true)}
+        className="bg-gradient-construction hover:opacity-90 text-white"
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add Your First Client
+      </Button>
+    )}
+  </div>
+) : (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {clients.map((client: any) => {
+      // Get industry color
+      const getIndustryColor = (industry: string) => {
+        const colors: Record<string, string> = {
+          construction: "#f97316",
+          agency: "#8b5cf6",
+          medspa: "#ec4899",
+          realestate: "#3b82f6",
+          automotive: "#ef4444",
+          finance: "#10b981",
+          healthcare: "#06b6d4",
+          legal: "#6366f1",
+          other: "#64748b",
+        };
+        return colors[industry] || colors.other;
+      };
 
-                    {/* ✅ FIX 2: Working 3-Dot Menu */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedClientId(client.id);
-                            setLocation("/dashboard");
-                          }}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Dashboard
-                        </DropdownMenuItem>
-                        {canCreateClient && (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedClient(client);
-                                setSetupName(client.name || "");
-                                setSetupIndustry(client.industry || "");
-                                setSetupWebsite(client.website || "");
-                                setSetupEmail(client.email || "");
-                                setSetupPhone(client.phone || "");
-                                setSetupWhatsappNumber(
-                                  client.whatsappNumber || ""
-                                );
-                                setSetupWhatsappPhoneNumberId(
-                                  client.whatsappPhoneNumberId || ""
-                                );
-                                setSetupErrors({});
-                                setShowSetupDialog(true);
-                              }}
-                            >
-                              <Settings className="w-4 h-4 mr-2" />
-                              Settings
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => setClientToDelete(client)}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Client
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
+      // Get stats
+      const stats = clientStats?.[client.id] || { leads: 0, active: 0, hot: 0 };
+      const industryColor = getIndustryColor(client.industry);
+      
+      // Calculate activity level
+      const totalActivity = stats.leads + stats.active + stats.hot;
+      const activityLevel = totalActivity > 20 ? "high" : totalActivity > 10 ? "medium" : "low";
 
-                <CardContent className="space-y-4">
-                  {/* Contact Info */}
-                  <div className="space-y-2">
-                    {client.website && (
-                      <div className="flex items-center space-x-2 text-sm text-slate-600">
-                        <Globe className="w-4 h-4" />
-                        <span className="truncate">{client.website}</span>
-                      </div>
-                    )}
-                    {client.email && (
-                      <div className="flex items-center space-x-2 text-sm text-slate-600">
-                        <Mail className="w-4 h-4" />
-                        <span className="truncate">{client.email}</span>
-                      </div>
-                    )}
-                    {client.phone && (
-                      <div className="flex items-center space-x-2 text-sm text-slate-600">
-                        <Phone className="w-4 h-4" />
-                        <span>{client.phone}</span>
-                      </div>
-                    )}
-                  </div>
+      return (
+        <Card
+          key={client.id}
+          className="border-2 hover:shadow-xl transition-all duration-300 cursor-pointer group relative overflow-hidden"
+          style={{
+            borderTopWidth: "4px",
+            borderTopColor: industryColor,
+          }}
+        >
+          {/* Background Pattern */}
+          <div 
+            className="absolute top-0 right-0 w-32 h-32 opacity-5 transform translate-x-8 -translate-y-8"
+            style={{
+              background: `radial-gradient(circle, ${industryColor} 0%, transparent 70%)`,
+            }}
+          />
 
-                  <Separator />
-
-                  {/* Quick Stats */}
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {clientStats?.[client.id]?.leads || 0}
-                      </div>
-                      <div className="text-xs text-slate-500">Leads</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {clientStats?.[client.id]?.active || 0}
-                      </div>
-                      <div className="text-xs text-slate-500">Active</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {clientStats?.[client.id]?.hot || 0}
-                      </div>
-                      <div className="text-xs text-slate-500">Hot</div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Actions */}
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setSelectedClientId(client.id);
-                        setLocation("/dashboard");
+          <CardContent className="p-6 relative">
+            {/* Header Section */}
+            <div className="flex items-start justify-between mb-5">
+              <div className="flex items-center gap-4">
+                {/* Company Avatar */}
+                <div 
+                  className="w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg"
+                  style={{ backgroundColor: industryColor }}
+                >
+                  {client.name.substring(0, 2).toUpperCase()}
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-slate-900 truncate mb-1">
+                    {client.name}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      className="text-xs font-semibold capitalize"
+                      style={{ 
+                        backgroundColor: `${industryColor}15`,
+                        color: industryColor,
+                        border: `1px solid ${industryColor}30`
                       }}
                     >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
-                    {canCreateClient && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
+                      {client.industry}
+                    </Badge>
+                    {activityLevel === "high" && (
+                      <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
+                        <Activity className="w-3 h-3 mr-1" />
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0 hover:bg-slate-100"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedClientId(client.id);
+                      setLocation("/dashboard");
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Dashboard
+                  </DropdownMenuItem>
+                  {canCreateClient && (
+                    <>
+                      <DropdownMenuItem
                         onClick={() => {
                           setSelectedClient(client);
                           setSetupName(client.name || "");
@@ -1200,17 +1159,174 @@ export default function Clients() {
                           setSetupErrors({});
                           setShowSetupDialog(true);
                         }}
+                        className="cursor-pointer"
                       >
-                        <Settings className="w-4 h-4 mr-1" />
-                        Setup
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                        <Settings className="w-4 h-4 mr-2" />
+                        Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-red-600 cursor-pointer"
+                        onClick={() => setClientToDelete(client)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Client
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Owner Info (Super Admin Only) */}
+            {user?.role === "super_admin" && client.user && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span className="text-slate-600">Owner:</span>
+                  <span className="font-medium text-slate-900">{client.user.email}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Contact Information */}
+            <div className="space-y-2 mb-5">
+              {client.website && (
+                <div className="flex items-center gap-2 text-sm text-slate-600 group/item hover:text-primary transition-colors">
+                  <Globe className="w-4 h-4 flex-shrink-0" />
+                  <a 
+                    href={client.website} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="truncate hover:underline"
+                  >
+                    {client.website.replace(/^https?:\/\//, '')}
+                  </a>
+                </div>
+              )}
+              {client.email && (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Mail className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{client.email}</span>
+                </div>
+              )}
+              {client.phone && (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Phone className="w-4 h-4 flex-shrink-0" />
+                  <span>{client.phone}</span>
+                </div>
+              )}
+            </div>
+
+            <Separator className="my-5" />
+
+            {/* Stats Grid with Visual Appeal */}
+            <div className="grid grid-cols-3 gap-4 mb-5">
+              <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="flex items-center justify-center gap-1 text-blue-600 mb-1">
+                  <User className="w-4 h-4" />
+                  <span className="text-xl font-bold">{stats.leads}</span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">Total Leads</p>
+              </div>
+
+              <div className="text-center p-3 bg-green-50 rounded-lg border border-green-100">
+                <div className="flex items-center justify-center gap-1 text-green-600 mb-1">
+                  <Activity className="w-4 h-4" />
+                  <span className="text-xl font-bold">{stats.active}</span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">Active</p>
+              </div>
+
+              <div className="text-center p-3 bg-red-50 rounded-lg border border-red-100">
+                <div className="flex items-center justify-center gap-1 text-red-600 mb-1">
+                  <Flame className="w-4 h-4" />
+                  <span className="text-xl font-bold">{stats.hot}</span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">Hot Leads</p>
+              </div>
+            </div>
+
+            {/* Activity Indicator */}
+            {stats.leads > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-slate-600">Lead Activity</span>
+                  <span className="text-xs font-semibold text-slate-900">
+                    {((stats.hot / stats.leads) * 100).toFixed(0)}% Hot
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-2 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(stats.hot / stats.leads) * 100}%`,
+                      background: 'linear-gradient(to right, #f97316, #ef4444)',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <Separator className="my-5" />
+
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1 bg-primary hover:bg-primary/90"
+                onClick={() => {
+                  setSelectedClientId(client.id);
+                  setLocation("/dashboard");
+                }}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View Dashboard
+              </Button>
+              {canCreateClient && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 hover:bg-slate-50"
+                  onClick={() => {
+                    setSelectedClient(client);
+                    setSetupName(client.name || "");
+                    setSetupIndustry(client.industry || "");
+                    setSetupWebsite(client.website || "");
+                    setSetupEmail(client.email || "");
+                    setSetupPhone(client.phone || "");
+                    setSetupWhatsappNumber(client.whatsappNumber || "");
+                    setSetupWhatsappPhoneNumberId(
+                      client.whatsappPhoneNumberId || ""
+                    );
+                    setSetupErrors({});
+                    setShowSetupDialog(true);
+                  }}
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Configure
+                </Button>
+              )}
+            </div>
+
+            {/* Last Updated Info */}
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span>Created {new Date(client.createdAt).toLocaleDateString()}</span>
+                </div>
+                {client.updatedAt && client.updatedAt !== client.createdAt && (
+                  <span>Updated {new Date(client.updatedAt).toLocaleDateString()}</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    })}
+  </div>
+)}
       </main>
 
       {/* ✅ FIX 3: Setup Dialog with Required Field Validation */}
@@ -1221,10 +1337,10 @@ export default function Clients() {
           </DialogHeader>
 
           <Tabs defaultValue="details" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-              <TabsTrigger value="ai">AI Settings</TabsTrigger>
+              {/* <TabsTrigger value="ai">AI Settings</TabsTrigger> */}
             </TabsList>
 
             {/* Details Tab - Around line 920 */}
@@ -1444,7 +1560,7 @@ export default function Clients() {
             </TabsContent>
 
             {/* AI Settings Tab */}
-            <TabsContent value="ai" className="space-y-4 mt-4">
+            {/* <TabsContent value="ai" className="space-y-4 mt-4">
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">
@@ -1506,7 +1622,7 @@ export default function Clients() {
                   </p>
                 </div>
               </div>
-            </TabsContent>
+            </TabsContent> */}
           </Tabs>
 
           {/* Footer Actions */}
