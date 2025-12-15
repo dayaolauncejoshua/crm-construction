@@ -34,6 +34,7 @@ import { sql, eq, desc } from "drizzle-orm";
 import { db } from "./db";
 import { normalizePhone, normalizeEmail } from "./utils/normalize";
 import { cloudinaryService } from "./services/cloudinary.service";
+import { sessionManager } from "./services/session-manager";
 
 
 // Helper function to check if user owns the resource
@@ -204,6 +205,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   console.log("✅ WebSocket server initialized on path: /ws");
+
+
+  // ========================= SESSION ROUTES =========================================
+  // Get user's active sessions
+app.get("/api/user/sessions", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const currentSessionId = req.sessionID;
+
+    const sessions = await sessionManager.getUserSessions(userId);
+
+    // Mark current session
+    const sessionsWithCurrent = sessions.map((session) => ({
+      ...session,
+      isCurrent: session.sessionId === currentSessionId,
+    }));
+
+    res.json({ sessions: sessionsWithCurrent });
+  } catch (error: any) {
+    console.error("❌ Error fetching sessions:", error);
+    res.status(500).json({ error: "Failed to fetch sessions" });
+  }
+});
+
+// Revoke a specific session
+app.delete("/api/user/sessions/:sessionId", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const { sessionId } = req.params;
+    const currentSessionId = req.sessionID;
+
+    // Prevent revoking current session
+    if (sessionId === currentSessionId) {
+      return res.status(400).json({
+        error: "Cannot revoke current session. Use logout instead.",
+      });
+    }
+
+    const success = await sessionManager.revokeSession(sessionId, userId);
+
+    if (success) {
+      res.json({ success: true, message: "Session revoked successfully" });
+    } else {
+      res.status(404).json({ error: "Session not found" });
+    }
+  } catch (error: any) {
+    console.error("❌ Error revoking session:", error);
+    res.status(500).json({ error: "Failed to revoke session" });
+  }
+});
+
+// Revoke all other sessions
+app.post("/api/user/sessions/revoke-all", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const currentSessionId = req.sessionID;
+
+    const count = await sessionManager.revokeAllOtherSessions(
+      currentSessionId,
+      userId
+    );
+
+    res.json({
+      success: true,
+      message: `${count} session(s) revoked successfully`,
+      count,
+    });
+  } catch (error: any) {
+    console.error("❌ Error revoking sessions:", error);
+    res.status(500).json({ error: "Failed to revoke sessions" });
+  }
+});
+
+// Check session health
+app.get("/api/user/session/status", requireAuth, async (req, res) => {
+  try {
+    const session = req.session as any;
+
+    res.json({
+      sessionId: req.sessionID,
+      userId: session.userId,
+      createdAt: session.createdAt,
+      expiresAt: new Date(Date.now() + (session.cookie.maxAge || 0)),
+      maxAge: session.cookie.maxAge,
+      deviceInfo: session.deviceInfo,
+      ipAddress: session.ipAddress,
+    });
+  } catch (error: any) {
+    console.error("❌ Error checking session:", error);
+    res.status(500).json({ error: "Failed to check session status" });
+  }
+});
 
   // ========================= LEADS ROUTE ======================================
 

@@ -2,7 +2,13 @@
 
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useLocation } from "wouter";
@@ -11,18 +17,20 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   Check,
-  X,
-  ArrowLeft,
   Rocket,
-  Zap,
-  Crown,
-  HardHat,
-  ChevronDown,
-  ChevronUp,
   Timer,
   CheckCircle,
   Loader2,
-  Menu,
+  Sparkles,
+  CreditCard,
+  Calendar,
+  DollarSign,
+  AlertCircle,
+  Zap,
+  Shield,
+  TrendingUp,
+  Lock,
+  ChevronDown,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -32,6 +40,14 @@ import {
   BreadcrumbSeparator,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface TrialStatus {
   isTrialActive: boolean;
@@ -41,40 +57,56 @@ interface TrialStatus {
   subscriptionType?: string;
 }
 
+interface Subscription {
+  id: string;
+  plan: string;
+  billingPeriod: string;
+  status: string;
+  amount: number;
+  currency: string;
+  currentPeriodEnd: string;
+  currentPeriodStart: string;
+  cancelAtPeriodEnd: boolean;
+  stripeSubscriptionId: string;
+}
+
 export default function Pricing() {
-  usePageTitle("Pricing - AI Lead System");
+  usePageTitle("Subscription - AI Lead System");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">(
     "monthly"
   );
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Fetch trial status
-  const { data: trialStatus } = useQuery<TrialStatus>({
+  const { data: trialStatus, isLoading: trialLoading } = useQuery<TrialStatus>({
     queryKey: ["/api/user/trial-status"],
     enabled: isAuthenticated,
     retry: false,
   });
 
+  // Fetch subscription
+  const { data: subscriptionData, isLoading: subLoading } = useQuery<{
+    subscription: Subscription | null;
+  }>({
+    queryKey: ["/api/stripe/subscription"],
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
   const daysLeft = trialStatus?.daysLeft ?? 0;
+  const subscription = subscriptionData?.subscription;
 
   // Stripe checkout mutation
   const checkoutMutation = useMutation({
-    mutationFn: async ({
-      plan,
-      billingPeriod,
-    }: {
-      plan: string;
-      billingPeriod: string;
-    }) => {
+    mutationFn: async ({ billingPeriod }: { billingPeriod: string }) => {
       const response = await fetch("/api/stripe/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ plan, billingPeriod }),
+        body: JSON.stringify({ billingPeriod }),
       });
 
       if (!response.ok) {
@@ -87,12 +119,6 @@ export default function Pricing() {
     onSuccess: async (data) => {
       if (data.url) {
         window.location.href = data.url;
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to get checkout URL",
-          variant: "destructive",
-        });
       }
     },
     onError: (error: any) => {
@@ -104,273 +130,364 @@ export default function Pricing() {
     },
   });
 
-  const handleUpgrade = (tierName: string) => {
-    if (!isAuthenticated) {
-      setLocation("/signup");
-      return;
-    }
-
-    if (tierName === "Enterprise") {
-      window.location.href =
-        "mailto:sales@yourdomain.com?subject=Enterprise Plan Inquiry";
-      return;
-    }
-
-    const plan = tierName.toLowerCase();
-    const billing = billingPeriod;
-
-    checkoutMutation.mutate({ plan, billingPeriod: billing });
+  const handleSubscribe = () => {
+    checkoutMutation.mutate({ billingPeriod });
   };
 
-  // Minimal pricing tiers
-  const pricingTiers = [
-    {
-      name: "Starter",
-      price: billingPeriod === "monthly" ? 97 : 970,
-      period: billingPeriod === "monthly" ? "/mo" : "/yr",
-      description: "Perfect for getting started",
-      icon: <HardHat className="w-6 h-6" />,
-      color: "from-slate-600 to-slate-700",
-      features: [
-        "1 Active Client",
-        "500 Leads per month",
-        "AI Lead Qualification",
-        "WhatsApp Integration",
-        "24/7 Auto-Responses",
-        "Basic Analytics",
-        "Email Support",
-      ],
-      cta: "Start Free Trial",
+  // Cancel subscription mutation
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/stripe/cancel-subscription", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to cancel");
+      return response.json();
     },
-    {
-      name: "Professional",
-      price: billingPeriod === "monthly" ? 297 : 2970,
-      period: billingPeriod === "monthly" ? "/mo" : "/yr",
-      description: "For growing businesses",
-      icon: <Rocket className="w-6 h-6" />,
-      color: "from-blue-600 to-orange-500",
-      popular: true,
-      badge: "MOST POPULAR",
-      features: [
-        "5 Active Clients",
-        "2,000 Leads per month",
-        "Everything in Starter",
-        "VSL Generator (AI-powered)",
-        "1-Click Meeting Booking",
-        "Advanced Analytics",
-        "Lead Temperature Scoring",
-        "Automated Follow-ups",
-        "Priority Support",
-      ],
-      cta: "Start Free Trial",
+    onSuccess: () => {
+      toast({
+        title: "Subscription Canceled",
+        description:
+          "You'll still have access until the end of your billing period.",
+      });
+      window.location.reload();
     },
-    {
-      name: "Enterprise",
-      price: billingPeriod === "monthly" ? 797 : 7970,
-      period: billingPeriod === "monthly" ? "/mo" : "/yr",
-      description: "For established companies",
-      icon: <Crown className="w-6 h-6" />,
-      color: "from-purple-600 to-pink-600",
-      badge: "BEST VALUE",
-      features: [
-        "Unlimited Clients",
-        "Unlimited Leads",
-        "Everything in Professional",
-        "White Label Customization",
-        "API Access",
-        "Dedicated Account Manager",
-        "Phone Support",
-        "Custom Integrations",
-        "99.9% SLA Guarantee",
-      ],
-      cta: "Contact Sales",
+  });
+
+  // Billing portal mutation
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/stripe/billing-portal", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to open portal");
+      return response.json();
     },
-  ];
+    onSuccess: (data) => {
+      window.location.href = data.url;
+    },
+  });
+
+  const monthlyPrice = 297;
+  const yearlyPrice = 2970;
 
   const faqs = [
     {
-      question: "What happens after my 14-day free trial?",
+      question: "Can I cancel anytime?",
       answer:
-        "After your trial ends, choose any plan to continue. Your data is preserved. No credit card required to start.",
-    },
-    {
-      question: "Can I change plans later?",
-      answer:
-        "Yes! Upgrade or downgrade anytime. Changes take effect immediately (upgrades) or at next billing cycle (downgrades).",
-    },
-    {
-      question: "Do you offer refunds?",
-      answer:
-        "Yes! 30-day money-back guarantee. Not satisfied? Full refund, no questions asked.",
+        "Absolutely. You can cancel your subscription at any time with no penalties or hidden fees. Your access will continue until the end of your billing period.",
     },
     {
       question: "What payment methods do you accept?",
       answer:
-        "All major credit cards (Visa, Mastercard, Amex) via Stripe. All payments are secure and encrypted.",
+        "We accept all major credit cards (Visa, MasterCard, American Express) and offer invoice-based billing for annual plans.",
     },
     {
-      question: "Can I cancel anytime?",
+      question: "Do you offer a free trial?",
       answer:
-        "Absolutely. Cancel anytime from your account settings. No cancellation fees, no questions asked.",
+        "Yes! Start with a 7-day free trial with full access to all features. No credit card required to get started.",
     },
   ];
 
-  if (authLoading) {
+  // Loading state
+  if (authLoading || trialLoading || subLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-construction" />
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </header>
+        <main className="flex-1 overflow-auto p-4 sm:p-6">
+          <Skeleton className="h-4 w-48 mb-6" />
+          <div className="max-w-7xl mx-auto space-y-6">
+            <Card className="border-2">
+              <CardHeader>
+                <Skeleton className="h-6 w-48 mb-2" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="p-4 bg-slate-50 rounded-lg">
+                      <Skeleton className="h-4 w-20 mb-2" />
+                      <Skeleton className="h-6 w-24" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="py-12">
+              <div className="max-w-5xl mx-auto">
+                <Skeleton className="h-8 w-64 mx-auto mb-4" />
+                <Skeleton className="h-4 w-96 mx-auto mb-12" />
+                <Card className="border-2">
+                  <CardContent className="p-12">
+                    <Skeleton className="h-64 w-full" />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div
-      className={`min-h-screen bg-gradient-to-b from-slate-50 to-white ${
-        isAuthenticated ? "flex flex-col" : ""
-      }`}
-    >
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      {!isAuthenticated ? (
-        <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
-          {/* DESKTOP HEADER (md and up) */}
-          <div className="hidden md:block px-4 lg:px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
-              {/* Left: Title Section */}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
-                  Upgrade Your Plan
-                </h2>
-                <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
-                  Choose the perfect plan for your business
-                </p>
-              </div>
-
-              {/* Right: Trial Badge */}
-              {trialStatus?.isTrialActive && (
-                <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
-                  <Badge className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2">
-                    <Timer className="w-4 h-4 mr-2" />
-                    {daysLeft} {daysLeft === 1 ? "day" : "days"} left in trial
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* MOBILE/TABLET HEADER (below md) */}
-          <div className="md:hidden px-4 py-3 space-y-3">
-            {/* Row 1: Title + Badge */}
-            <div className="flex flex-col gap-2">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-                  Upgrade Your Plan
-                </h2>
-                <p className="text-xs text-slate-600 mt-0.5 truncate">
-                  Choose your perfect plan
-                </p>
-              </div>
-              {trialStatus?.isTrialActive && (
-                <Badge className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-1.5 self-start">
-                  <Timer className="w-3 h-3 mr-1.5" />
-                  {daysLeft} {daysLeft === 1 ? "day" : "days"} left
-                </Badge>
-              )}
-            </div>
-          </div>
-        </header>
-      ) : (
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-                Upgrade Your Plan
+      <header className="bg-white border-b border-slate-200 flex-shrink-0 shadow-sm">
+        <div className="hidden md:block px-4 lg:px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                Subscription & Billing
               </h2>
-              <p className="text-sm sm:text-base text-slate-600">
-                Choose the perfect plan for your business
+              <p className="text-sm lg:text-base text-slate-600 mt-1 truncate">
+                Manage your subscription and payment methods
               </p>
             </div>
             {trialStatus?.isTrialActive && (
-              <Badge className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 self-start sm:self-auto">
-                <Timer className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
+              <Badge className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2">
+                <Timer className="w-4 h-4 mr-2" />
                 {daysLeft} {daysLeft === 1 ? "day" : "days"} left in trial
               </Badge>
             )}
           </div>
-        </header>
-      )}
+        </div>
 
-      <main className={isAuthenticated ? "flex-1 overflow-auto" : ""}>
-        {/* Trial Banner */}
-        {isAuthenticated && trialStatus?.isTrialActive && (
-          <section className="bg-gradient-to-r from-blue-50 to-orange-50 border-y-2 border-construction/20 py-4 sm:py-6 px-4 sm:px-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-0 sm:justify-between">
-              <div className="flex items-center space-x-3 sm:space-x-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-construction rounded-full flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                    You're Currently on Free Trial
-                  </h3>
-                  <p className="text-sm sm:text-base text-slate-600">
-                    {daysLeft} {daysLeft === 1 ? "day" : "days"} remaining • All
-                    Professional features included
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
+        <div className="md:hidden px-4 py-3 space-y-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              Subscription
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5 truncate">
+              Manage your plan
+            </p>
+          </div>
+          {trialStatus?.isTrialActive && (
+            <Badge className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-3 py-1.5 inline-flex">
+              <Timer className="w-3 h-3 mr-1.5" />
+              {daysLeft} {daysLeft === 1 ? "day" : "days"} left
+            </Badge>
+          )}
+        </div>
+      </header>
 
-        {/* Breadcrumb - Only for authenticated users */}
-        {isAuthenticated && (
-          <div className="px-4 sm:px-6 pt-4 sm:pt-6">
-            <Breadcrumb className="mb-4 sm:mb-6">
-              <BreadcrumbList className="text-sm">
-                <BreadcrumbItem>
-                  <BreadcrumbLink
-                    onClick={() => setLocation("/dashboard")}
-                    className="cursor-pointer"
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* Breadcrumb - Matching analytics.tsx style */}
+        <Breadcrumb className="mb-6">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                onClick={() => setLocation("/dashboard")}
+                className="cursor-pointer"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Subscription</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Current Subscription Status - If Active */}
+        {subscription && (
+          <div className="mb-6">
+            <Card className="border-2 border-construction/20 shadow-lg">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Rocket className="w-5 h-5 text-construction" />
+                      Your Current Plan
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Active subscription • Professional Plan
+                    </CardDescription>
+                  </div>
+                  <Badge className="bg-green-100 text-green-700 border-green-200">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Active
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Subscription Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CreditCard className="w-4 h-4 text-slate-600" />
+                      <span className="text-sm text-slate-600">Plan</span>
+                    </div>
+                    <p className="font-semibold text-lg capitalize">
+                      {subscription.billingPeriod}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-4 h-4 text-slate-600" />
+                      <span className="text-sm text-slate-600">Amount</span>
+                    </div>
+                    <p className="font-semibold text-lg">
+                      ${(subscription.amount / 100).toFixed(0)}/
+                      {subscription.billingPeriod === "monthly" ? "mo" : "yr"}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="w-4 h-4 text-slate-600" />
+                      <span className="text-sm text-slate-600">
+                        Next Billing
+                      </span>
+                    </div>
+                    <p className="font-semibold text-lg">
+                      {new Date(
+                        subscription.currentPeriodEnd
+                      ).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                {subscription.cancelAtPeriodEnd && (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-yellow-900">
+                          Subscription Canceling
+                        </p>
+                        <p className="text-sm text-yellow-700 mt-1">
+                          Your subscription will end on{" "}
+                          {new Date(
+                            subscription.currentPeriodEnd
+                          ).toLocaleDateString()}
+                          . You'll still have access until then.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => portalMutation.mutate()}
+                    disabled={portalMutation.isPending}
                   >
-                    Dashboard
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>Pricing</BreadcrumbPage>
-                </BreadcrumbItem>
-              </BreadcrumbList>
-            </Breadcrumb>
+                    {portalMutation.isPending && (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    )}
+                    Manage Payment Method
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => portalMutation.mutate()}
+                    disabled={portalMutation.isPending}
+                  >
+                    View Billing History
+                  </Button>
+
+                  {!subscription.cancelAtPeriodEnd && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Are you sure you want to cancel? You'll still have access until the end of your billing period."
+                          )
+                        ) {
+                          cancelMutation.mutate();
+                        }
+                      }}
+                      disabled={cancelMutation.isPending}
+                    >
+                      {cancelMutation.isPending && (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      )}
+                      Cancel Subscription
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
-        {/* Hero */}
-        <section className="py-12 sm:py-16 md:py-20 px-4 sm:px-6">
-          <div
-            className={`text-center ${
-              isAuthenticated ? "" : "max-w-4xl mx-auto"
-            }`}
-          >
-            <Badge className="mb-4 sm:mb-6 bg-gradient-construction text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm">
-              🎉 14-Day Free Trial • No Credit Card Required
-            </Badge>
+        {/* Trial Progress - If On Trial */}
+        {trialStatus?.isTrialActive && !subscription && (
+          <div className="mb-6">
+            <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-600" />
+                      Free Trial Active
+                    </CardTitle>
+                    <CardDescription className="mt-1 text-amber-700">
+                      {daysLeft} {daysLeft === 1 ? "day" : "days"} remaining •
+                      All features unlocked
+                    </CardDescription>
+                  </div>
+                  <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+                    <Timer className="w-3 h-3 mr-1" />
+                    Trial
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-slate-700">
+                      Trial Progress
+                    </span>
+                    <span className="text-sm font-semibold text-amber-600">
+                      Day {7 - daysLeft} of 7
+                    </span>
+                  </div>
+                  <Progress
+                    value={((7 - daysLeft) / 7) * 100}
+                    className="h-2"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 mb-4 sm:mb-6">
-              Simple Pricing for
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">
-                Construction Companies
-              </span>
-            </h1>
-
-            <p className="text-base sm:text-lg md:text-xl text-slate-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-              Stop losing projects to slow responses. AI that converts leads in
-              under 2 minutes.
-            </p>
+        {/* Main Pricing Section */}
+        <div className="py-8 sm:py-8 bg-gradient-to-b from-slate-50 to-white -mx-4 sm:-mx-6 px-4 sm:px-6">
+          <div className="max-w-6xl mx-auto">
+            {/* Header */}
+            <div className="text-center mb-12">
+              <Badge className="bg-blue-100 text-blue-700 border-blue-200 mb-4">
+                Simple, Transparent Pricing
+              </Badge>
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+                Everything You Need to Grow
+              </h1>
+              <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+                One powerful plan with all features included. No hidden fees, no
+                surprises. Scale your business with confidence.
+              </p>
+            </div>
 
             {/* Billing Toggle */}
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-12 px-4">
+            <div className="flex items-center justify-center gap-4 mb-12">
               <span
-                className={`text-sm font-medium ${
+                className={`text-base font-medium ${
                   billingPeriod === "monthly"
                     ? "text-slate-900"
                     : "text-slate-500"
@@ -400,7 +517,7 @@ export default function Pricing() {
                 />
               </button>
               <span
-                className={`text-sm font-medium ${
+                className={`text-base font-medium ${
                   billingPeriod === "yearly"
                     ? "text-slate-900"
                     : "text-slate-500"
@@ -408,351 +525,187 @@ export default function Pricing() {
               >
                 Yearly
               </span>
-              {billingPeriod === "yearly" && (
-                <Badge className="bg-green-100 text-green-700 text-xs sm:text-sm">
-                  Save 20%
-                </Badge>
-              )}
             </div>
-          </div>
-        </section>
 
-        {/* Pricing Cards */}
-        <section className="pb-12 sm:pb-16 md:pb-20 px-4 sm:px-6">
-          <div className={isAuthenticated ? "" : "max-w-7xl mx-auto"}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-              {pricingTiers.map((tier, index) => (
-                <Card
-                  key={index}
-                  className={`relative flex flex-col ${
-                    tier.popular
-                      ? "border-4 border-construction shadow-2xl lg:scale-105 z-10"
-                      : "border-2 border-slate-200 hover:border-construction/50 transition-all"
-                  }`}
-                >
-                  {tier.badge && (
-                    <div className="absolute -top-3 sm:-top-4 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-gradient-construction text-white px-3 sm:px-4 py-1 text-[10px] sm:text-xs font-bold shadow-lg">
-                        {tier.badge}
-                      </Badge>
-                    </div>
-                  )}
+            {/* Pricing Card */}
+            <Card className="max-w-5xl mx-auto border-2 shadow-xl overflow-hidden relative">
+              {/* Gradient Border Effect */}
+              <div
+                className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500 rounded-lg"
+                style={{ padding: "2px" }}
+              >
+                <div className="absolute inset-[2px] bg-white rounded-lg" />
+              </div>
 
-                  <CardHeader className="text-center pb-6 sm:pb-8 pt-8 sm:pt-10 px-4 sm:px-6">
-                    <div
-                      className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 bg-gradient-to-r ${tier.color} rounded-xl flex items-center justify-center text-white shadow-lg`}
-                    >
-                      {tier.icon}
+              <div className="relative">
+                <div className="grid lg:grid-cols-2 gap-8 p-8 sm:p-12">
+                  {/* Left Column */}
+                  <div className="space-y-8">
+                    <div>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+                        Professional Plan
+                      </h2>
+                      <p className="text-slate-600">
+                        Perfect for growing businesses and teams
+                      </p>
                     </div>
 
-                    <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-                      {tier.name}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-600 mb-4 sm:mb-6">
-                      {tier.description}
-                    </p>
-
-                    <div className="mb-4 sm:mb-6">
-                      <span className="text-4xl sm:text-5xl font-bold text-slate-900">
-                        ${tier.price}
-                      </span>
-                      <span className="text-sm sm:text-base text-slate-600">
-                        {tier.period}
-                      </span>
+                    <div>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="text-5xl sm:text-6xl font-bold text-slate-900">
+                          $
+                          {billingPeriod === "monthly"
+                            ? monthlyPrice
+                            : yearlyPrice}
+                        </span>
+                        <span className="text-xl text-slate-600">
+                          /{billingPeriod === "monthly" ? "month" : "year"}
+                        </span>
+                      </div>
                     </div>
 
                     <Button
-                      className={`w-full text-sm sm:text-base ${
-                        tier.popular
-                          ? "bg-gradient-construction hover:opacity-90 text-white shadow-xl"
-                          : "bg-slate-900 hover:bg-slate-800 text-white"
-                      }`}
                       size="lg"
-                      onClick={() => handleUpgrade(tier.name)}
+                      onClick={handleSubscribe}
                       disabled={checkoutMutation.isPending}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-lg py-6"
                     >
                       {checkoutMutation.isPending ? (
                         <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                           Processing...
                         </>
-                      ) : isAuthenticated ? (
-                        tier.name === "Enterprise" ? (
-                          "Contact Sales"
-                        ) : (
-                          `Upgrade to ${tier.name}`
-                        )
                       ) : (
-                        tier.cta
+                        "Start Free Trial"
                       )}
                     </Button>
 
-                    {billingPeriod === "yearly" && (
-                      <p className="text-[10px] sm:text-xs text-green-600 mt-2 font-medium">
-                        💰 Save ${(tier.price * 12 * 0.2).toFixed(0)}/year
-                      </p>
-                    )}
-                  </CardHeader>
+                    <p className="text-center text-sm text-slate-600">
+                      No credit card required • Cancel anytime
+                    </p>
 
-                  <CardContent className="pt-4 sm:pt-6 border-t border-slate-200 flex-1 px-4 sm:px-6">
-                    <div className="space-y-2 sm:space-y-3">
-                      {tier.features.map((feature, featureIndex) => (
-                        <div
-                          key={featureIndex}
-                          className="flex items-start space-x-2 sm:space-x-3"
-                        >
-                          <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                          <span
-                            className={`text-xs sm:text-sm ${
-                              feature.includes("Everything")
-                                ? "font-semibold text-slate-900"
-                                : "text-slate-700"
-                            }`}
-                          >
-                            {feature}
-                          </span>
+                    <div className="space-y-4 pt-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Zap className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Lightning Fast Setup
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Get started in minutes, not hours
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Shield className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Enterprise Security
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Bank-grade encryption & data protection
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Proven ROI
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Average 3x increase in conversions
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column - Features */}
+                  <div className="lg:border-l lg:pl-8">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-6">
+                      Everything Included
+                    </h3>
+                    <div className="space-y-3">
+                      {[
+                        "5 Active Clients",
+                        "AI Lead Qualification",
+                        "24/7 Auto-Responses",
+                        "1-Click Meeting Booking",
+                        "Lead Temperature Scoring",
+                        "Priority Support",
+                        "2,000 Leads/month",
+                        "WhatsApp Integration",
+                        "VSL Generator",
+                        "Advanced Analytics",
+                        "Automated Follow-ups",
+                        "Video Tutorials",
+                      ].map((feature, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-green-600" />
+                          </div>
+                          <span className="text-slate-700">{feature}</span>
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Simple Comparison */}
-        <section className="py-12 sm:py-16 md:py-20 bg-slate-50 px-4 sm:px-6">
-          <div className={isAuthenticated ? "" : "max-w-5xl mx-auto"}>
-            <div className="text-center mb-8 sm:mb-12">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-3 sm:mb-4">
-                Compare Plans
-              </h2>
-              <p className="text-base sm:text-lg md:text-xl text-slate-600">
-                See what's included
-              </p>
-            </div>
-
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
-                  <thead className="bg-slate-50 border-b-2 border-slate-200">
-                    <tr>
-                      <th className="text-left py-3 sm:py-4 px-4 sm:px-6 font-semibold text-slate-900 text-sm sm:text-base">
-                        Feature
-                      </th>
-                      <th className="text-center py-3 sm:py-4 px-3 sm:px-6 font-semibold text-slate-900 text-sm sm:text-base">
-                        Starter
-                      </th>
-                      <th className="text-center py-3 sm:py-4 px-3 sm:px-6 font-semibold text-slate-900 text-sm sm:text-base bg-construction/10">
-                        Professional
-                      </th>
-                      <th className="text-center py-3 sm:py-4 px-3 sm:px-6 font-semibold text-slate-900 text-sm sm:text-base">
-                        Enterprise
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        Active Clients
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        1
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm bg-construction/5">
-                        5
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        Unlimited
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        Leads per Month
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        500
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm bg-construction/5">
-                        2,000
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        Unlimited
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        AI Qualification
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center bg-construction/5">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        VSL Generator
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center bg-construction/5">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        Meeting Booking
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center bg-construction/5">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        White Label
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center bg-construction/5">
-                        <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300 mx-auto" />
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center">
-                        <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mx-auto" />
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="py-3 sm:py-4 px-4 sm:px-6 text-slate-700 text-xs sm:text-sm">
-                        Support
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        Email
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm bg-construction/5">
-                        Priority
-                      </td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-6 text-center text-slate-700 font-medium text-xs sm:text-sm">
-                        24/7 + Phone
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               </div>
             </Card>
-
-            {/* Mobile scroll hint */}
-            <p className="text-xs text-slate-500 text-center mt-3 sm:hidden">
-              ← Scroll to see all features →
-            </p>
           </div>
-        </section>
+        </div>
 
-        {/* FAQ */}
-        <section className="py-12 sm:py-16 md:py-20 px-4 sm:px-6">
-          <div className={isAuthenticated ? "" : "max-w-3xl mx-auto"}>
-            <div className="text-center mb-8 sm:mb-12">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-3 sm:mb-4">
-                Frequently Asked Questions
-              </h2>
-            </div>
+        {/* FAQ Section */}
+        <div className="py-16 bg-white -mx-4 sm:-mx-6 px-4 sm:px-6">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-center text-slate-900 mb-12">
+              Frequently Asked Questions
+            </h2>
 
-            <div className="space-y-3 sm:space-y-4">
-              {faqs.map((faq, index) => (
-                <Card
-                  key={index}
-                  className="border-2 hover:border-construction/50 transition-all"
+            <div className="space-y-4">
+              {faqs.map((faq, idx) => (
+                <Collapsible
+                  key={idx}
+                  open={openFaq === idx}
+                  onOpenChange={() => setOpenFaq(openFaq === idx ? null : idx)}
                 >
-                  <button
-                    className="w-full text-left p-4 sm:p-6 flex items-center justify-between"
-                    onClick={() =>
-                      setExpandedFaq(expandedFaq === index ? null : index)
-                    }
-                  >
-                    <h3 className="text-sm sm:text-base md:text-lg font-semibold text-slate-900 pr-4 sm:pr-8">
-                      {faq.question}
-                    </h3>
-                    {expandedFaq === index ? (
-                      <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 flex-shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 flex-shrink-0" />
-                    )}
-                  </button>
-                  {expandedFaq === index && (
-                    <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-                      <p className="text-xs sm:text-sm md:text-base text-slate-600 leading-relaxed">
-                        {faq.answer}
-                      </p>
-                    </div>
-                  )}
-                </Card>
+                  <Card className="border-2 hover:border-slate-300 transition-colors">
+                    <CollapsibleTrigger className="w-full">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-slate-900 text-left">
+                            {faq.question}
+                          </h3>
+                          <ChevronDown
+                            className={`w-5 h-5 text-slate-600 transition-transform ${
+                              openFaq === idx ? "rotate-180" : ""
+                            }`}
+                          />
+                        </div>
+                      </CardContent>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 px-6 pb-6">
+                        <p className="text-slate-600 leading-relaxed">
+                          {faq.answer}
+                        </p>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
               ))}
             </div>
           </div>
-        </section>
-
-        {/* Final CTA */}
-        <section className="py-12 sm:py-16 md:py-20 bg-gradient-construction text-white px-4 sm:px-6">
-          <div
-            className={`text-center ${
-              isAuthenticated ? "" : "max-w-4xl mx-auto"
-            }`}
-          >
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6">
-              Ready to Close More Deals?
-            </h2>
-            <p className="text-base sm:text-lg md:text-xl text-blue-100 mb-6 sm:mb-8">
-              Start your 14-day free trial today. No credit card required.
-            </p>
-            <Button
-              size="lg"
-              className="bg-white text-construction hover:bg-blue-50 text-sm sm:text-base md:text-lg px-8 sm:px-12 py-5 sm:py-6 shadow-xl h-auto"
-              onClick={() => setLocation("/signup")}
-            >
-              <Rocket className="w-4 h-4 sm:w-5 sm:h-5 mr-2 sm:mr-3" />
-              Start Free Trial
-            </Button>
-            <p className="text-xs sm:text-sm text-blue-100 mt-4 sm:mt-6">
-              Join 200+ construction companies winning more projects
-            </p>
-          </div>
-        </section>
-
-        {/* Footer - Only for public users */}
-        {!isAuthenticated && (
-          <footer className="bg-slate-900 text-slate-300 py-8 sm:py-12">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-construction rounded-lg flex items-center justify-center">
-                    <HardHat className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                  </div>
-                  <span className="text-sm sm:text-base font-bold text-white">
-                    AI Lead System
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-center sm:text-right">
-                  © 2025 AI Lead System. All rights reserved.
-                </p>
-              </div>
-            </div>
-          </footer>
-        )}
+        </div>
       </main>
     </div>
   );

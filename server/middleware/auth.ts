@@ -39,7 +39,7 @@ async function loadUser(req: Request, res: Response, next: NextFunction) {
         console.log("❌ User not found in DB for userId:", userId);
       }
     } else {
-      console.log("❌ No userId in session");
+      // console.log("❌ No userId in session");
     }
 
     next();

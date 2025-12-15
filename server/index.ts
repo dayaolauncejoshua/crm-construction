@@ -13,6 +13,7 @@ import { spamPatternLearning } from "./services/spamPatternLearning";
 import twoFactorRoutes from "./routes/2fa";
 import passport from "./config/passport";
 import cors from "cors";
+import { trackSessionActivity } from "./middleware/session-activity";
 
 // Import pool from db.ts
 import { pool } from "./db";
@@ -88,21 +89,22 @@ app.use("/api/twilioCall_webhook", voice_AI_CallRouter);
 app.use(
   session({
     store: new PgSession({
-  pool: pool as any, // Cast to any to satisfy type checker
-  tableName: "sessions",
-  createTableIfMissing: true,
-}),
+      pool: pool as any,
+      tableName: "sessions",
+      createTableIfMissing: true,
+      pruneSessionInterval: 60 * 60, // 1 hour
+    }),
     secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
     resave: false,
     saveUninitialized: false,
-    rolling: true,
+    rolling: true, // ✅ Refresh session on every request
     name: "sessionId",
-    proxy: true, // Always true for both ngrok and production
+    proxy: true, // ✅ Important for production proxies
     cookie: {
-      secure: isProduction || isNgrok, // ✅ HTTPS for production and ngrok
+      secure: isProduction || isNgrok, // ✅ HTTPS in production/ngrok
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: isProduction || isNgrok ? "none" : "lax", // ✅ Cross-origin for production/ngrok
+      maxAge: 30 * 24 * 60 * 60 * 1000, // ✅ 30 days default
+      sameSite: isProduction || isNgrok ? "none" : "lax",
       path: "/",
     },
   })
@@ -111,6 +113,7 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(loadUser);
+app.use(trackSessionActivity);
 
 // Routes
 app.use(authRouter);
@@ -175,22 +178,23 @@ app.use((req, res, next) => {
     console.error("❌ Failed to initialize AI retry worker:", error);
   }
 
+  // SESSION CLEANUP CRON 
+  const { sessionManager } = await import("./services/session-manager");
+  
+  // Session cleanup cron (runs every hour)
+  setInterval(async () => {
+    try {
+      console.log("🧹 Running session cleanup...");
+      await sessionManager.cleanupExpiredSessions();
+    } catch (error) {
+      console.error("❌ Session cleanup error:", error);
+    }
+  }, 60 * 60 * 1000); // Every hour
+
+  console.log("✅ Session cleanup cron started");
+
  const server = await registerRoutes(app);
 
- console.log("\n📋 ========== REGISTERED ROUTES ==========");
-app._router.stack.forEach((middleware: any) => {
-  if (middleware.route) {
-    const methods = Object.keys(middleware.route.methods).join(", ").toUpperCase();
-    console.log(`  ${methods} ${middleware.route.path}`);
-  } else if (middleware.name === "router") {
-    middleware.handle.stack.forEach((handler: any) => {
-      if (handler.route) {
-        const methods = Object.keys(handler.route.methods).join(", ").toUpperCase();
-        console.log(`  ${methods} ${handler.route.path}`);
-      }
-    });
-  }
-});
 console.log("📋 ========================================\n");
 
   // Error handler

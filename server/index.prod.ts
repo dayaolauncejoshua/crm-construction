@@ -17,10 +17,15 @@ import passport from "./config/passport";
 import browserTestRouter from "./routes/browser-test.route";
 import cors from "cors";
 import { pool } from "./db";
+import { trackSessionActivity } from "./middleware/session-activity";
 
 config();
 
 const app = express();
+
+// ✅ DEFINE ENVIRONMENT VARIABLES (CRITICAL FIX)
+const isProduction = process.env.NODE_ENV === "production";
+const isNgrok = process.env.NGROK_MODE === "true";
 
 console.log(`🚀 Starting server in PRODUCTION mode`);
 
@@ -80,18 +85,19 @@ app.use(
       pool: pool as any,
       tableName: "sessions",
       createTableIfMissing: true,
+      pruneSessionInterval: 60 * 60,
     }),
-    secret: process.env.SESSION_SECRET || "change-this-secret-in-production",
+    secret: process.env.SESSION_SECRET || "your-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     rolling: true,
     name: "sessionId",
-    proxy: true,
+    proxy: true, // ✅ Important for production
     cookie: {
-      secure: true,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "none",
+      secure: isProduction || isNgrok, // ✅ Now defined
+      sameSite: isProduction || isNgrok ? "none" : "lax", // ✅ Now defined
       path: "/",
     },
   })
@@ -100,6 +106,7 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(loadUser);
+app.use(trackSessionActivity); 
 
 app.use("/api/browser-test", browserTestRouter);
 app.use(authRouter);
@@ -159,6 +166,21 @@ app.use((req, res, next) => {
   } catch (error) {
     console.error("❌ Failed to initialize AI retry worker:", error);
   }
+
+   // SESSION CLEANUP CRON 
+  const { sessionManager } = await import("./services/session-manager");
+  
+  // Session cleanup cron (runs every hour)
+  setInterval(async () => {
+    try {
+      console.log("🧹 Running session cleanup...");
+      await sessionManager.cleanupExpiredSessions();
+    } catch (error) {
+      console.error("❌ Session cleanup error:", error);
+    }
+  }, 60 * 60 * 1000); // Every hour
+
+  console.log("✅ Session cleanup cron started");
 
   const server = await registerRoutes(app);
 

@@ -5,6 +5,7 @@ import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import passport from "./config/passport";
+import { sessionManager } from "./services/session-manager";
 
 const router = Router();
 const SALT_ROUNDS = 10;
@@ -69,8 +70,14 @@ router.post("/api/auth/signup", async (req, res) => {
       // Don't fail signup if email fails
     }
 
-    // Set userId in session
+    // ✅ Store session metadata with device tracking
     (req.session as any).userId = newUser.id;
+    (req.session as any).createdAt = new Date().toISOString();
+    (req.session as any).userAgent = req.headers["user-agent"];
+    (req.session as any).ipAddress = req.ip || req.headers["x-forwarded-for"];
+    (req.session as any).deviceInfo = sessionManager.parseUserAgent(
+      req.headers["user-agent"] || ""
+    );
 
     // Save session
     req.session.save((err) => {
@@ -102,7 +109,7 @@ router.post("/api/auth/signup", async (req, res) => {
 router.post("/api/auth/login", async (req, res) => {
   try {
     console.log("=== LOGIN BACKEND DEBUG ===");
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body; // ✅ Add rememberMe
 
     if (!email || !password) {
       console.log("❌ Missing credentials");
@@ -149,13 +156,33 @@ router.post("/api/auth/login", async (req, res) => {
       // Don't create full session yet, return 2FA required
       return res.json({
         requires2FA: true,
-        userId: user.id, // Frontend needs this
+        userId: user.id,
         email: user.email,
         message: "Please enter your 2FA code",
       });
     }
 
     // 🔓 NO 2FA - Complete login immediately
+
+    // ✅ Set session expiry based on rememberMe
+    if (rememberMe) {
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      console.log("✅ Remember me enabled: 30 days session");
+    } else {
+      req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      console.log("✅ Standard session: 7 days");
+    }
+
+    // ✅ Store session metadata with device tracking
+    (req.session as any).userId = user.id;
+    (req.session as any).createdAt = new Date().toISOString();
+    (req.session as any).userAgent = req.headers["user-agent"];
+    (req.session as any).ipAddress = req.ip || req.headers["x-forwarded-for"];
+    (req.session as any).deviceInfo = sessionManager.parseUserAgent(
+      req.headers["user-agent"] || ""
+    );
+
+    // Update login stats
     await db
       .update(users)
       .set({
@@ -163,9 +190,6 @@ router.post("/api/auth/login", async (req, res) => {
         loginCount: (user.loginCount || 0) + 1,
       })
       .where(eq(users.id, user.id));
-
-    // Create session
-    (req.session as any).userId = user.id;
 
     req.session.save((err) => {
       if (err) {
@@ -188,6 +212,7 @@ router.post("/api/auth/login", async (req, res) => {
           trialEndsAt: user.trialEndsAt,
           twoFactorEnabled: user.twoFactorEnabled,
         },
+        sessionExpiry: req.session.cookie.maxAge,
       });
     });
   } catch (error: any) {
@@ -199,7 +224,7 @@ router.post("/api/auth/login", async (req, res) => {
 // 🆕 Login - Step 2: Verify 2FA code and complete login
 router.post("/api/auth/verify-2fa", async (req, res) => {
   try {
-    const { userId, code, useBackupCode } = req.body;
+    const { userId, code, useBackupCode, rememberMe } = req.body; // ✅ Add rememberMe
 
     if (!userId || !code) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -226,7 +251,6 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
     let isValid = false;
 
     if (useBackupCode) {
-      // Verify backup code
       const result = await verifyBackupCode(
         user.twoFactorBackupCodes as string[],
         code
@@ -234,7 +258,6 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
       isValid = result.valid;
 
       if (isValid) {
-        // Update remaining backup codes
         await db
           .update(users)
           .set({
@@ -249,7 +272,6 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
         );
       }
     } else {
-      // Decrypt secret and verify TOTP code
       const decryptedSecret = decrypt2FASecret(user.twoFactorSecret);
       isValid = verify2FACode(decryptedSecret, code);
     }
@@ -260,6 +282,23 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
     }
 
     console.log("✅ 2FA verification successful");
+
+    // ✅ Set session expiry based on rememberMe
+    if (rememberMe) {
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      console.log("✅ Remember me enabled: 30 days session");
+    } else {
+      req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      console.log("✅ Standard session: 7 days");
+    }
+
+    // ✅ Store session metadata
+    (req.session as any).createdAt = new Date().toISOString();
+    (req.session as any).userAgent = req.headers["user-agent"];
+    (req.session as any).ipAddress = req.ip || req.headers["x-forwarded-for"];
+    (req.session as any).deviceInfo = sessionManager.parseUserAgent(
+      req.headers["user-agent"] || ""
+    );
 
     // Update login stats
     await db
@@ -295,6 +334,7 @@ router.post("/api/auth/verify-2fa", async (req, res) => {
           trialEndsAt: user.trialEndsAt,
           twoFactorEnabled: user.twoFactorEnabled,
         },
+        sessionExpiry: req.session.cookie.maxAge,
       });
     });
   } catch (error: any) {
@@ -345,14 +385,14 @@ router.get("/api/auth/me", async (req, res) => {
         passwordHash: user.passwordHash,
         oauthProvider: user.oauthProvider,
         googleId: user.googleId,
-        
+
         // notification preferences
         emailNotifications: user.emailNotifications ?? true,
         whatsappNotifications: user.whatsappNotifications ?? false,
         leadNotifications: user.leadNotifications ?? true,
         bookingNotifications: user.bookingNotifications ?? true,
         weeklyReports: user.weeklyReports ?? true,
-        
+
         // Settings JSONB (for regional preferences)
         settings: user.settings || {
           regional: {
@@ -370,11 +410,9 @@ router.get("/api/auth/me", async (req, res) => {
 
 // ==================== GOOGLE OAUTH ROUTES ====================
 
-
 // OAuth Init Route - Track referrer
 router.get("/api/auth/google/init", (req, res) => {
-  // Track where OAuth was initiated from
-  const referrer = req.query.referrer as string || 'unknown';
+  const referrer = (req.query.referrer as string) || "unknown";
   (req.session as any).oauthReferrer = referrer;
 
   console.log(`🔐 OAuth initiated from: ${referrer}`);
@@ -382,12 +420,11 @@ router.get("/api/auth/google/init", (req, res) => {
   req.session.save((err) => {
     if (err) {
       console.error("❌ Session save error:", err);
-      return res.redirect('/login?error=session_failed');
+      return res.redirect("/login?error=session_failed");
     }
 
-    res.redirect('/api/auth/google');
+    res.redirect("/api/auth/google");
   });
-
 });
 
 // Initiate Google OAuth
@@ -398,7 +435,6 @@ router.get(
   })
 );
 
-
 // Google OAuth callback
 router.get(
   "/api/auth/google/callback",
@@ -407,46 +443,59 @@ router.get(
   }),
   (req, res) => {
     const user = req.user as any;
-    
+
     if (!user) {
       console.error("❌ No user returned from Google OAuth");
-      return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/login?error=auth_failed`
+      );
     }
 
     // ✅ Get auth type and referrer
-    const authType = user._authType || 'unknown';
-    const referrer = (req.session as any).oauthReferrer || 'unknown';
+    const authType = user._authType || "unknown";
+    const referrer = (req.session as any).oauthReferrer || "unknown";
 
-    console.log(`🔐 OAuth completed:`, { 
-      authType, 
-      referrer, 
-      email: user.email 
+    console.log(`🔐 OAuth completed:`, {
+      authType,
+      referrer,
+      email: user.email,
     });
 
-    // Set user session
+    // ✅ Set session with device tracking (OAuth users get 30 days by default)
     (req.session as any).userId = user.id;
-    
+    (req.session as any).createdAt = new Date().toISOString();
+    (req.session as any).userAgent = req.headers["user-agent"];
+    (req.session as any).ipAddress = req.ip || req.headers["x-forwarded-for"];
+    (req.session as any).deviceInfo = sessionManager.parseUserAgent(
+      req.headers["user-agent"] || ""
+    );
+
+    // OAuth users get 30-day sessions by default
+    req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+
     // ✅ Clear OAuth referrer
     delete (req.session as any).oauthReferrer;
 
     req.session.save((err) => {
       if (err) {
         console.error("❌ Session save error:", err);
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=session_failed`);
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/login?error=session_failed`
+        );
       }
 
       // ✅ Redirect to FRONTEND with appropriate message
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
       let redirectPath = "/dashboard";
-      
+
       switch (authType) {
-        case 'new_oauth_signup':
+        case "new_oauth_signup":
           redirectPath += "?auth=signup_success";
           break;
-        case 'returning_oauth_login':
+        case "returning_oauth_login":
           redirectPath += "?auth=login_success";
           break;
-        case 'oauth_account_linked':
+        case "oauth_account_linked":
           redirectPath += "?auth=account_linked";
           break;
         default:

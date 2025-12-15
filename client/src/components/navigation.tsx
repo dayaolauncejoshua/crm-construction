@@ -151,15 +151,15 @@ export default function Navigation({
     },
     // { path: "/sops", label: "SOPs", icon: <FileText className="w-4 h-4" /> },
     {
-      path: "/subscription",
+      path: "/pricing",
       label: "Subscription",
       icon: <CreditCard className="w-4 h-4" />,
     },
-    {
-      path: "/pricing",
-      label: "Upgrade",
-      icon: <Crown className="w-4 h-4" />,
-    },
+    // {
+    //   path: "/pricing",
+    //   label: "Upgrade",
+    //   icon: <Crown className="w-4 h-4" />,
+    // },
   ];
 
   const superAdminMenuItems: MenuItem[] = [

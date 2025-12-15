@@ -17,6 +17,7 @@ import { getApiUrl } from "@/lib/api-config";
 interface TwoFactorAuthProps {
   userId: string;
   email: string;
+  rememberMe?: boolean; // ✅ ADD THIS PROP
   onSuccess: (user: any) => void;
   onBack: () => void;
 }
@@ -24,6 +25,7 @@ interface TwoFactorAuthProps {
 export function TwoFactorAuth({
   userId,
   email,
+  rememberMe = false, // ✅ ADD DEFAULT VALUE
   onSuccess,
   onBack,
 }: TwoFactorAuthProps) {
@@ -54,7 +56,12 @@ export function TwoFactorAuth({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ userId, code, useBackupCode }),
+        body: JSON.stringify({ 
+          userId, 
+          code, 
+          useBackupCode,
+          rememberMe // ✅ PASS rememberMe TO BACKEND
+        }),
       });
 
       console.log("📡 [2FA VERIFY] Response:", response.status);

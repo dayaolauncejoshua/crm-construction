@@ -12,7 +12,7 @@ import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { getApiUrl } from "@/lib/api-config";
 
-// 🆕 User Settings interface
+// User Settings interface
 interface UserSettings {
   notifications?: {
     email?: boolean;
@@ -63,12 +63,12 @@ interface AuthContextType {
     lastName?: string
   ) => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>; // 🆕 ADD THIS
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ✅ Define public pages
+// ✅ Define public pages that don't require auth
 const skipAuthRoutes = [
   "/",
   "/login",
@@ -92,43 +92,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [location] = useLocation();
 
-  // ✅ Check auth on ALL pages except skip-auth routes
+  // ✅ Always check auth on protected pages
   const shouldFetchUser = useMemo(() => {
     return !shouldSkipAuth(location);
   }, [location]);
 
-  // ✅ Fetch user whenever needed
+  // ✅ Fetch user with proper credentials
   const { data, isLoading, refetch } = useQuery<{ user: User } | null>({
     queryKey: ["/api/auth/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: async () => {
+      const response = await fetch(getApiUrl("/api/auth/me"), {
+        credentials: "include", // ✅ CRITICAL: Send cookies
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          return null; // Not authenticated
+        }
+        throw new Error("Failed to fetch user");
+      }
+
+      return response.json();
+    },
     retry: false,
-    enabled: shouldFetchUser,
+    enabled: true, // ✅ Always enabled (we'll check in component)
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: shouldFetchUser,
+    refetchOnWindowFocus: true, // ✅ Refetch when tab regains focus
+    refetchOnMount: true, // ✅ Always check on mount
   });
 
+  // ✅ Update user state when data changes
   useEffect(() => {
     if (data?.user) {
       setUser(data.user);
+      console.log("✅ [AUTH] User authenticated:", data.user.email);
     } else if (data === null) {
       setUser(null);
+      console.log("❌ [AUTH] No active session");
     }
   }, [data]);
 
   // ✅ Listen for cross-tab auth changes
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "auth_updated" && shouldFetchUser) {
-        console.log("🔄 Auth state changed in another tab");
+      if (e.key === "auth_updated") {
+        console.log("🔄 [AUTH] Auth state changed in another tab");
         refetch();
       }
     };
 
     const handleWindowFocus = () => {
-      if (shouldFetchUser) {
-        refetch();
-      }
+      console.log("👁️ [AUTH] Window focused, checking session");
+      refetch();
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -138,93 +153,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("focus", handleWindowFocus);
     };
-  }, [refetch, location]);
+  }, [refetch]);
 
- // Login
-const loginMutation = useMutation({
-  mutationFn: async ({
-    email,
-    password,
-  }: {
-    email: string;
-    password: string;
-  }) => {
-    const response = await fetch(getApiUrl("api/auth/login"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
+  // Login
+  const loginMutation = useMutation({
+    mutationFn: async ({
+      email,
+      password,
+    }: {
+      email: string;
+      password: string;
+    }) => {
+      const response = await fetch(getApiUrl("api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ CRITICAL: Send cookies
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Login failed");
-    }
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Login failed");
+      }
 
-    return response.json();
-  },
-  onSuccess: (data) => {
-    setUser(data.user);
-    queryClient.invalidateQueries();
-    localStorage.setItem("auth_updated", Date.now().toString());
-  },
-});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setUser(data.user);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      localStorage.setItem("auth_updated", Date.now().toString());
+      console.log("✅ [AUTH] Login successful:", data.user.email);
+    },
+  });
 
- // Signup
-const signupMutation = useMutation({
-  mutationFn: async ({
-    email,
-    password,
-    firstName,
-    lastName,
-  }: {
-    email: string;
-    password: string;
-    firstName?: string;
-    lastName?: string;
-  }) => {
-    const response = await fetch(getApiUrl("api/auth/signup"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password, firstName, lastName }),
-    });
+  // Signup
+  const signupMutation = useMutation({
+    mutationFn: async ({
+      email,
+      password,
+      firstName,
+      lastName,
+    }: {
+      email: string;
+      password: string;
+      firstName?: string;
+      lastName?: string;
+    }) => {
+      const response = await fetch(getApiUrl("api/auth/signup"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ CRITICAL: Send cookies
+        body: JSON.stringify({ email, password, firstName, lastName }),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Signup failed");
-    }
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Signup failed");
+      }
 
-    return response.json();
-  },
-  onSuccess: (data) => {
-    setUser(data.user);
-    queryClient.invalidateQueries();
-    localStorage.setItem("auth_updated", Date.now().toString());
-  },
-});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setUser(data.user);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      localStorage.setItem("auth_updated", Date.now().toString());
+      console.log("✅ [AUTH] Signup successful:", data.user.email);
+    },
+  });
 
   // Logout
-const logoutMutation = useMutation({
-  mutationFn: async () => {
-    const response = await fetch(getApiUrl("api/auth/logout"), {
-      method: "POST",
-      credentials: "include",
-    });
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(getApiUrl("api/auth/logout"), {
+        method: "POST",
+        credentials: "include", // ✅ CRITICAL: Send cookies
+      });
 
-    if (!response.ok) throw new Error("Logout failed");
-    return response.json();
-  },
-  onSuccess: () => {
-    setUser(null);
-    queryClient.clear();
-    localStorage.setItem("auth_updated", Date.now().toString());
-    console.log("✅ Logged out successfully");
-  },
-});
+      if (!response.ok) throw new Error("Logout failed");
+      return response.json();
+    },
+    onSuccess: () => {
+      setUser(null);
+      queryClient.clear();
+      localStorage.setItem("auth_updated", Date.now().toString());
+      console.log("✅ [AUTH] Logged out successfully");
+    },
+  });
 
-  // 🆕 Refresh user data (for profile updates)
+  // Refresh user data
   const refreshUser = async () => {
+    console.log("🔄 [AUTH] Refreshing user data");
     await refetch();
   };
 
@@ -232,7 +250,7 @@ const logoutMutation = useMutation({
     <AuthContext.Provider
       value={{
         user,
-        isLoading: shouldFetchUser ? isLoading : false,
+        isLoading: isLoading,
         isAuthenticated: !!user,
         login: async (email, password) => {
           await loginMutation.mutateAsync({ email, password });
@@ -248,7 +266,7 @@ const logoutMutation = useMutation({
         logout: async () => {
           await logoutMutation.mutateAsync();
         },
-        refreshUser, // 🆕 ADD THIS
+        refreshUser,
       }}
     >
       {children}

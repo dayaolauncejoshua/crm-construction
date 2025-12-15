@@ -1,9 +1,11 @@
 // client/src/pages/landing.tsx
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Check,
   Users,
@@ -20,10 +22,43 @@ import {
   ArrowRight,
   Menu,
   X,
+  Rocket,
+  Star, 
+  Sparkles,
+  Badge,
+  ChevronDown
 } from "lucide-react";
 
 export default function Landing() {
   usePageTitle("AI Lead System - Intelligent CRM for Construction", false);
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+  
+
+  // ✅ Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      console.log("✅ [LANDING] User authenticated, redirecting to dashboard");
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, isLoading, setLocation]);
+
+  // ✅ Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Don't render if authenticated (prevents flash)
+  if (isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -34,6 +69,7 @@ export default function Landing() {
       <LeadCaptureSection />
       <FeaturesSection />
       <StatsSection />
+      <PricingSection />
       <CTASection />
       <Footer />
     </div>
@@ -76,12 +112,12 @@ function Header() {
             >
               How It Works
             </a>
-            <button
-              onClick={() => (window.location.href = "/pricing")}
+            <a
+              href="#pricing"
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
             >
               Pricing
-            </button>
+            </a>
           </nav>
 
           {/* Desktop Auth Buttons */}
@@ -745,6 +781,267 @@ function LeadCaptureSection() {
         <p className="text-white/80 text-xs sm:text-sm mt-4 text-center">
           💯 Setup in 10 minutes • 📱 Response via WhatsApp in under 2 minutes
         </p>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection() {
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const monthlyPrice = 297;
+  const yearlyPrice = 2970;
+  const yearlyDiscount = 20;
+
+  const faqs = [
+    {
+      question: "Can I cancel anytime?",
+      answer:
+        "Absolutely. You can cancel your subscription at any time with no penalties or hidden fees. Your access will continue until the end of your billing period.",
+    },
+    {
+      question: "What payment methods do you accept?",
+      answer:
+        "We accept all major credit cards (Visa, MasterCard, American Express) and offer invoice-based billing for annual plans.",
+    },
+    {
+      question: "Do you offer a free trial?",
+      answer:
+        "Yes! Start with a 7-day free trial with full access to all features. No credit card required to get started.",
+    },
+  ];
+
+  return (
+    <section id="pricing" className="py-12 sm:py-16 md:py-20 bg-gradient-to-b from-white via-slate-50 to-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center space-x-2 bg-blue-100 border border-blue-200 rounded-full px-4 py-2 mb-6">
+            <Sparkles className="w-4 h-4 text-blue-700" />
+            <span className="text-sm font-medium text-blue-700">
+              7-Day Free Trial • No Credit Card Required
+            </span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4">
+            Simple, Transparent Pricing
+          </h2>
+          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
+            One plan with everything you need to close more deals
+          </p>
+        </div>
+
+        {/* Pricing Content */}
+        <div className="max-w-6xl mx-auto">
+          {/* Main Pricing Section */}
+          <div className="mb-16">
+            {/* Header */}
+            <div className="text-center mb-12">
+              
+              
+            </div>
+
+            {/* Billing Toggle */}
+            <div className="flex items-center justify-center gap-4 mb-12">
+              <span
+                className={`text-base font-medium ${
+                  billingPeriod === "monthly"
+                    ? "text-slate-900"
+                    : "text-slate-500"
+                }`}
+              >
+                Monthly
+              </span>
+              <button
+                onClick={() =>
+                  setBillingPeriod(
+                    billingPeriod === "monthly" ? "yearly" : "monthly"
+                  )
+                }
+                style={{ minHeight: "28px" }}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-construction-500 focus:ring-offset-2 ${
+                  billingPeriod === "yearly"
+                    ? "bg-gradient-construction"
+                    : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                    billingPeriod === "yearly"
+                      ? "translate-x-8"
+                      : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span
+                className={`text-base font-medium ${
+                  billingPeriod === "yearly"
+                    ? "text-slate-900"
+                    : "text-slate-500"
+                }`}
+              >
+                Yearly
+              </span>
+            </div>
+
+            {/* Pricing Card */}
+            <Card className="max-w-5xl mx-auto border-2 shadow-xl overflow-hidden relative">
+              {/* Gradient Border Effect */}
+              <div
+                className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500 rounded-lg"
+                style={{ padding: "2px" }}
+              >
+                <div className="absolute inset-[2px] bg-white rounded-lg" />
+              </div>
+
+              <div className="relative">
+                <div className="grid lg:grid-cols-2 gap-8 p-8 sm:p-12">
+                  {/* Left Column */}
+                  <div className="space-y-8">
+                    <div>
+                      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+                        Professional Plan
+                      </h2>
+                      <p className="text-slate-600">
+                        Perfect for growing businesses and teams
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="text-5xl sm:text-6xl font-bold text-slate-900">
+                          ${billingPeriod === "monthly" ? monthlyPrice : yearlyPrice}
+                        </span>
+                        <span className="text-xl text-slate-600">
+                          /{billingPeriod === "monthly" ? "month" : "year"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="lg"
+                      onClick={() => (window.location.href = "/signup")}
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-lg py-6"
+                    >
+                      Start Free Trial
+                    </Button>
+
+                    <p className="text-center text-sm text-slate-600">
+                      No credit card required • Cancel anytime
+                    </p>
+
+                    <div className="space-y-4 pt-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Zap className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Lightning Fast Setup
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Get started in minutes, not hours
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Shield className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Enterprise Security
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Bank-grade encryption & data protection
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-1">
+                            Proven ROI
+                          </h3>
+                          <p className="text-sm text-slate-600">
+                            Average 3x increase in conversions
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column - Features */}
+                  <div className="lg:border-l lg:pl-8">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-6">
+                      Everything Included
+                    </h3>
+                    <div className="space-y-3">
+                      {[
+                        "5 Active Clients",
+                        "AI Lead Qualification",
+                        "24/7 Auto-Responses",
+                        "1-Click Meeting Booking",
+                        "Lead Temperature Scoring",
+                        "Priority Support",
+                        "2,000 Leads/month",
+                        "WhatsApp Integration",
+                        "VSL Generator",
+                        "Advanced Analytics",
+                        "Automated Follow-ups",
+                        "Video Tutorials",
+                      ].map((feature, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-green-600" />
+                          </div>
+                          <span className="text-slate-700">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* FAQ Section */}
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-center text-slate-900 mb-12">
+              Frequently Asked Questions
+            </h2>
+
+            <div className="space-y-4">
+              {faqs.map((faq, idx) => (
+                <Card key={idx} className="border-2 hover:border-slate-300 transition-colors">
+                  <button
+                    className="w-full text-left p-6 flex items-center justify-between"
+                    onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                  >
+                    <h3 className="font-semibold text-slate-900 pr-8">
+                      {faq.question}
+                    </h3>
+                    <ChevronDown
+                      className={`w-5 h-5 text-slate-600 transition-transform flex-shrink-0 ${
+                        openFaq === idx ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {openFaq === idx && (
+                    <div className="px-6 pb-6">
+                      <p className="text-slate-600 leading-relaxed">
+                        {faq.answer}
+                      </p>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
